@@ -43,9 +43,9 @@ Showing the target before hiding the source is an intentional safety rule, but l
 
 | Failure point | Required final/compensated state |
 |---|---|
-| Configure, show, unminimize or focus target | Best-effort restore target to its prior visibility; leave source visible; keep prior persisted visibility. |
-| Persist intended visibility | Best-effort restore target to its prior visibility; leave source visible; keep/restore prior persisted visibility. |
-| Hide source | Best-effort restore the previous persisted visibility and target visibility; keep or restore the source visible. |
+| Configure, show, unminimize or focus target | Best-effort restore both source and target to their snapshotted visibility; keep prior persisted visibility. |
+| Persist intended visibility | Best-effort restore both source and target to their snapshotted visibility; keep or restore all prior persisted settings. |
+| Hide source | Best-effort restore prior persisted settings and restore both source and target to their snapshotted visibility. |
 | Compensation also fails | Return the original structured error with sanitized rollback-failure detail; never report success. |
 
 No failure path may be represented as a successful switch. Position movement persistence updates only position/monitor/scale fields and never rewrites `visible`, so a stale `Moved` task cannot revert the selected mode.
@@ -70,6 +70,10 @@ Direct visibility bypasses are removed after migration:
 - remove `visible`, `x`, `y`, `monitorName` and `scaleFactor` from the frontend-settable `StickySettingsPatch` contract;
 - retain only `alwaysOnTop` as a frontend setting mutation;
 - allow visibility changes only through `enter_sticky_mode`, `enter_main_mode`, startup reconciliation and explicit sticky hide/close.
+
+Every read-modify-write operation on the single `sticky_window` settings record participates in the same transition mutex unless the repository performs a genuinely atomic field-only update. This includes `set_sticky_settings({ alwaysOnTop })`, because the current repository replaces the complete JSON value.
+
+The revised Rust `set_sticky_settings` command accepts only `always_on_top`, applies only `window.set_always_on_top`, and persists only that preference while preserving the latest visibility and position fields. With the current whole-record repository, it acquires the transition mutex across its read/apply/write sequence. It removes the existing `window.show()`, `window.hide()`, and `window.set_position()` branches and never makes a visibility decision from a snapshot read before another transition completed.
 
 ## macOS menu
 
@@ -119,8 +123,9 @@ Application-menu mappings are explicit:
 
 ## Error handling
 
-- Main-mode entry failures leave sticky visible and surface no false success.
-- Sticky-mode entry failures leave main visible.
+- A failed mode transition best-effort restores both windows and persisted settings to their pre-transition snapshots.
+- When a transition began from the opposite visible mode, that mode therefore remains visible.
+- When a transition began from the intentional zero-window state created by explicit sticky close, compensation preserves the zero-window state instead of opening the nominal source window.
 - The shared transition mutex serializes repeated, rapid and opposing transitions. Frontend controls await the command and disable themselves while pending only to provide clear UX.
 - Sticky persistence continues through the existing settings repository. Transition code captures the actual position before hiding sticky.
 - Spawned menu and single-instance transitions inspect their `Result`. Failures are recorded through a sanitized native error log containing no prompt content and are never silently discarded.
@@ -134,8 +139,9 @@ Application-menu mappings are explicit:
 - Add a frontend test proving the footer management action calls the same transition.
 - Add frontend tests proving all three full-window sticky entry points call `enterStickyMode`, command rejection is handled without an unhandled promise rejection, and the new `{ mode: ... }` contracts are mapped correctly.
 - Update existing sticky tests/mocks for the narrowed settings and new API contract.
-- Extract transition sequencing behind a testable native window-operations/state-machine boundary. Rust tests cover successful entry in both directions, idempotent re-entry, failure of each target operation, persistence failure, source-hide failure, startup with persisted sticky-visible/hidden state, and concurrent opposing requests. Every case asserts actual modeled visibility and persisted `visible` agree.
+- Extract transition sequencing behind a testable native window-operations/state-machine boundary. Rust tests cover successful entry in both directions, idempotent re-entry, failure of each target operation, persistence failure, source-hide failure, startup with persisted sticky-visible/hidden state, concurrent opposing requests, and failed entry in either direction from the intentional zero-window state. Every case asserts actual modeled visibility and persisted `visible` agree; zero-window compensation must not make the opposite mode visible.
 - Add a regression test proving a movement update changes only position metadata and cannot overwrite visibility.
+- Add a race regression test that overlaps `set_sticky_settings({ alwaysOnTop: ... })` with both mode transitions. Assert that the selected mode remains exclusive, persisted `visible` is not overwritten, and the requested top preference is retained.
 - Extract a pure menu descriptor and test the required Edit-item order; compilation plus native inspection verifies the AppKit responder boundary.
 - Run the entire frontend and Rust suites, strict TypeScript, Rustfmt, Clippy and production build.
 
