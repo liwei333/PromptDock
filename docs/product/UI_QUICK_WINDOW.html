@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PromptDock · 全局快捷面板 UI 原型</title>
+<style>
+:root{--line:#e8ecf3;--ink:#243048;--muted:#8995aa;--brand:#5266e8;--soft:#eef0ff}
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;background:#f2f4f9;color:var(--ink)}button,input{font:inherit}button{cursor:pointer}button:focus-visible,input:focus-visible{outline:3px solid #b3beff;outline-offset:2px}
+.demo-label{text-align:center;color:#8b98b0;font-size:12px;letter-spacing:.2px;margin:28px auto 16px;max-width:740px}
+.window{max-width:680px;width:calc(100vw - 38px);height:520px;margin:0 auto 30px;background:white;border:1px solid #dde3f1;border-radius:16px;box-shadow:0 30px 75px rgba(19,28,55,.16);overflow:hidden;display:flex;flex-direction:column}
+.searchline{min-height:71px;padding:15px 19px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--line)}
+.search-icon{color:var(--brand);font-size:23px}.searchline input{border:0;outline:0;color:var(--ink);font-size:15px;flex:1;min-width:0}.searchline input::placeholder{color:#a9b3c3}
+.hotkey{border-radius:6px;border:1px solid #e3e7ef;background:#f8f9fc;color:#8490a7;font-size:11px;padding:5px 8px}
+.sectionline{display:flex;align-items:center;justify-content:space-between;padding:13px 19px 5px;font-size:11px;color:#99a5b8}.sectionline strong{color:#61728b;font-weight:700}
+.items{padding:6px 10px 14px;overflow:auto;flex:1}
+.item{width:100%;background:white;border:0;text-align:left;padding:11px 12px;border-radius:10px;display:flex;gap:13px;align-items:center;min-height:62px}.item:hover,.item.active{background:#f0f3ff}
+.symbol{height:36px;width:36px;background:#eef0ff;color:#576ce4;border-radius:10px;display:grid;place-items:center;flex-shrink:0;font-size:16px;font-weight:800}
+.item-body{flex:1;min-width:0}.item-title{font-size:12.5px;color:#2e3e5b;font-weight:750;display:flex;align-items:center;gap:9px}.tiny-pill{color:#6f7ee4;background:#e7eafb;border-radius:5px;font-weight:650;font-size:10px;padding:2px 6px}
+.item-desc{font-size:11px;color:#9da8ba;margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.action{font-size:11px;font-weight:680;color:#7180a1;white-space:nowrap}
+.foot{border-top:1px solid var(--line);padding:13px 18px;display:flex;gap:16px;justify-content:space-between;color:#9aa6ba;font-size:11px}.foot strong{color:#6072c9}
+.empty{padding:35px 16px;text-align:center;color:#94a0b6;font-size:12px}.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(18px);opacity:0;background:#1f2b42;color:white;border-radius:9px;padding:12px 18px;font-size:12px;pointer-events:none;transition:.17s}.toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+.modal-cover{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(10,19,38,.47);padding:16px}.modal-cover.open{display:flex}
+.modal{width:min(520px,100%);background:white;border-radius:14px;padding:25px;box-shadow:0 22px 70px rgba(14,26,59,.2)}
+.modal h2{margin:0 0 9px;font-size:17px}.modal .desc{font-size:12px;color:#8996ab;margin-bottom:16px;line-height:1.7}.formrow{margin:11px 0}.formrow label{display:block;font-size:12px;font-weight:700;color:#40516f;margin-bottom:7px}.formrow input{width:100%;border:1px solid #dce3ee;border-radius:8px;padding:11px;font-size:13px}
+.preview{background:#f6f7fb;border:1px solid var(--line);border-radius:8px;white-space:pre-wrap;word-break:break-word;padding:13px;color:#485773;font-size:12px;line-height:1.65;max-height:150px;overflow:auto;margin-top:13px}
+.buttons{margin-top:18px;display:flex;justify-content:flex-end;gap:9px}.buttons button{border-radius:8px;border:1px solid #dfe5ef;padding:10px 14px;background:#fff;color:#56637b;font-size:12px}.buttons .primary{background:var(--brand);color:white;border-color:var(--brand)}
+@media(max-width:600px){.demo-label{padding:0 20px}.foot{font-size:10px;gap:10px}.window{height:76vh}.item-desc{max-width:180px}}
+</style>
+</head>
+<body>
+<p class="demo-label">全局快捷窗口 · <strong>独立浏览器交互示意</strong>（正式版由 macOS 按 Option + Space 唤起）</p>
+<div class="window" role="dialog" aria-label="PromptDock 快捷复制面板">
+  <div class="searchline"><span class="search-icon">⌕</span><input id="search" placeholder="搜索提示词标题、正文、分类或标签..." autocomplete="off" autofocus aria-label="快捷搜索"><span class="hotkey">ESC</span></div>
+  <div class="sectionline"><strong id="section-name">常用和置顶</strong><span>↑↓ 选择　↵ 复制</span></div>
+  <div class="items" id="items"></div>
+  <div class="foot"><span><strong>⌥ Space</strong> 全局唤起（仅正式 macOS App）</span><span>单击复制 · 无自动粘贴</span><span>仅本机</span></div>
+</div>
+<div class="modal-cover" id="modal-cover" role="dialog" aria-modal="true" aria-label="填写模板变量"><div class="modal">
+<h2 id="modal-title"></h2><p class="desc">填写后将替换正文中的同名变量，复制的是最终文本。</p><div id="fields"></div><div class="preview" id="preview"></div>
+<div class="buttons"><button id="cancel">取消</button><button class="primary" id="copy-template">填入变量并复制</button></div>
+</div></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script>
+(()=>{
+'use strict';
+const demos=[
+{title:'任务拆解与执行规范',desc:'技术研发 · Codex · 任务执行',pinned:true,uses:36,body:'你是一名资深软件工程师。先核查仓库和需求，再拆解任务、验证实现并给出真实的构建与测试证据。'},
+{title:'文章润色与结构优化',desc:'通用效率 · 写作',pinned:true,uses:31,body:'请在不改变原文事实和核心观点的前提下，优化结构、删减套话、使表达清晰自然。'},
+{title:'Codex 源码审查与验收',desc:'技术研发 · 代码审查',pinned:true,uses:28,body:'请基于真实源码和运行结果严格验收实现：列出缺陷位置、复现步骤、风险和修复优先级。'},
+{title:'AI Agent 产品需求分析',desc:'产品规划 · PRD · 变量模板',pinned:false,uses:22,body:'你是一名产品负责人。请围绕{{产品名称}}，为{{目标用户}}拆解核心任务、MVP 和验收标准。'},
+{title:'行业首席研究员 · 深度报告',desc:'投资研究 · 买方研究 · 变量模板',pinned:false,uses:19,body:'你是{{研究板块}}行业研究员，请针对{{标的名称}}整理有证据支持的行业研究报告和反方审查。'},
+{title:'系统技术架构审查',desc:'技术研发 · 架构评审',pinned:false,uses:12,body:'请审查方案的数据边界、故障处理、部署成本、未来演进及 MVP 阶段的过度设计风险。'}
+];
+let active=0,results=[],current=null,values={},toastHandle;
+const $=(id)=>document.getElementById(id);
+const esc=(v)=>String(v).replace(/[&<>"']/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]));
+function variables(body){return [...new Set([...body.matchAll(/\{\{\s*([^{}]+?)\s*\}\}/g)].map(x=>x[1].trim()))]}
+function finalText(item){return item.body.replace(/\{\{\s*([^{}]+?)\s*\}\}/g,(x,k)=>values[k.trim()]?.trim()||x)}
+function msg(value){$('toast').textContent=value;$('toast').classList.add('show');clearTimeout(toastHandle);toastHandle=setTimeout(()=>$('toast').classList.remove('show'),2400)}
+function render(){const q=$('search').value.trim().toLocaleLowerCase();results=demos.filter(x=>!q||[x.title,x.desc,x.body].join(' ').toLocaleLowerCase().includes(q)).sort((a,b)=>Number(b.pinned)-Number(a.pinned)||b.uses-a.uses);active=0;$('section-name').textContent=q?'搜索结果 · '+results.length:'常用和置顶';paint()}
+function paint(){$('items').innerHTML=results.length?results.map((x,i)=>`<button class="item ${i===active?'active':''}" data-index="${i}"><span class="symbol">${variables(x.body).length?'{}':'▤'}</span><span class="item-body"><span class="item-title">${esc(x.title)} ${x.pinned?'<span class="tiny-pill">置顶</span>':''}</span><span class="item-desc">${esc(x.desc)}</span></span><span class="action">${variables(x.body).length?'填变量 ›':'复制 ↵'}</span></button>`).join(''):'<div class="empty">没有找到相关提示词，试试其他关键词。</div>'}
+async function clipboard(text){try{if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(text);return true}}catch(e){}try{const t=document.createElement('textarea');t.value=text;t.style.cssText='position:fixed;opacity:0';document.body.appendChild(t);t.select();const ok=document.execCommand('copy');t.remove();return ok}catch(e){return false}}
+async function copy(item){if(variables(item.body).length){openTemplate(item);return}if(await clipboard(item.body))msg('已复制「'+item.title+'」，可切回 AI 窗口粘贴');else msg('浏览器未授予剪贴板写入权限，请在正式客户端实测')}
+function openTemplate(item){current=item;values={};const vars=variables(item.body);$('modal-title').textContent=item.title;$('fields').innerHTML=vars.map((v,i)=>`<div class="formrow"><label for="var-${i}">${esc(v)}</label><input id="var-${i}" data-key="${esc(v)}" placeholder="填写 ${esc(v)}"></div>`).join('');$('preview').textContent=item.body;$('modal-cover').classList.add('open');$('fields').querySelector('input')?.focus()}
+function closeTemplate(){$('modal-cover').classList.remove('open');current=null;values={};$('search').focus()}
+$('items').addEventListener('click',(e)=>{const item=e.target.closest('button[data-index]');if(item)copy(results[Number(item.dataset.index)])});
+$('search').addEventListener('input',render);
+$('fields').addEventListener('input',(e)=>{const el=e.target.closest('input[data-key]');if(el){values[el.dataset.key]=el.value;$('preview').textContent=finalText(current)}});
+$('cancel').onclick=closeTemplate;
+$('copy-template').onclick=async()=>{if(!current)return;const unset=variables(current.body).find(v=>!(values[v]||'').trim());if(unset){msg('请先填写所有变量：'+unset);return}const item=current;const output=finalText(item);if(await clipboard(output)){closeTemplate();msg('模板「'+item.title+'」已复制')}else msg('当前浏览器剪贴板写入失败')};
+document.addEventListener('keydown',(e)=>{if(e.key==='Escape'){if(current){closeTemplate();return}$('search').value='';render();msg('正式版此处会隐藏快捷窗口');return}if(current)return;if(document.activeElement===$('search')&&['ArrowDown','ArrowUp'].includes(e.key)){e.preventDefault();if(results.length){active=(active+(e.key==='ArrowDown'?1:-1)+results.length)%results.length;paint();$('items').children[active]?.scrollIntoView({block:'nearest'})}}if(document.activeElement===$('search')&&e.key==='Enter'){e.preventDefault();if(results[active])copy(results[active])}});
+render();
+})();
+</script>
+</body>
+</html>

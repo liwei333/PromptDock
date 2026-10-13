@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light" />
+  <title>PromptDock · 我的提示词工作台</title>
+  <style>
+    :root{
+      --page:#f7f8fb;--paper:#fff;--ink:#20283c;--muted:#7c879a;--line:#e8ecf3;
+      --blue:#5266e8;--blueDeep:#4054d5;--blueSoft:#eef0ff;--side:#172033;--sideText:#d7ddec;
+      --shadow:0 4px 22px rgba(27,42,75,.035);--radius:15px;
+    }
+    *{box-sizing:border-box} html,body{margin:0;min-height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft Yahei",sans-serif;color:var(--ink)}
+    button,input,select,textarea{font:inherit} button{cursor:pointer} button:disabled{opacity:.5;cursor:not-allowed} button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid rgba(82,102,232,.21);outline-offset:2px}
+    .svg{width:18px;height:18px;display:inline-block;flex-shrink:0;stroke:currentColor;fill:none;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;vertical-align:middle}
+    .svg.sm{width:15px;height:15px}.svg.lg{width:21px;height:21px}
+    .app{display:flex;min-height:100vh}
+    aside.sidebar{width:253px;flex-shrink:0;background:var(--side);color:var(--sideText);height:100vh;position:sticky;top:0;display:flex;flex-direction:column;overflow:hidden}
+    .brand{height:94px;display:flex;align-items:center;gap:12px;padding:21px 24px 20px;border-bottom:1px solid rgba(255,255,255,.075)}
+    .brandmark{height:39px;width:39px;border-radius:12px;background:#6174f5;display:grid;place-items:center;box-shadow:0 8px 20px rgba(74,89,233,.23)}
+    .brandmark svg{width:27px;height:27px;stroke:#fff;fill:none;stroke-width:2;stroke-linejoin:round}
+    .brandname{font-size:17px;letter-spacing:.15px;line-height:1.23;font-weight:740;color:#fff}.brandcaption{margin-top:5px;color:#8894ae;font-size:10px;letter-spacing:.6px}
+    .workspace-select{margin:19px 15px 19px;border:1px solid rgba(255,255,255,.09);border-radius:11px;padding:12px 13px;display:flex;gap:10px;align-items:center}
+    .workspace-icon{background:rgba(99,117,246,.23);color:#adbbff;padding:8px;border-radius:9px;display:grid;place-items:center}
+    .workspace-select strong{font-size:12px;font-weight:650;color:#ecf0fb;display:block}.workspace-select small{font-size:11px;color:#8996af;display:block;margin-top:5px}
+    .side-scroll{overflow-y:auto;padding:0 11px 12px;scrollbar-width:thin}
+    .side-section{display:flex;justify-content:space-between;align-items:center;color:#75839e;padding:11px 13px 8px;margin-top:8px;font-size:10px;font-weight:700;letter-spacing:1.5px}
+    .side-add{border:0;background:transparent;color:#8290ac;display:grid;place-items:center;padding:3px;border-radius:5px}.side-add:hover{color:white;background:rgba(255,255,255,.09)}
+    .navitem{width:100%;border:0;background:transparent;color:#aebad0;text-align:left;display:flex;align-items:center;gap:11px;padding:11px 12px;border-radius:9px;font-size:12.5px;transition:background .15s,color .15s;margin:2px 0}
+    .navitem .navcount{margin-left:auto;color:#70809b;font-size:11px}.navitem:hover{color:#f7f9ff;background:rgba(255,255,255,.062)}
+    .navitem.active{color:#fff;background:#303d5c;font-weight:630}.navitem.active .svg{color:#aab8ff}.navitem.active .navcount{color:#aab7d5}
+    .cat-symbol{height:18px;width:18px;display:grid;place-items:center}.cat-dot{width:8px;height:8px;border-radius:3px;background:#9ba9f3}
+    .side-bottom{margin-top:auto;padding:14px 14px 20px;background:var(--side);border-top:1px solid rgba(255,255,255,.07)}
+    .side-tip{background:#222e47;padding:13px;border-radius:11px;margin-bottom:15px}.side-tip-head{display:flex;gap:8px;align-items:center;color:#dce3f5;font-size:12px;font-weight:650}
+    .side-tip p{font-size:11px;color:#8fa0bd;line-height:1.7;margin:6px 0 10px}
+    kbd{font-family:inherit;font-size:10px;border:1px solid rgba(255,255,255,.18);border-radius:5px;color:#b5c1da;padding:3px 7px;background:rgba(255,255,255,.035)}
+    .side-sync{display:flex;align-items:center;gap:8px;font-size:10px;color:#8290a9;padding:0 5px}.online-dot{height:7px;width:7px;background:#47c99d;border-radius:50%}.side-sync a{color:#9dadf9;margin-left:auto;text-decoration:none}
+    main.main{min-width:0;flex:1;background:var(--page)}
+    .topbar{height:76px;display:flex;justify-content:space-between;align-items:center;background:#fff;border-bottom:1px solid var(--line);padding:0 37px;gap:15px}
+    .breadcrumb{display:flex;align-items:center;gap:12px;font-size:12px;color:#99a3b3}.breadcrumb b{color:#344057;font-weight:660}.breadcrumb .separator{color:#c5cbd5}
+    .top-actions{display:flex;gap:9px;align-items:center}
+    .avatar{width:32px;height:32px;border-radius:10px;display:grid;place-items:center;background:#edf0fc;color:#6476dd;font-weight:800;font-size:12px;margin-left:9px;border:1px solid #e0e5f6}
+    .btn{height:37px;padding:0 15px;display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:9px;border:1px solid transparent;background:#fff;color:#58647a;font-size:12px;font-weight:630;white-space:nowrap;transition:background .15s,transform .15s,border .15s}
+    .btn:hover{background:#f3f5fa}.btn:active{transform:translateY(1px)}.btn.ghost{border-color:var(--line);color:#556079}.btn.ghost:hover{border-color:#d0d8ed;background:#f7f9fd}
+    .btn.primary{background:var(--blue);color:#fff;border-color:var(--blue);box-shadow:0 4px 10px rgba(82,102,232,.14)}.btn.primary:hover{background:var(--blueDeep)}.btn.subtle{background:#eff1ff;color:#5064dd}.btn.subtle:hover{background:#e6e9ff}
+    .btn.danger{color:#dc5360;background:#fff1f3}.btn.danger:hover{background:#ffe8eb}.btn.large{height:47px;padding:0 20px;font-size:13px;border-radius:11px}.btn.icononly{width:36px;padding:0}
+    .content{max-width:1540px;margin:0 auto;padding:32px 37px 70px}
+    .headline{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;margin-bottom:25px}
+    .overline{letter-spacing:1.7px;color:#7988a5;font-size:10px;font-weight:800;text-transform:uppercase;margin-bottom:8px}
+    h1{margin:0;font-size:26px;line-height:1.22;letter-spacing:-.7px;color:#243048;font-weight:780}.subtitle{margin:9px 0 0;color:#8490a2;font-size:12.5px;line-height:1.6}
+    .headline-note{display:flex;gap:8px;align-items:center;font-size:11px;color:#8b96a8;padding-bottom:6px}.headline-note .svg{color:#90a2bb}
+    .searchbar{display:flex;justify-content:space-between;align-items:center;gap:17px;margin-bottom:24px}
+    .searchwrap{height:45px;display:flex;align-items:center;gap:10px;flex:1;min-width:0;border:1px solid #e2e7f1;border-radius:11px;background:white;padding:0 13px 0 15px;box-shadow:0 3px 13px rgba(34,48,78,.025);transition:border .15s}
+    .searchwrap:focus-within{border-color:#8fa0f5}.searchwrap>.svg{color:#909bb0}.searchwrap input{flex:1;min-width:0;border:0;background:transparent;outline:none;font-size:12.5px;color:#26324b}.searchwrap input::placeholder{color:#a9b2c2}
+    .shortcut-key{border:1px solid #e5e9f0;padding:3px 7px;border-radius:5px;color:#8b96a8;font-size:10px;white-space:nowrap}
+    .toolbar-actions{display:flex;align-items:center;gap:10px}
+    .control-select{border:1px solid #e2e7f0;background:white;border-radius:10px;color:#69758b;height:45px;padding:0 12px;font-size:12px;min-width:122px;outline:none}
+    .pill-tabs{display:flex;gap:5px;background:#eef0f6;padding:4px;border-radius:10px;white-space:nowrap}
+    .pill-tabs button{border:0;background:transparent;border-radius:7px;padding:8px 12px;font-size:11.5px;color:#8290a2;font-weight:600}.pill-tabs button.active{background:white;color:#3d4d70;box-shadow:0 1px 5px rgba(45,55,81,.08)}
+    .quick-panel{border:1px solid #e7eaf3;border-radius:16px;background:#fff;padding:21px 23px 23px;margin-bottom:31px;box-shadow:var(--shadow)}
+    .section-line{display:flex;align-items:center;justify-content:space-between;gap:12px}.section-name{margin:0;font-size:15px;font-weight:750;color:#2b3650;display:flex;align-items:center;gap:8px}.section-name .svg{color:#6175e9}
+    .section-desc{font-size:11px;color:#a0a9b9;margin-top:5px}.micro-link{border:0;background:transparent;color:#6c7ce6;display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:6px 0}
+    .quick-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:18px}
+    .quick-item{padding:14px;min-width:0;background:#f8f9fd;border:1px solid #ebedf4;border-radius:11px;display:flex;align-items:center;gap:10px;transition:border .15s,background .15s}.quick-item:hover{background:#f4f6ff;border-color:#dfe4fb}
+    .quick-icon{height:34px;width:34px;border-radius:9px;background:#ecefff;color:#6b7eeb;display:grid;place-items:center;flex-shrink:0}.quick-copy-title{font-size:12px;font-weight:690;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}.quick-copy-meta{font-size:10px;color:#9aa5b6;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .quick-item button{margin-left:auto;flex-shrink:0;height:32px;border:1px solid #dce3fb;background:white;color:#566de3;border-radius:8px;font-size:11px;font-weight:700;padding:0 9px;display:flex;gap:5px;align-items:center}.quick-item button:hover{border-color:#8d9df4;background:#eff1ff}
+    .list-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}.list-head-left{display:flex;align-items:center;gap:11px}
+    .counttag{background:#e9edf6;color:#7889a4;padding:4px 8px;border-radius:7px;font-size:10px;font-weight:750}
+    .helptext{color:#9ca6b6;font-size:11px}.sort-wrap{display:flex;gap:8px;align-items:center;font-size:11px;color:#9aa6b6}.sort-wrap select{border:0;background:transparent;color:#52627d;font-weight:630;font-size:11px;outline:0;cursor:pointer}
+    .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:15px}
+    .prompt-card{position:relative;min-width:0;min-height:249px;display:flex;flex-direction:column;border-radius:14px;border:1px solid #e6eaf2;background:white;padding:18px 18px 15px;box-shadow:0 3px 11px rgba(19,37,65,.025);transition:box-shadow .15s,border-color .15s,transform .15s;cursor:pointer}
+    .prompt-card:hover{border-color:#cdd6f8;box-shadow:0 9px 25px rgba(42,60,108,.08);transform:translateY(-2px)}
+    .card-top{display:flex;align-items:center;justify-content:space-between;gap:7px}.tag{font-size:10px;display:inline-flex;gap:5px;align-items:center;padding:5px 8px;border-radius:6px;font-weight:690;background:#f1f3f8;color:#748098;white-space:nowrap}
+    .tag .tiny-dot{height:6px;width:6px;border-radius:2px;background:currentColor;opacity:.75}.card-top-right{display:flex;gap:4px}.card-star{height:27px;width:27px;border:0;background:transparent;color:#b4bfcb;border-radius:7px;display:grid;place-items:center}.card-star:hover{background:#f4f5ff;color:#777ee6}.card-star.is-active{color:#f0aa3f}.card-star.is-active svg{fill:#f6c36a;stroke:#eaa936}
+    .card-title{margin:13px 0 8px;font-size:14px;font-weight:760;color:#2b3550;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}.card-desc{font-size:11.5px;line-height:1.75;color:#8490a3;margin:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:40px}
+    .card-preview{margin-top:11px;font-size:11px;line-height:1.67;color:#a0a9b9;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-line}
+    .card-spacer{flex:1;min-height:12px}.card-footer{border-top:1px solid #f0f2f6;padding-top:13px;display:flex;align-items:center;justify-content:space-between;gap:7px}
+    .card-footnote{display:flex;gap:7px;align-items:center;font-size:10px;color:#a0aabb;min-width:0;white-space:nowrap}.card-footnote .svg{width:13px;height:13px}.footsep{height:3px;width:3px;background:#ced5df;border-radius:50%}.card-copy{height:33px;border:1px solid #dfe4f3;border-radius:8px;padding:0 10px;background:#fff;color:#5266dc;font-size:11px;font-weight:730;display:flex;gap:6px;align-items:center;white-space:nowrap}
+    .card-copy:hover{background:#f1f3ff;border-color:#bec8fb}.card-copy .svg{width:14px;height:14px}.template-hint{display:inline-flex;align-items:center;gap:3px;color:#8a75c8;font-size:10px;font-weight:600}.template-hint .svg{width:12px;height:12px}
+    .empty{background:#fff;border:1px dashed #d9dfec;border-radius:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:65px 20px;color:#93a0b4;text-align:center}
+    .empty-icon{height:52px;width:52px;border-radius:16px;display:grid;place-items:center;color:#8191e5;background:#eff1ff}.empty-icon .svg{width:25px;height:25px}.empty h3{font-size:15px;color:#44516a;margin:19px 0 7px}.empty p{font-size:12px;margin:0 0 19px}
+    .footer-note{display:flex;justify-content:space-between;color:#b3bbca;font-size:10px;margin-top:27px;padding:0 2px}.footer-note span{display:flex;align-items:center;gap:6px}
+    .overlay{position:fixed;inset:0;z-index:30;background:rgba(12,22,44,.46);backdrop-filter:blur(2px);animation:fade .16s both}.hidden{display:none!important}
+    @keyframes fade{from{opacity:0}to{opacity:1}}@keyframes slideIn{from{transform:translateX(18px);opacity:.5}to{transform:translateX(0);opacity:1}}
+    .drawer{width:min(540px,100vw);height:100%;position:absolute;right:0;top:0;background:#fff;box-shadow:-10px 0 50px rgba(8,19,44,.18);display:flex;flex-direction:column;animation:slideIn .2s both}
+    .drawer-header{height:69px;padding:0 27px;flex-shrink:0;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}.drawer-heading{font-weight:760;font-size:13px;color:#44526a}.header-control{display:flex;gap:9px}
+    .drawer-body{flex:1;min-height:0;overflow-y:auto;padding:28px 29px 40px;scrollbar-width:thin}.drawer-meta{display:flex;align-items:center;gap:8px;margin-bottom:15px}.drawer h2{font-size:22px;line-height:1.4;letter-spacing:-.4px;margin:0 0 12px;color:#26324a}.drawer-desc{font-size:12px;color:#8692a6;line-height:1.9;margin:0 0 23px}
+    .divider{border:0;border-top:1px solid #edf0f5;margin:22px 0}.label-line{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}.label-line strong{font-size:12px;color:#4a5770}.label-line small{font-size:10px;color:#a1aaba}
+    .body-preview{white-space:pre-wrap;overflow-wrap:anywhere;background:#f7f8fc;border:1px solid #ebedf3;border-radius:11px;padding:19px 18px;font-size:12px;line-height:1.95;color:#526077;max-height:none}
+    .drawer-tags{display:flex;flex-wrap:wrap;gap:6px}.drawer-tags span{background:#f0f3f9;color:#8190a5;font-size:10px;padding:6px 9px;border-radius:6px}
+    .variable-panel{padding:17px;border:1px solid #e4e7fd;background:#f8f9ff;border-radius:12px;margin-bottom:24px}.variable-head{display:flex;align-items:center;gap:7px;color:#596bd9;font-size:12px;font-weight:740;margin-bottom:7px}
+    .variable-explain{color:#8793b1;font-size:11px;line-height:1.7;margin-bottom:13px}.variable-row{margin:12px 0}.variable-row label{display:block;color:#63718b;font-size:11px;margin-bottom:7px}.variable-row input{height:39px;border:1px solid #dce2f6;background:#fff;border-radius:8px;width:100%;padding:0 12px;color:#3c4861;font-size:12px;outline:none}.variable-row input:focus{border-color:#8d9af3}
+    .drawer-footer{flex-shrink:0;display:flex;flex-direction:column;gap:9px;border-top:1px solid #e9edf4;padding:19px 27px 22px;background:white;box-shadow:0 -8px 24px rgba(27,42,77,.024)}.drawer-footer .btn{width:100%}.drawer-foot-help{display:flex;justify-content:center;gap:7px;align-items:center;font-size:10px;color:#a0aaba}
+    .modal-wrap,.palette-wrap{position:fixed;inset:0;z-index:45;background:rgba(11,21,44,.56);backdrop-filter:blur(3px);display:flex;justify-content:center;align-items:center;padding:22px;animation:fade .15s both}
+    .modal{width:min(670px,100%);max-height:min(90vh,880px);overflow:hidden;display:flex;flex-direction:column;background:#fff;border-radius:17px;box-shadow:0 26px 80px rgba(12,27,58,.23)}
+    .modal-header{padding:21px 25px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}.modal-title{font-size:16px;font-weight:780;color:#2c3951}.modal-sub{color:#98a4b4;font-size:11px;margin-top:5px}
+    .modal-content{padding:24px 26px 16px;overflow-y:auto;scrollbar-width:thin}.modal-footer{padding:16px 25px 20px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:12px;align-items:center;background:#fff}
+    .form-row{display:grid;grid-template-columns:1fr 1fr;gap:15px}.formfield{margin-bottom:17px}.formfield label{display:block;color:#526079;font-size:11px;font-weight:690;margin-bottom:8px}.required{color:#ef6973}.formfield input,.formfield select,.formfield textarea{border:1px solid #e0e6f0;border-radius:9px;width:100%;padding:10px 12px;font-size:12px;color:#2e3a53;background:#fff;outline:none}.formfield input:focus,.formfield select:focus,.formfield textarea:focus{border-color:#8b9bf5}.formfield input,.formfield select{height:41px}.formfield textarea{min-height:190px;resize:vertical;font-size:12px;line-height:1.8}.formfield input::placeholder,.formfield textarea::placeholder{color:#b0b9c7}
+    .hint-line{color:#9aa6b7;font-size:10px;margin-top:7px}.toggle-row{display:flex;gap:20px;align-items:center;flex-wrap:wrap}.toggle-row label{font-size:12px;color:#63728b;display:flex;align-items:center;gap:7px;cursor:pointer}.toggle-row input{accent-color:var(--blue)}
+    .modal-warning{font-size:11px;color:#a5aebd}.modal-footer-right{display:flex;gap:9px}
+    .palette-wrap{align-items:flex-start;padding-top:min(15vh,145px)}.palette{width:min(680px,95vw);max-height:70vh;display:flex;flex-direction:column;background:white;border-radius:15px;box-shadow:0 26px 84px rgba(11,26,55,.31);overflow:hidden}
+    .palette-search{display:flex;gap:12px;align-items:center;padding:18px 20px;border-bottom:1px solid #e9ecf3}.palette-search .svg{color:#6e80a7}.palette-search input{border:0;outline:0;font-size:15px;color:#26334c;flex:1;width:0}.palette-search input::placeholder{color:#a4aec0}.palette-search kbd{border-color:#e1e6f0;color:#8290a7}
+    .palette-list{overflow-y:auto;padding:10px}.palette-item{width:100%;display:flex;align-items:center;gap:12px;padding:12px;border:0;background:white;border-radius:9px;text-align:left}.palette-item:hover,.palette-item:focus{background:#f2f4fe;outline:0}
+    .palette-item-icon{background:#edf0ff;color:#687bea;border-radius:9px;height:35px;width:35px;display:grid;place-items:center}.palette-item-main{flex:1;min-width:0}.palette-item-name{font-size:12px;font-weight:720;color:#31405c}.palette-item-desc{margin-top:5px;font-size:10.5px;color:#9da8b9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.palette-item-tail{font-size:10px;color:#8a99b0;display:flex;gap:7px;align-items:center}.palette-foot{border-top:1px solid #edf0f4;font-size:10px;color:#9ba7b9;padding:12px 19px;display:flex;gap:16px}
+    .toast{position:fixed;z-index:80;bottom:29px;left:50%;transform:translateX(-50%) translateY(15px);opacity:0;pointer-events:none;background:#24314b;color:#fff;display:flex;align-items:center;gap:9px;padding:12px 18px;border-radius:11px;font-size:12px;font-weight:590;box-shadow:0 14px 40px rgba(16,33,62,.26);transition:opacity .2s,transform .2s;max-width:90vw;white-space:nowrap}.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}.toast .svg{color:#83e0c5}
+    .mobile-menu{display:none}.close-mobile{display:none}
+    @media(max-width:1350px){.content{padding:29px 27px 60px}.topbar{padding:0 27px}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.quick-list{grid-template-columns:repeat(3,minmax(0,1fr))}.quick-item{padding:11px}.quick-icon{display:none}}
+    @media(max-width:1060px){aside.sidebar{width:227px}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.quick-list{grid-template-columns:1fr}.quick-item{padding:12px}.quick-icon{display:grid}.searchbar{flex-wrap:wrap}.toolbar-actions{width:100%;justify-content:space-between}.searchwrap{flex-basis:100%}}
+    @media(max-width:740px){.mobile-menu{display:grid;place-items:center;border:0;background:transparent;color:#536179;padding:4px}.sidebar{position:fixed!important;z-index:20;left:0;transform:translateX(-100%);transition:transform .2s}.sidebar.mobile-open{transform:translateX(0)}.close-mobile{display:block;position:absolute;right:10px;top:16px;border:0;background:transparent;color:#c8d1e5}.topbar{height:62px;padding:0 17px}.breadcrumb{gap:8px}.top-actions>.btn:nth-child(2){display:none}.avatar{display:none}.content{padding:25px 17px 50px}.headline-note{display:none}.headline h1{font-size:24px}.grid{grid-template-columns:1fr}.toolbar-actions{overflow-x:auto}.quick-panel{padding:18px}.list-head .helptext{display:none}.btn{padding:0 11px}.form-row{grid-template-columns:1fr;gap:0}}
+
+    /* V1.1 便签模式：浏览器内的原生小窗口模拟，正式版须由 Tauri 创建独立窗口 */
+    .sticky-note{position:fixed;z-index:27;top:115px;right:38px;width:340px;height:270px;background:#fff3ac;border:1px solid #dfc96d;border-radius:9px;box-shadow:0 16px 45px rgba(52,50,22,.28),0 2px 5px rgba(52,50,22,.12);display:flex;flex-direction:column;color:#493c26;overflow:hidden;user-select:none}
+    .sticky-note .sticky-header{height:46px;min-height:46px;display:flex;align-items:center;gap:8px;padding:0 11px 0 13px;border-bottom:1px solid rgba(158,125,43,.18);cursor:grab;background:linear-gradient(180deg,#fff8c7,#fff3ac)}
+    .sticky-note .sticky-header:active{cursor:grabbing}.sticky-header>*{flex-shrink:0}.sticky-label{font-weight:800;font-size:13px;letter-spacing:-.2px}.sticky-pin-icon{font-size:15px;color:#ad7929}.sticky-counter{font-size:10px;background:#ffeb8b;color:#8d711e;border-radius:10px;padding:3px 7px;margin-right:auto}.sticky-controls{display:flex;gap:2px}
+    .sticky-iconbtn{width:25px;height:26px;display:grid;place-items:center;background:transparent;border:0;border-radius:5px;color:#77643b;font-size:14px}.sticky-iconbtn:hover{background:rgba(142,108,42,.13)}.sticky-iconbtn[aria-pressed="true"]{color:#ac781e;background:#fbe189}
+    .sticky-rows{padding:5px 9px;flex:1;min-height:0;display:flex;flex-direction:column;gap:2px}
+    .sticky-item{flex:0 0 35px;border:1px solid rgba(184,146,42,.12);border-radius:6px;background:rgba(255,255,255,.42);height:36px;width:100%;display:flex;align-items:center;gap:8px;text-align:left;color:#534328;padding:0 9px;min-width:0;transition:background .15s,border-color .15s}
+    .sticky-item:hover{background:rgba(255,255,255,.78);border-color:#d9bd69}.sticky-item:focus-visible{outline:2px solid #8e7518;outline-offset:0}
+    .sticky-no{font-size:10px;font-weight:800;color:#bd9948;width:17px;flex-shrink:0;font-variant-numeric:tabular-nums}.sticky-item-title{font-size:11.5px;font-weight:670;flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;min-width:0}.sticky-copyicon{font-size:12px;color:#98772e;flex-shrink:0}.sticky-item.copied{background:#e5f5ce;border-color:#9ebe75;color:#476b32}
+    .sticky-empty{flex:0 0 35px;border:1px dashed #dbbf71;background:rgba(255,255,255,.2);border-radius:6px;color:#ad914f;height:36px;display:flex;align-items:center;justify-content:center;font-size:11px;gap:6px}
+    .sticky-footer{height:30px;min-height:30px;border-top:1px solid rgba(158,125,43,.19);display:flex;align-items:center;justify-content:space-between;padding:0 12px;font-size:10px;color:#957844;gap:5px}.sticky-footer button{border:0;background:none;color:#9c761e;font-weight:740;font-size:10px;padding:5px 1px}
+    .sticky-manager-list{display:flex;flex-direction:column;gap:8px}.sticky-manager-item{border:1px solid #e8e9f0;padding:10px 12px;border-radius:9px;display:flex;gap:10px;align-items:center;color:#4a566c}.sticky-manager-title{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px;font-weight:660}.sticky-manager-item .tiny-btn{font-size:11px;border:1px solid #dfe4ed;background:#fff;color:#64728a;border-radius:6px;padding:5px 9px;min-width:31px}.sticky-manager-item .tiny-btn:hover{background:#f1f4fe}.sticky-manager-hint{font-size:11px;color:#8995a7;line-height:1.8;margin:0 0 14px}
+    @media(max-width:740px){.sticky-note{width:min(340px,calc(100vw - 20px));right:10px;top:76px}.top-actions .btn.mini-launch{padding:0 8px;font-size:11px}}
+  </style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand"><div class="brandmark"><svg viewBox="0 0 32 32"><path d="M8 7.5h10.5a5.5 5.5 0 0 1 0 11H8z"/><path d="M13.2 13.3H23a5.5 5.5 0 1 1 0 11H13.2z"/></svg></div><div><div class="brandname">PromptDock</div><div class="brandcaption">个人提示词工作台</div></div><button class="close-mobile" data-action="close-mobile">✕</button></div>
+    <div class="workspace-select"><span class="workspace-icon" id="workspace-icon"></span><div><strong>我的工作空间</strong><small>仅存储在当前浏览器</small></div></div>
+    <div class="side-scroll">
+      <div class="side-section">工作台</div>
+      <nav id="nav-main"></nav>
+      <div class="side-section" style="margin-top:23px">分类管理 <button class="side-add" data-action="add-category" aria-label="新增分类" title="新增分类" id="categoryAdd"></button></div>
+      <nav id="nav-categories"></nav>
+    </div>
+    <div class="side-bottom">
+      <div class="side-tip"><div class="side-tip-head" id="shortcut-heading"></div><p>不必翻文档。调出快捷面板，搜索后立即复制。</p><button data-action="palette" class="side-add" style="padding:0"><kbd>⌘ / Ctrl + K</kbd></button></div>
+      <div class="side-sync"><span class="online-dot"></span><span>浏览器本地保存</span><a href="#" data-action="export">备份数据</a></div>
+    </div>
+  </aside>
+  <main class="main">
+    <header class="topbar"><div class="breadcrumb"><button class="mobile-menu" data-action="mobile-menu" id="mobile-menu"></button><span>个人工作空间</span><span class="separator">/</span><b id="breadcrumb-label">全部提示词</b></div><div class="top-actions"><button class="btn subtle mini-launch" data-action="sticky-show" id="stickyLaunch" title="打开五条置顶提示词便签">📌 便签模式</button><button class="btn ghost" data-action="import" id="importBtn"></button><button class="btn ghost" data-action="export" id="exportBtn"></button><button class="btn primary" data-action="new" id="newBtn"></button><div class="avatar" title="本地个人空间">P</div></div></header>
+    <div class="content">
+      <section class="headline"><div><div class="overline">PERSONAL PROMPT LIBRARY</div><h1 id="pageTitle">我的提示词库</h1><p class="subtitle">存好每一个好用的指令，下次需要时，一键复制就能用。</p></div><div class="headline-note" id="headlineNote"></div></section>
+      <section class="searchbar"><div class="searchwrap" id="searchwrap"><span id="searchIcon"></span><input id="mainSearch" type="search" placeholder="搜索标题、提示词正文、标签..." autocomplete="off" aria-label="搜索提示词"/><span class="shortcut-key">⌘ K</span></div><div class="toolbar-actions"><div class="pill-tabs" id="filterTabs"><button data-view="all" class="active">全部</button><button data-view="favorite">已收藏</button><button data-view="template">变量模板</button></div><select class="control-select" id="sortSelect" aria-label="排序方式"><option value="recent">最近更新</option><option value="popular">使用最多</option><option value="name">按名称</option></select></div></section>
+      <section class="quick-panel" id="quickPanel"><div class="section-line"><div><h2 class="section-name" id="quickHeading"></h2><div class="section-desc">将最常用的提示词置顶，复制只需一次点击</div></div><button class="micro-link" data-action="palette" id="quickMore"></button></div><div class="quick-list" id="quickList"></div></section>
+      <section><div class="list-head"><div class="list-head-left"><h2 class="section-name" id="listTitle">全部提示词</h2><span class="counttag" id="listCount">0 条</span><span class="helptext">点击卡片查看完整内容</span></div><div class="sort-wrap" id="sortLine"></div></div><div class="grid" id="cards"></div><div id="empty" class="empty hidden"></div></section>
+      <div class="footer-note"><span id="footerLeft"></span><span>Prototype V1.1 · PromptDock</span></div>
+    </div>
+  </main>
+</div>
+
+<div class="overlay hidden" id="detailOverlay" role="dialog" aria-modal="true" aria-label="提示词详情"><div class="drawer"><div class="drawer-header"><span class="drawer-heading">提示词详情</span><div class="header-control"><button class="btn ghost icononly" data-action="edit-selected" title="编辑" aria-label="编辑" id="detailEdit"></button><button class="btn ghost icononly" data-action="close-detail" title="关闭" aria-label="关闭" id="detailClose"></button></div></div><div class="drawer-body" id="detailBody"></div><div class="drawer-footer"><button class="btn primary large" data-action="copy-selected" id="detailCopy"></button><div class="drawer-foot-help" id="detailFootHelp"></div></div></div></div>
+
+<div class="modal-wrap hidden" id="editorOverlay" role="dialog" aria-modal="true" aria-label="编辑提示词"><form class="modal" id="editorForm"><div class="modal-header"><div><div class="modal-title" id="editorTitle">新建提示词</div><div class="modal-sub">给 AI 的好指令，值得认真保存</div></div><button type="button" class="btn ghost icononly" data-action="close-editor" id="editorClose"></button></div><div class="modal-content"><div class="form-row"><div class="formfield"><label for="editTitle">提示词名称 <span class="required">*</span></label><input id="editTitle" name="title" maxlength="80" required placeholder="例如：Codex 代码审查专家"/></div><div class="formfield"><label for="editCategory">所属分类</label><select id="editCategory" name="category"></select></div></div><div class="formfield"><label for="editDesc">简短说明</label><input id="editDesc" name="description" maxlength="160" placeholder="一句话说明这个提示词适用于什么场景"/></div><div class="formfield"><label for="editTags">标签</label><input id="editTags" name="tags" placeholder="多个标签用逗号分隔，如：审查, 开发, Codex"/></div><div class="formfield"><label for="editBody">提示词正文 <span class="required">*</span></label><textarea id="editBody" name="body" required placeholder="写下要发给 AI 的完整指令...\n\n支持使用 {{项目名称}} 这样的变量，复制前可以填写。"></textarea><div class="hint-line" id="bodyHint">输入 {{变量名}} 可自动生成可填写的变量模板。</div></div><div class="toggle-row"><label><input type="checkbox" id="editFavorite"/> 加入收藏</label><label><input type="checkbox" id="editPinned"/> 加入便签（最多 5 条）</label></div></div><div class="modal-footer"><button type="button" class="btn danger hidden" id="deleteBtn" data-action="delete-selected">删除这条</button><span class="modal-warning" id="modalLeftHint"></span><div class="modal-footer-right"><button type="button" class="btn ghost" data-action="close-editor">取消</button><button type="submit" class="btn primary" id="saveBtn"></button></div></div></form></div>
+
+<div class="modal-wrap hidden" id="categoryOverlay" role="dialog" aria-modal="true" aria-label="新建分类"><form class="modal" style="width:min(450px,100%)" id="categoryForm"><div class="modal-header"><div><div class="modal-title">新增分类</div><div class="modal-sub">为不同的 AI 工作场景分门别类</div></div><button type="button" class="btn ghost icononly" data-action="close-category" id="catClose"></button></div><div class="modal-content"><div class="formfield"><label for="categoryName">分类名称 <span class="required">*</span></label><input id="categoryName" maxlength="18" required placeholder="例如：法律文书"/></div></div><div class="modal-footer"><span class="modal-warning">分类将保存在本地</span><div class="modal-footer-right"><button type="button" class="btn ghost" data-action="close-category">取消</button><button class="btn primary" type="submit">创建分类</button></div></div></form></div>
+
+<div class="modal-wrap hidden" id="deleteOverlay" role="dialog" aria-modal="true" aria-label="确认删除"><div class="modal" style="width:min(415px,100%)"><div class="modal-header"><div class="modal-title">删除这条提示词？</div><button class="btn ghost icononly" data-action="close-delete" id="delClose"></button></div><div class="modal-content"><p style="color:#6e7b90;font-size:13px;line-height:1.9;margin:0 0 10px">删除后无法从当前工作空间恢复。建议先通过「导出 JSON」备份重要提示词。</p><strong id="deleteName" style="font-size:12px;color:#394964"></strong></div><div class="modal-footer" style="justify-content:flex-end"><button class="btn ghost" data-action="close-delete">取消</button><button class="btn danger" data-action="confirm-delete">确认删除</button></div></div></div>
+
+<div class="palette-wrap hidden" id="paletteOverlay" role="dialog" aria-modal="true" aria-label="快捷复制面板"><div class="palette"><div class="palette-search"><span id="paletteSearchIcon"></span><input id="paletteInput" placeholder="搜索并快速复制提示词..." autocomplete="off"/><kbd>ESC</kbd></div><div class="palette-list" id="paletteResults"></div><div class="palette-foot"><span>↵ 点击结果复制</span><span>变量模板需先填写</span><span>Esc 退出</span></div></div></div>
+<section class="sticky-note hidden" id="stickyNote" aria-label="便签模式，五条置顶提示词" aria-live="off">
+  <div class="sticky-header" id="stickyDragHandle" title="按住这里移动便签">
+    <span class="sticky-pin-icon">✦</span><span class="sticky-label">快捷便签</span><span class="sticky-counter" id="stickyCounter">0 / 5</span>
+    <div class="sticky-controls"><button class="sticky-iconbtn" data-action="sticky-on-top" id="stickyTopBtn" title="始终置顶（浏览器内为模拟，正式版是系统级）" aria-label="切换始终置顶" aria-pressed="true">♢</button><button class="sticky-iconbtn" data-action="sticky-manage" title="管理置顶顺序" aria-label="管理置顶顺序">⚙</button><button class="sticky-iconbtn" data-action="sticky-hide" title="收起便签" aria-label="收起便签">×</button></div>
+  </div>
+  <div class="sticky-rows" id="stickyRows"></div>
+  <div class="sticky-footer"><span id="stickyHelp">整行点击 · 复制全文</span><button data-action="sticky-manage">管理置顶 ↗</button></div>
+</section>
+<div class="modal-wrap hidden" id="stickyManagerOverlay" role="dialog" aria-modal="true" aria-label="管理便签置顶">
+  <div class="modal" style="width:min(480px,100%)"><div class="modal-header"><div><div class="modal-title">管理快捷便签</div><div class="modal-sub">最多置顶 5 条，按指定顺序显示</div></div><button class="btn ghost icononly" data-action="sticky-manager-close" aria-label="关闭管理窗口">×</button></div><div class="modal-content"><p class="sticky-manager-hint">点击上下箭头调整顺序；点击移除后，提示词仍保留在主库。要新增一条，请到主库编辑时勾选「加入便签」。</p><div class="sticky-manager-list" id="stickyManagerList"></div></div><div class="modal-footer" style="justify-content:flex-end"><button class="btn ghost" data-action="sticky-manager-close">完成</button><button class="btn primary" data-action="sticky-manager-add">去提示词库添加</button></div></div>
+</div>
+<div class="toast" id="toast"><span id="toastIcon"></span><span id="toastText"></span></div>
+<input id="importFile" type="file" accept=".json,application/json" style="display:none"/>
+
+<script>
+(()=>{
+  'use strict';
+  const icons={
+    plus:'<path d="M12 5v14M5 12h14"/>', copy:'<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
+    search:'<circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 4.2 4.2"/>',box:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18m-10 4h3"/>',clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    star:'<path d="m12 3 2.85 5.77 6.37.92-4.61 4.5 1.09 6.35L12 17.53l-5.7 3.01 1.09-6.35-4.61-4.5 6.37-.92z"/>',sparkles:'<path d="m12 3 1.9 6.1L20 11l-6.1 1.9L12 19l-1.9-6.1L4 11l6.1-1.9L12 3zM19 18l.6 1.4L21 20l-1.4.6L19 22l-.6-1.4L17 20l1.4-.6z"/>',
+    folder:'<path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10H3z"/>',code:'<path d="m8 8-4 4 4 4m8-8 4 4-4 4m-3-11-2 14"/>',chart:'<path d="M4 19h17M5 15l5-5 4 3 6-8"/><path d="M16 5h4v4"/>',layers:'<path d="m12 3 9 5-9 5-9-5zM3 12l9 5 9-5M3 16l9 5 9-5"/>',video:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10 9 5 3-5 3z"/>',
+    bag:'<path d="M4 8h16l-1.3 13H5.3L4 8zM9 9V6a3 3 0 0 1 6 0v3"/>',file:'<path d="M6 3h8l5 5v13H6zM14 3v5h5M9 12h7m-7 4h7"/>',pin:'<path d="M9 3h6l-1 6 3 3v2H7v-2l3-3-1-6zM12 14v7"/>',
+    arrow:'<path d="m9 18 6-6-6-6"/>',close:'<path d="M18 6 6 18M6 6l12 12"/>',edit:'<path d="M12 20h9M4 16l-1 5 5-1L19 9l-4-4zM14 6l4 4"/>',
+    download:'<path d="M12 3v12m-4-4 4 4 4-4M4 17v3h16v-3"/>',upload:'<path d="M12 16V4M8 8l4-4 4 4M4 17v3h16v-3"/>',check:'<path d="m4 12 5 5L20 6"/>',
+    keyboard:'<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M6 13h.01M10 13h.01M14 13h.01M18 13h.01M7 16h10"/>',
+    shield:'<path d="M12 3 4 6v6c0 5 3 8 8 10 5-2 8-5 8-10V6z"/><path d="m9 12 2 2 4-4"/>',curly:'<path d="M10 4H8c-2 0-2 3-2 5s-1 3-3 3c2 0 3 1 3 3s0 5 2 5h2m4-16h2c2 0 2 3 2 5s1 3 3 3c-2 0-3 1-3 3s0 5-2 5h-2"/>',
+    menu:'<path d="M4 7h16M4 12h16M4 17h16"/>',message:'<path d="M4 4h16v13H9l-5 4z"/>',heart:'<path d="M20.8 9c0 4.8-8.8 10.2-8.8 10.2S3.2 13.8 3.2 9A4.6 4.6 0 0 1 12 7.1 4.6 4.6 0 0 1 20.8 9z"/>',
+    chevron:'<path d="m9 18 6-6-6-6"/>',alert:'<circle cx="12" cy="12" r="9"/><path d="M12 7v6m0 4h.01"/>'
+  };
+  const icon=(name,cls='')=>`<svg class="svg ${cls}" viewBox="0 0 24 24" aria-hidden="true">${icons[name]||icons.file}</svg>`;
+  const esc=(str)=>String(str??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  const id=()=>('p'+Date.now().toString(36)+Math.random().toString(36).slice(2,7));
+  const START_CATEGORIES=['技术研发','投资研究','产品规划','内容创作','商业运营','通用效率'];
+  const categoryInfo={
+    '技术研发':{icon:'code',color:'#5776cf',bg:'#ecf2ff'},
+    '投资研究':{icon:'chart',color:'#478ca2',bg:'#e9f5f8'},
+    '产品规划':{icon:'layers',color:'#9a70c0',bg:'#f4effb'},
+    '内容创作':{icon:'video',color:'#cf855b',bg:'#fcf1e8'},
+    '商业运营':{icon:'bag',color:'#b28c49',bg:'#fbf5e9'},
+    '通用效率':{icon:'sparkles',color:'#6687ae',bg:'#edf3fa'}
+  };
+  const demo=[
+    {title:'任务拆解与执行规范',category:'技术研发',description:'把复杂的需求拆成可验收的小任务，确保 AI 先理解再动手。',tags:['Codex','任务执行'],favorite:true,pinned:true,uses:36,body:`你是一名资深软件工程师与交付负责人。请严格执行以下流程：\n\n1. 先阅读需求和现有项目结构，区分事实、假设与待确认事项。\n2. 输出可落地的实施计划，说明文件修改范围、风险与验收标准。\n3. 严格控制范围，不要修改无关代码；每个开发任务必须使用独立 Git 分支。\n4. 实施后执行必要的构建、测试和关键流程验证，不得把“代码已写”当作“功能通过”。\n5. 最终反馈：完成内容、变更文件、测试结果、遗留问题、下一步建议。\n\n注意：禁止编造测试结果；无法执行时明确说明原因。`},
+    {title:'Codex 源码审查与验收',category:'技术研发',description:'以真实代码和执行结果为证据，审查功能是否真正实现。',tags:['代码审查','质量保障'],favorite:true,pinned:true,uses:28,body:`你是一名独立代码审查员，请对当前 Git 仓库进行严格验收。\n\n【审查步骤】\n1. 确认当前分支、最新提交及工作区状态。\n2. 阅读 README、需求文档、相关实现与测试，绘制真实调用链。\n3. 按功能逐项验收：接口、数据持久化、异常处理、权限控制和 UI 真实交互。\n4. 尝试复现核心用户流程；执行能够运行的测试和构建。\n5. 将问题划分为 P0 / P1 / P2，并附文件位置、复现步骤与影响。\n\n【输出格式】\n总体结论（通过 / 有条件通过 / 不通过）\n证据清单｜缺陷清单｜验收矩阵｜修复优先级。\n\n不允许用页面截图或硬编码演示代替功能实现证据。`},
+    {title:'行业首席研究员 · 深度报告',category:'投资研究',description:'A 股买方研究框架：政策资金、订单、盈利与竞争格局。',tags:['买方研究','估值前置'],favorite:true,pinned:false,uses:19,body:`你是中国 A 股私募基金的{{研究板块}}行业首席研究员。\n\n【研究任务】\n研究{{标的名称}}，证券代码{{证券代码}}，分析未来{{研究周期}}的产业发展与公司基本面。\n\n【要求】\n1. 事实数据必须给出来源、公告日期、报告期及口径。\n2. 核验政策是否落实为实际投资额、项目招标与公司订单。\n3. 拆分收入、毛利、扣非利润、现金流和主要业务。\n4. 从壁垒、竞争对手、市场空间、产能和订单角度判断优势。\n5. 明确牛市 / 基准 / 熊市假设，识别证伪条件和风险。\n6. 仅提供研究建议，不冒充基金经理签署投决结论。\n\n排除科创板和 ST 标的；对不确定内容使用“未核实”标注。`},
+    {title:'财报质量与预期差分析',category:'投资研究',description:'快速识别利润增长的质量，判断利好是否被市场提前计价。',tags:['财务分析','季度跟踪'],favorite:false,pinned:true,uses:14,body:`你是一名严谨的 A 股财务分析师。请以最新正式披露文件为准分析指定公司财报，禁止使用未经核验的传闻。\n\n重点审查：\n- 营收与归母、扣非归母同比和环比增速；\n- 毛利率、费用率、净利率的变化及驱动因素；\n- 经营现金流、应收账款、存货与合同负债；\n- 非经常性损益、大额减值及潜在会计异常；\n- 分业务业绩与行业景气度是否一致；\n- 市场原有预期和新数据之间的预期差。\n\n结尾区分：已验证事实、研究推断、交易假设。给出未来 1~2 个季度的可证伪观察指标。`},
+    {title:'AI Agent 产品需求分析',category:'产品规划',description:'为 AI 应用梳理用户价值、MVP、业务闭环及可验收需求。',tags:['AI Agent','PRD'],favorite:true,pinned:false,uses:22,body:`你是一名 B2B SaaS 产品负责人，正在设计「{{产品名称}}」。\n\n目标用户：{{目标用户}}\n核心痛点：{{核心痛点}}\n\n请按以下步骤输出：\n1. 用户画像与高频任务；\n2. 用户使用前后流程对比；\n3. 最小闭环 MVP（只保留影响核心价值的能力）；\n4. 功能列表与 P0/P1/P2 优先级；\n5. 关键页面、业务流程与异常处理；\n6. 数据指标、成本估算及验证方案；\n7. 三个最可能导致项目失败的反方观点。\n\n避免空泛的“AI 赋能”，每条功能都应具备可验收条件。`},
+    {title:'短视频选题与脚本拆解',category:'内容创作',description:'将复杂话题转成适合 60 秒短视频表达的清晰观点。',tags:['短视频','表达训练'],favorite:false,pinned:false,uses:10,body:`你是一名兼顾内容传播与专业准确性的短视频策划。\n\n主题：{{视频主题}}\n受众：{{目标受众}}\n\n请给出：\n1. 一句话核心观点；\n2. 三个不同方向的开头（前 3 秒抓住注意力）；\n3. 60 秒口播稿：问题—事实—观点—行动；\n4. 镜头安排与屏幕字幕建议；\n5. 容易引发误解的表达及修正。\n\n要求口语化、具体、有个人判断，不夸大数据，也不制造虚假争议。`},
+    {title:'基金经理反方审查',category:'投资研究',description:'站在反方审查产业逻辑、估值前提和最大亏损风险。',tags:['投决审查','风险控制'],favorite:false,pinned:false,uses:8,body:`你是投资委员会中的独立反方评审人。\n\n请对收到的研究报告开展“证伪优先”的审查，而不是重复研究员的乐观结论。\n\n逐项检查：\n1. 关键数据是否有一手来源，可否复核；\n2. 利润增长是否依赖高波动假设或一次性收益；\n3. 行业供需是否可能发生逆转；\n4. 核心催化剂是否可能已经反映在股价中；\n5. 下行情景的估值支撑与最大预期回撤；\n6. 哪些新增事实会触发撤回投资论点。\n\n输出：最强多头论据、最强空头论据、待验证事项、是否具备提交下一审查环节的条件。\n请勿把“估值合理”直接等同于“可以立即买入”。`},
+    {title:'文章润色与结构优化',category:'通用效率',description:'保留原意和观点，把草稿写得更清晰、更有说服力。',tags:['写作','通用'],favorite:true,pinned:true,uses:31,body:`你是一名专业编辑。请在不改变原文事实、立场和核心观点的前提下，对我提供的内容进行优化。\n\n处理原则：\n1. 先识别这段文字真正想表达的一件事；\n2. 调整结构，让观点—论据—结论的逻辑更顺；\n3. 删除套话、空话、重复表述和明显的 AI 腔；\n4. 保持自然、有判断力的中文表达；\n5. 如发现事实依据不足，请标注待核实，不要擅自补充数据。\n\n请输出“优化后版本”和“修改说明”，语气简洁、不居高临下。\n\n以下是待修改内容：`},
+    {title:'系统技术架构审查',category:'技术研发',description:'从可靠性、边界、成本与演进能力审视整体方案。',tags:['系统设计','架构评审'],favorite:false,pinned:true,uses:12,body:`你是一名资深软件架构师，请作为独立评审人评估我给出的技术架构方案。\n\n按以下维度审查：\n- 业务需求与架构选型是否匹配；\n- 前后端职责与数据边界是否清晰；\n- 鉴权、安全、审计、密钥管理、容灾；\n- 可观测性、部署、测试与回滚；\n- 第三方依赖、厂商锁定与长期维护成本；\n- MVP 阶段是否存在明显过度设计。\n\n交付：架构风险矩阵、替代方案对比、建议技术栈、分阶段演进路线。\n先说明证据缺口，无法判断的内容不要杜撰。`},
+    {title:'电商选品验证工作流',category:'商业运营',description:'在低预算情况下，验证商品需求、毛利与履约成本。',tags:['电商','商业验证'],favorite:false,pinned:false,uses:7,body:`你是电商业务负责人，请针对「{{商品方向}}」建立可执行的选品验证方案。\n\n平台：{{目标平台}}\n测试预算：{{预算}}\n\n先分析真实需求，再核对同类商品的价格区间、评论槽点、退货风险、供应稳定性和物流费用。\n\n提供：\n1. 3 个候选 SKU 及目标人群；\n2. 进货成本、包装、平台费、佣金、物流、售后成本表；\n3. 保本售价及不同销量下的利润敏感性；\n4. 最小测品方案与失败退出条件。\n\n缺少数据时必须明确假设，不允许编造市场销量或毛利率。`}
+  ];
+  function initDemo(){const now=Date.now();return demo.map((x,i)=>({...x,id:'demo-'+(i+1),createdAt:now-(i+1)*86400000,updatedAt:now-(i+1)*3600000,lastUsed:x.uses?now-(i+1)*86400000:null}));}
+  const STORAGE='promptdock-v1-local';
+  function loadState(){try{const raw=localStorage.getItem(STORAGE);if(raw){const v=JSON.parse(raw);if(v&&Array.isArray(v.prompts)&&Array.isArray(v.categories))return v}}catch(e){}return {prompts:initDemo(),categories:START_CATEGORIES.slice()}}
+  let db=loadState();
+  const NOTE_UI_STATE='promptdock-mini-view-v1';
+  let stickyTop=true;let stickyWasVisible=false;let stickyPos=null;
+  try{const saved=JSON.parse(localStorage.getItem(NOTE_UI_STATE)||'{}');stickyTop=saved.alwaysOnTop!==false;stickyWasVisible=!!saved.visible;stickyPos=saved.position||null}catch(e){}
+  function saveStickyUI(){try{localStorage.setItem(NOTE_UI_STATE,JSON.stringify({alwaysOnTop:stickyTop,visible:!document.getElementById('stickyNote').classList.contains('hidden'),position:stickyPos}))}catch(e){}}
+  function pinnedInOrder(){return db.prompts.filter(p=>p.pinned).sort((a,b)=>(Number.isInteger(a.pinOrder)?a.pinOrder:999)-(Number.isInteger(b.pinOrder)?b.pinOrder:999)||(b.uses||0)-(a.uses||0)||String(a.id).localeCompare(String(b.id)))}
+  function reconcilePinOrders(){pinnedInOrder().forEach((p,i)=>{p.pinOrder=i<5?i+1:null});db.prompts.filter(p=>!p.pinned).forEach(p=>p.pinOrder=null)}
+  reconcilePinOrders();
+  let filter='all',tab='all',query='',sort='recent',selected=null,editId=null,deleteId=null,variableValues={},toastTimeout=null;
+  const el=(id)=>document.getElementById(id);
+  function persist(){try{localStorage.setItem(STORAGE,JSON.stringify(db));return true}catch(e){showToast('浏览器存储不可用，可通过 JSON 导出备份',false);return false}}
+  function getItem(pid){return db.prompts.find(p=>p.id===pid)}
+  function varsOf(body){return [...new Set([...String(body).matchAll(/\{\{\s*([^{}]+?)\s*\}\}/g)].map(m=>m[1].trim()))]}
+  function formatOutput(item){return item.body.replace(/\{\{\s*([^{}]+?)\s*\}\}/g,(all,k)=>{const value=(variableValues[k.trim()]||'').trim();return value||all})}
+  function hasAllVars(item){return varsOf(item.body).every(k=>(variableValues[k]||'').trim())}
+  function navBtn(iconName,label,count,which){return `<button class="navitem ${filter===which?'active':''}" data-nav="${esc(which)}">${icon(iconName)}<span>${esc(label)}</span><span class="navcount">${count}</span></button>`}
+  function renderNav(){
+    el('nav-main').innerHTML=navBtn('box','全部提示词',db.prompts.length,'all')+navBtn('clock','最近使用',db.prompts.filter(p=>p.lastUsed).length,'recent')+navBtn('star','我的收藏',db.prompts.filter(p=>p.favorite).length,'favorite')+navBtn('pin','快捷置顶',db.prompts.filter(p=>p.pinned).length,'pinned');
+    el('nav-categories').innerHTML=db.categories.map(c=>{
+      const count=db.prompts.filter(p=>p.category===c).length;
+      const info=categoryInfo[c]||{icon:'folder',color:'#a4b1d2'};
+      return `<button class="navitem ${filter==='cat:'+c?'active':''}" data-nav="${esc('cat:'+c)}"><span class="cat-symbol" style="color:${info.color}">${icon(info.icon)}</span><span>${esc(c)}</span><span class="navcount">${count}</span></button>`
+    }).join('');
+  }
+  function titleForFilter(){if(filter==='all')return '全部提示词';if(filter==='recent')return '最近使用';if(filter==='favorite')return '我的收藏';if(filter==='pinned')return '快捷置顶';if(filter.startsWith('cat:'))return filter.slice(4);return '全部提示词'}
+  function itemsForView(){let out=db.prompts.filter(p=>{
+    if(filter==='recent'&&!p.lastUsed)return false;
+    if(filter==='favorite'&&!p.favorite)return false;
+    if(filter==='pinned'&&!p.pinned)return false;
+    if(filter.startsWith('cat:')&&p.category!==filter.slice(4))return false;
+    if(tab==='favorite'&&!p.favorite)return false;
+    if(tab==='template'&&varsOf(p.body).length===0)return false;
+    const t=query.trim().toLocaleLowerCase();if(t&&!([p.title,p.description,p.category,p.body,...(p.tags||[])].join(' ').toLocaleLowerCase().includes(t)))return false;
+    return true;
+  });
+  if(filter==='recent')out.sort((a,b)=>(b.lastUsed||0)-(a.lastUsed||0));
+  else if(sort==='popular')out.sort((a,b)=>(b.uses||0)-(a.uses||0));
+  else if(sort==='name')out.sort((a,b)=>a.title.localeCompare(b.title,'zh-CN'));
+  else out.sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+  return out;
+  }
+  function renderQuick(){
+    const pins=pinnedInOrder().slice(0,3);
+    el('quickPanel').classList.toggle('hidden',filter!=='all'||query.trim()!==''||tab!=='all');
+    el('quickList').innerHTML=pins.length?pins.map(p=>`<div class="quick-item"><div class="quick-icon">${icon('file')}</div><div style="min-width:0;flex:1"><span class="quick-copy-title" title="${esc(p.title)}">${esc(p.title)}</span><div class="quick-copy-meta">${esc(p.category)} · 已复制 ${p.uses||0} 次</div></div><button data-action="copy" data-id="${esc(p.id)}" title="一键复制">${icon('copy','sm')} 复制</button></div>`).join(''):`<div style="grid-column:1/-1;color:#8b97ab;font-size:12px;padding:7px 2px">还没有置顶提示词。编辑任意提示词，勾选「置顶到快捷复制区」即可。</div>`;
+  }
+  function cardHTML(p){const category=categoryInfo[p.category]||{bg:'#f0f3f9',color:'#71829f'};const isTemplate=varsOf(p.body).length>0;
+    const badge=`<span class="tag" style="background:${category.bg};color:${category.color}"><span class="tiny-dot"></span>${esc(p.category)}</span>`;
+    const used=(p.uses||0);
+    return `<article class="prompt-card" data-action="open" data-id="${esc(p.id)}" role="button" tabindex="0" aria-label="查看 ${esc(p.title)}"><div class="card-top">${badge}<div class="card-top-right">${isTemplate?`<span class="template-hint" title="变量模板">${icon('curly','sm')} 变量</span>`:''}<button class="card-star ${p.favorite?'is-active':''}" data-action="favorite" data-id="${esc(p.id)}" aria-label="${p.favorite?'取消收藏':'收藏'}" title="${p.favorite?'取消收藏':'收藏'}">${icon('star','sm')}</button></div></div><h3 class="card-title" title="${esc(p.title)}">${esc(p.title)}</h3><p class="card-desc">${esc(p.description||'暂无描述，点击查看提示词全文')}</p><div class="card-preview">${esc(p.body.replace(/\s+/g,' ').slice(0,125))}</div><div class="card-spacer"></div><div class="card-footer"><div class="card-footnote">${icon('copy','sm')} <span>${used} 次使用</span><span class="footsep"></span><span>${p.pinned?'快捷置顶':'本地保存'}</span></div><button class="card-copy" data-action="copy" data-id="${esc(p.id)}">${icon('copy','sm')} ${isTemplate?'填写并复制':'一键复制'}</button></div></article>`;
+  }
+  function renderCards(){const items=itemsForView();el('cards').innerHTML=items.map(cardHTML).join('');el('listTitle').textContent=titleForFilter();el('listCount').textContent=items.length+' 条';el('cards').classList.toggle('hidden',items.length===0);el('empty').classList.toggle('hidden',items.length!==0);
+    el('empty').innerHTML=`<div class="empty-icon">${icon('search','lg')}</div><h3>${query?'没有找到符合条件的提示词':'这个分类还没有提示词'}</h3><p>${query?'试试更短的关键词，或清除搜索条件':'创建一条提示词，开始积累你的工作流'}</p><button class="btn primary" data-action="${query?'clear-search':'new'}">${icon(query?'close':'plus','sm')}${query?'清除搜索':'新建提示词'}</button>`;
+    el('pageTitle').textContent=filter==='all'?'我的提示词库':titleForFilter();el('breadcrumb-label').textContent=titleForFilter();
+    document.querySelectorAll('#filterTabs button').forEach(b=>b.classList.toggle('active',b.dataset.view===tab));
+    el('headlineNote').innerHTML=`${icon('shield','sm')} 所有内容只保存在本机浏览器`;
+    el('footerLeft').innerHTML=`${icon('check','sm')} ${db.prompts.length} 条提示词 · ${db.categories.length} 个分类 · 当前浏览器本地空间`;
+  }
+  function renderSticky(){
+    const pins=pinnedInOrder().slice(0,5),root=el('stickyRows');
+    el('stickyCounter').textContent=`${Math.min(db.prompts.filter(p=>p.pinned).length,5)} / 5`;
+    root.innerHTML=pins.map((p,i)=>`<button type="button" class="sticky-item" data-action="sticky-copy" data-id="${esc(p.id)}" title="${esc(p.title)} · ${varsOf(p.body).length?'需要填写变量':'点击复制完整提示词'}"><span class="sticky-no">${String(i+1).padStart(2,'0')}</span><span class="sticky-item-title">${esc(p.title)}</span><span class="sticky-copyicon">${varsOf(p.body).length?'{}':'⧉'}</span></button>`).join('')+
+    Array.from({length:5-pins.length},(_,i)=>`<div class="sticky-empty"><span>＋</span> 空位 ${pins.length+i+1} · 在主库中选择置顶</div>`).join('');
+    el('stickyTopBtn').setAttribute('aria-pressed',String(stickyTop));
+    el('stickyHelp').textContent=stickyTop?'整行点击 · 复制全文':'普通层级 · 复制全文';
+    if(!el('stickyManagerOverlay').classList.contains('hidden'))renderStickyManager();
+  }
+  function renderStickyManager(){
+    el('stickyManagerList').innerHTML=pinnedInOrder().slice(0,5).map((p,i)=>`<div class="sticky-manager-item"><strong class="sticky-no">${i+1}</strong><span class="sticky-manager-title" title="${esc(p.title)}">${esc(p.title)}</span><button class="tiny-btn" data-action="sticky-move-up" data-id="${esc(p.id)}" ${i===0?'disabled':''} aria-label="上移 ${esc(p.title)}">↑</button><button class="tiny-btn" data-action="sticky-move-down" data-id="${esc(p.id)}" ${i===pinnedInOrder().slice(0,5).length-1?'disabled':''} aria-label="下移 ${esc(p.title)}">↓</button><button class="tiny-btn" data-action="sticky-remove" data-id="${esc(p.id)}">移除</button></div>`).join('') || '<div class="sticky-empty" style="height:60px">暂无置顶提示词，请在主库添加</div>';
+  }
+  function showSticky(){el('stickyNote').classList.remove('hidden');renderSticky();saveStickyUI()}
+  function hideSticky(){el('stickyNote').classList.add('hidden');saveStickyUI()}
+  function openStickyManager(){renderStickyManager();el('stickyManagerOverlay').classList.remove('hidden')}
+  function closeStickyManager(){el('stickyManagerOverlay').classList.add('hidden')}
+  function movePin(pid,delta){const pins=pinnedInOrder().slice(0,5),idx=pins.findIndex(p=>p.id===pid),j=idx+delta;if(idx<0||j<0||j>=pins.length)return;const a=pins[idx],b=pins[j];const old=a.pinOrder;a.pinOrder=b.pinOrder;b.pinOrder=old;persist();render()}
+  function removePin(pid){const p=getItem(pid);if(!p)return;p.pinned=false;p.pinOrder=null;p.updatedAt=Date.now();reconcilePinOrders();persist();render();showToast('已从便签移除，提示词仍保留')}
+  function render(){renderNav();renderQuick();renderCards();renderSticky()}
+  let lastToastTime=0;
+  function showToast(message,success=true){const toast=el('toast');el('toastIcon').innerHTML=icon(success?'check':'alert','sm');el('toastText').textContent=message;toast.classList.add('show');if(toastTimeout)clearTimeout(toastTimeout);toastTimeout=setTimeout(()=>toast.classList.remove('show'),2600)}
+  async function clipboard(text){
+    try{if(navigator.clipboard&&navigator.clipboard.writeText){await navigator.clipboard.writeText(text);return true}}catch(e){}
+    try{const ta=document.createElement('textarea');ta.value=text;ta.setAttribute('readonly','');ta.style.cssText='position:fixed;opacity:0;left:-9999px;top:0';document.body.appendChild(ta);ta.focus();ta.select();const worked=document.execCommand('copy');ta.remove();if(worked)return true}catch(e){}
+    return false;
+  }
+  async function copyPrompt(pid,fromDetails=false){const p=getItem(pid);if(!p)return;
+    if(varsOf(p.body).length>0&&(!fromDetails||!hasAllVars(p))){openDetail(pid);showToast('这是变量模板，请先填写变量再复制',false);return}
+    const content=varsOf(p.body).length>0?formatOutput(p):p.body;
+    const ok=await clipboard(content);if(ok){p.uses=(p.uses||0)+1;p.lastUsed=Date.now();persist();render();if(!el('detailOverlay').classList.contains('hidden'))renderDetail();showToast(`已复制「${p.title}」，去 AI 对话框粘贴即可`);closePalette(false)}else showToast('剪贴板写入被浏览器拦截，请允许访问剪贴板',false);
+  }
+  function openDetail(pid){const p=getItem(pid);if(!p)return;selected=pid;variableValues={};renderDetail();el('detailOverlay').classList.remove('hidden');closePalette(false);document.body.style.overflow='hidden'}
+  function renderDetail(){const p=getItem(selected);if(!p)return;const info=categoryInfo[p.category]||{bg:'#f0f3f9',color:'#7085a3'};const vars=varsOf(p.body);const has=vars.length>0;
+    el('detailBody').innerHTML=`<div class="drawer-meta"><span class="tag" style="background:${info.bg};color:${info.color}">${esc(p.category)}</span>${p.pinned?`<span class="tag" style="color:#7484c5;background:#eef0ff">${icon('pin','sm')} 快捷置顶</span>`:''}</div><h2>${esc(p.title)}</h2><p class="drawer-desc">${esc(p.description||'未填写说明')}</p><div class="drawer-tags">${(p.tags||[]).map(t=>`<span># ${esc(t)}</span>`).join('')}</div><hr class="divider"/>${has?`<section class="variable-panel"><div class="variable-head">${icon('curly','sm')} 这是一个变量模板</div><div class="variable-explain">填入下面的内容，会自动替换正文里的 {{变量名}}。填写完成后点击底部复制按钮。</div>${vars.map(k=>`<div class="variable-row"><label for="var-${esc(k)}">${esc(k)}</label><input data-variable="${esc(k)}" placeholder="请输入 ${esc(k)}" id="var-${esc(k)}" value="${esc(variableValues[k]||'')}"/></div>`).join('')}</section>`:''}<div class="label-line"><strong>${has?'实时预览':'完整提示词'}</strong><small>${p.body.length} 字符</small></div><div class="body-preview" id="detailPreview">${esc(has?formatOutput(p):p.body)}</div><div class="label-line" style="margin-top:22px"><strong>使用记录</strong><small>本地统计</small></div><div style="display:flex;gap:18px;color:#8e9aab;font-size:11px">${icon('copy','sm')} 已复制 ${p.uses||0} 次 <span>·</span>${p.lastUsed?'最近使用 '+new Date(p.lastUsed).toLocaleDateString('zh-CN'):'尚未使用'}</div>`;
+    el('detailCopy').innerHTML=`${icon('copy','sm')} ${has?'填入变量并复制':'复制完整提示词'}`;
+    el('detailFootHelp').innerHTML=`${icon('shield','sm')} 一键写入系统剪贴板，不会发送到云端`;
+  }
+  function closeDetail(){el('detailOverlay').classList.add('hidden');selected=null;variableValues={};document.body.style.overflow=''}
+  function openEditor(pid=null){const p=pid?getItem(pid):null;editId=pid;closeDetail();el('editorTitle').textContent=p?'编辑提示词':'新建提示词';el('editCategory').innerHTML=db.categories.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
+    el('editTitle').value=p?.title||'';el('editCategory').value=p?.category||db.categories[0]||'';el('editDesc').value=p?.description||'';el('editTags').value=(p?.tags||[]).join(', ');el('editBody').value=p?.body||'';el('editFavorite').checked=!!p?.favorite;el('editPinned').checked=!!p?.pinned;
+    el('deleteBtn').classList.toggle('hidden',!p);el('modalLeftHint').textContent=p?'修改后将自动保存到浏览器':'支持多行文本和 {{变量名}}';el('saveBtn').innerHTML=`${icon(p?'check':'plus','sm')}${p?'保存修改':'创建提示词'}`;
+    el('editorOverlay').classList.remove('hidden');document.body.style.overflow='hidden';setTimeout(()=>el('editTitle').focus(),30);
+  }
+  function closeEditor(){el('editorOverlay').classList.add('hidden');editId=null;document.body.style.overflow=''}
+  function saveEditor(ev){ev.preventDefault();const title=el('editTitle').value.trim(),body=el('editBody').value.trim();if(!title||!body){showToast('请填写提示词名称和正文',false);return}
+    const old=editId?getItem(editId):null;
+    const wantsPin=el('editPinned').checked;
+    if(wantsPin&&!old?.pinned&&db.prompts.filter(x=>x.pinned&&x.id!==old?.id).length>=5){showToast('便签最多置顶 5 条，请先在便签管理中移除一条',false);return}
+    const pinOrder=wantsPin?(old?.pinned&&Number.isInteger(old?.pinOrder)?old.pinOrder:pinnedInOrder().length+1):null;
+    const p={pinOrder,id:old?.id||id(),title,body,description:el('editDesc').value.trim(),category:el('editCategory').value,tags:el('editTags').value.split(/[,，]/).map(x=>x.trim()).filter(Boolean).slice(0,10),favorite:el('editFavorite').checked,pinned:el('editPinned').checked,uses:old?.uses||0,createdAt:old?.createdAt||Date.now(),updatedAt:Date.now(),lastUsed:old?.lastUsed||null};
+    if(old)db.prompts=db.prompts.map(x=>x.id===p.id?p:x);else db.prompts.unshift(p);reconcilePinOrders();persist();closeEditor();filter='all';tab='all';query='';el('mainSearch').value='';render();showToast(old?'提示词已更新':'提示词已创建，可直接一键复制');
+  }
+  function showDelete(pid){const p=getItem(pid);if(!p)return;deleteId=pid;el('deleteName').textContent=p.title;el('deleteOverlay').classList.remove('hidden')}
+  function hideDelete(){el('deleteOverlay').classList.add('hidden');deleteId=null}
+  function confirmDelete(){const p=getItem(deleteId);if(!p)return;db.prompts=db.prompts.filter(x=>x.id!==deleteId);reconcilePinOrders();persist();hideDelete();closeEditor();closeDetail();render();showToast('提示词已删除')}
+  function openCategory(){el('categoryOverlay').classList.remove('hidden');el('categoryName').value='';document.body.style.overflow='hidden';setTimeout(()=>el('categoryName').focus(),25)}
+  function closeCategory(){el('categoryOverlay').classList.add('hidden');document.body.style.overflow=''}
+  function saveCategory(ev){ev.preventDefault();const c=el('categoryName').value.trim();if(!c)return;if(db.categories.includes(c)){showToast('该分类已存在',false);return}db.categories.push(c);persist();closeCategory();filter='cat:'+c;tab='all';render();showToast('分类已创建')}
+  function selectNav(which){filter=which;tab='all';query='';el('mainSearch').value='';el('sidebar').classList.remove('mobile-open');render()}
+  function openPalette(){el('paletteOverlay').classList.remove('hidden');el('paletteInput').value='';renderPalette();setTimeout(()=>el('paletteInput').focus(),25)}
+  function closePalette(focus=true){el('paletteOverlay').classList.add('hidden');if(focus)el('mainSearch').focus()}
+  function renderPalette(){const term=el('paletteInput').value.trim().toLocaleLowerCase();let matches=db.prompts.filter(p=>!term||[p.title,p.description,p.body,p.category,...(p.tags||[])].join(' ').toLocaleLowerCase().includes(term));matches.sort((a,b)=>Number(b.pinned)-Number(a.pinned)||(b.uses||0)-(a.uses||0));el('paletteResults').innerHTML=matches.length?matches.slice(0,12).map(p=>`<button class="palette-item" data-action="copy" data-id="${esc(p.id)}"><span class="palette-item-icon">${icon(varsOf(p.body).length?'curly':'copy')}</span><span class="palette-item-main"><div class="palette-item-name">${esc(p.title)}</div><div class="palette-item-desc">${esc(p.category)} · ${esc(p.description||'')}</div></span><span class="palette-item-tail">${varsOf(p.body).length?'填变量':'复制'} ${icon('chevron','sm')}</span></button>`).join(''):`<div style="padding:26px;text-align:center;color:#99a5b6;font-size:12px">未找到提示词</div>`}
+  function exportJSON(){const payload={app:'PromptDock',version:1,exportedAt:new Date().toISOString(),categories:db.categories,prompts:db.prompts};const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json;charset=utf-8'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='PromptDock_提示词备份_'+new Date().toISOString().slice(0,10)+'.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);showToast('已导出提示词 JSON 备份')}
+  async function importJSON(file){if(!file)return;try{const text=await file.text();const obj=JSON.parse(text);if(!Array.isArray(obj.prompts))throw Error('无效的 PromptDock 文件');const incoming=obj.prompts.filter(p=>p&&typeof p.title==='string'&&typeof p.body==='string'&&p.title.trim()&&p.body.trim()).slice(0,3000);
+    if(!incoming.length)throw Error('没有可导入的有效提示词');const newCats=Array.isArray(obj.categories)?obj.categories.filter(c=>typeof c==='string'):[];
+    const keys=new Set(db.prompts.map(p=>p.id));let imported=0,unPinnedOnImport=0;let availableSlots=Math.max(0,5-db.prompts.filter(p=>p.pinned).length);incoming.forEach(p=>{const freshId=typeof p.id==='string'&&!keys.has(p.id)?p.id:id();keys.add(freshId);const c=typeof p.category==='string'?p.category:'通用效率';if(!db.categories.includes(c))db.categories.push(c);db.prompts.push({id:freshId,title:p.title.slice(0,80),body:p.body,description:String(p.description||''),category:c,tags:Array.isArray(p.tags)?p.tags.filter(x=>typeof x==='string').slice(0,10):[],favorite:!!p.favorite,pinned:!!p.pinned&&availableSlots-- > 0,uses:Number.isFinite(p.uses)?Math.max(0,p.uses):0,createdAt:Number.isFinite(p.createdAt)?p.createdAt:Date.now(),updatedAt:Number.isFinite(p.updatedAt)?p.updatedAt:Date.now(),lastUsed:Number.isFinite(p.lastUsed)?p.lastUsed:null});if(p.pinned&&availableSlots<0)unPinnedOnImport++;imported++});newCats.forEach(c=>{if(c&&!db.categories.includes(c))db.categories.push(c)});reconcilePinOrders();persist();selectNav('all');showToast(`导入 ${imported} 条提示词${unPinnedOnImport?`；${unPinnedOnImport} 条因便签已满未置顶`:''}`)
+  }catch(e){showToast('导入失败：请检查 JSON 文件格式',false)}finally{el('importFile').value=''}}
+  function toggleFavorite(pid){const p=getItem(pid);if(!p)return;p.favorite=!p.favorite;p.updatedAt=Date.now();persist();render();showToast(p.favorite?'已加入收藏':'已取消收藏')}
+  function initStatic(){el('workspace-icon').innerHTML=icon('layers');el('shortcut-heading').innerHTML=icon('keyboard','sm')+' 快捷取用';el('categoryAdd').innerHTML=icon('plus','sm');el('mobile-menu').innerHTML=icon('menu');el('importBtn').innerHTML=icon('upload','sm')+' 导入';el('exportBtn').innerHTML=icon('download','sm')+' 导出';el('newBtn').innerHTML=icon('plus','sm')+' 新建提示词';el('searchIcon').innerHTML=icon('search');el('quickHeading').innerHTML=icon('pin','sm')+' 快捷复制';el('quickMore').innerHTML='打开快捷面板 '+icon('arrow','sm');el('sortLine').innerHTML='点击卡片查看更多 '+icon('chevron','sm');el('detailEdit').innerHTML=icon('edit','sm');el('detailClose').innerHTML=icon('close','sm');el('editorClose').innerHTML=icon('close','sm');el('catClose').innerHTML=icon('close','sm');el('delClose').innerHTML=icon('close','sm');el('paletteSearchIcon').innerHTML=icon('search','lg');el('toastIcon').innerHTML=icon('check','sm')}
+  document.addEventListener('click',async(e)=>{
+    const nav=e.target.closest('[data-nav]');if(nav){selectNav(nav.dataset.nav);return}
+    const actionEl=e.target.closest('[data-action]');if(!actionEl)return;const action=actionEl.dataset.action;const pid=actionEl.dataset.id;e.preventDefault();
+    if(action==='sticky-show'){showSticky();return}
+    if(action==='sticky-hide'){hideSticky();return}
+    if(action==='sticky-on-top'){stickyTop=!stickyTop;saveStickyUI();renderSticky();showToast('正式版将切换系统级始终置顶；HTML 中仅预览按钮状态');return}
+    if(action==='sticky-manage'){openStickyManager();return}
+    if(action==='sticky-manager-close'){closeStickyManager();return}
+    if(action==='sticky-manager-add'){closeStickyManager();hideSticky();selectNav('all');showToast('编辑提示词时勾选「加入便签（最多5条）」');return}
+    if(action==='sticky-move-up'){movePin(pid,-1);return}
+    if(action==='sticky-move-down'){movePin(pid,1);return}
+    if(action==='sticky-remove'){removePin(pid);return}
+    if(action==='sticky-copy'){await copyPrompt(pid);return}
+    if(action==='copy'){await copyPrompt(pid);return}
+    if(action==='favorite'){toggleFavorite(pid);return}
+    if(action==='open'){openDetail(pid);return}
+    if(action==='new'){openEditor();return}
+    if(action==='edit-selected'){openEditor(selected);return}
+    if(action==='close-detail'){closeDetail();return}
+    if(action==='copy-selected'){await copyPrompt(selected,true);return}
+    if(action==='close-editor'){closeEditor();return}
+    if(action==='delete-selected'){showDelete(editId);return}
+    if(action==='close-delete'){hideDelete();return}
+    if(action==='confirm-delete'){confirmDelete();return}
+    if(action==='add-category'){openCategory();return}
+    if(action==='close-category'){closeCategory();return}
+    if(action==='palette'){openPalette();return}
+    if(action==='import'){el('importFile').click();return}
+    if(action==='export'){exportJSON();return}
+    if(action==='clear-search'){query='';el('mainSearch').value='';tab='all';render();return}
+    if(action==='mobile-menu'){el('sidebar').classList.add('mobile-open');return}
+    if(action==='close-mobile'){el('sidebar').classList.remove('mobile-open');return}
+  });
+  el('editorForm').addEventListener('submit',saveEditor);
+  el('categoryForm').addEventListener('submit',saveCategory);
+  el('importFile').addEventListener('change',e=>importJSON(e.target.files?.[0]));
+  el('mainSearch').addEventListener('input',e=>{query=e.target.value;renderQuick();renderCards()});
+  el('paletteInput').addEventListener('input',renderPalette);
+  el('sortSelect').addEventListener('change',e=>{sort=e.target.value;renderCards()});
+  el('filterTabs').addEventListener('click',e=>{const b=e.target.closest('[data-view]');if(b){tab=b.dataset.view;renderQuick();renderCards()}});
+  el('detailBody').addEventListener('input',e=>{const input=e.target.closest('[data-variable]');if(!input)return;variableValues[input.dataset.variable]=input.value;const p=getItem(selected);if(p)el('detailPreview').textContent=formatOutput(p)});
+  el('editorOverlay').addEventListener('click',e=>{if(e.target===el('editorOverlay'))closeEditor()});
+  el('detailOverlay').addEventListener('click',e=>{if(e.target===el('detailOverlay'))closeDetail()});
+  el('categoryOverlay').addEventListener('click',e=>{if(e.target===el('categoryOverlay'))closeCategory()});
+  el('deleteOverlay').addEventListener('click',e=>{if(e.target===el('deleteOverlay'))hideDelete()});
+  el('stickyManagerOverlay').addEventListener('click',e=>{if(e.target===el('stickyManagerOverlay'))closeStickyManager()});
+  el('paletteOverlay').addEventListener('click',e=>{if(e.target===el('paletteOverlay'))closePalette()});
+  document.addEventListener('keydown',(e)=>{
+    const mod=e.metaKey||e.ctrlKey;if(mod&&e.key.toLowerCase()==='k'){e.preventDefault();openPalette();return}
+    if(mod&&e.key.toLowerCase()==='n'){e.preventDefault();openEditor();return}
+    if(e.key==='Escape'){if(!el('stickyManagerOverlay').classList.contains('hidden'))closeStickyManager();else if(!el('deleteOverlay').classList.contains('hidden'))hideDelete();else if(!el('categoryOverlay').classList.contains('hidden'))closeCategory();else if(!el('editorOverlay').classList.contains('hidden'))closeEditor();else if(!el('detailOverlay').classList.contains('hidden'))closeDetail();else if(!el('paletteOverlay').classList.contains('hidden'))closePalette(false);else el('sidebar').classList.remove('mobile-open')}
+    if((e.key==='Enter'||e.key===' ')&&e.target.classList?.contains('prompt-card')){e.preventDefault();openDetail(e.target.dataset.id)}
+    if(e.key==='Enter'&&document.activeElement===el('paletteInput')){e.preventDefault();const first=el('paletteResults').querySelector('[data-action="copy"]');if(first)copyPrompt(first.dataset.id)}
+  });
+  // 仅浏览器原型：用 pointer 模拟独立窗口拖动；正式版由 macOS/Tauri 完成系统窗体拖动。
+  (function(){
+    const sticky=el('stickyNote'),handle=el('stickyDragHandle');let origin=null;
+    function clamp(x,y){return {x:Math.max(8,Math.min(x,window.innerWidth-sticky.offsetWidth-8)),y:Math.max(8,Math.min(y,window.innerHeight-sticky.offsetHeight-8))}}
+    if(stickyPos&&Number.isFinite(stickyPos.x)&&Number.isFinite(stickyPos.y)){const pos=clamp(stickyPos.x,stickyPos.y);sticky.style.left=pos.x+'px';sticky.style.top=pos.y+'px';sticky.style.right='auto'}
+    handle.addEventListener('pointerdown',ev=>{if(ev.button!==0||ev.target.closest('button'))return;const r=sticky.getBoundingClientRect();origin={px:ev.clientX,py:ev.clientY,left:r.left,top:r.top};handle.setPointerCapture(ev.pointerId)});
+    handle.addEventListener('pointermove',ev=>{if(!origin)return;const pos=clamp(origin.left+ev.clientX-origin.px,origin.top+ev.clientY-origin.py);sticky.style.left=pos.x+'px';sticky.style.top=pos.y+'px';sticky.style.right='auto';stickyPos=pos});
+    const end=()=>{if(origin){origin=null;saveStickyUI()}};handle.addEventListener('pointerup',end);handle.addEventListener('pointercancel',end);
+    window.addEventListener('resize',()=>{if(!sticky.classList.contains('hidden')){const r=sticky.getBoundingClientRect(),pos=clamp(r.left,r.top);sticky.style.left=pos.x+'px';sticky.style.top=pos.y+'px';sticky.style.right='auto';stickyPos=pos;saveStickyUI()}})
+  })();
+  // New visitors get demo data; subsequent visits retain the current local state.
+  initStatic();render();if(stickyWasVisible)showSticky();
+})();
+</script>
+</body>
+</html>

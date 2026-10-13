@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PromptDock · 五条快捷便签 · 独立窗口原型 V1.1</title>
+<style>
+:root{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;color:#493c26}
+*{box-sizing:border-box}html,body{min-height:100%;margin:0}body{background:radial-gradient(circle at 20% 5%,#e2ebd8,#cfdde5 36%,#9db9bd 95%);overflow:hidden}
+button,input{font:inherit}button{cursor:pointer}button:focus-visible,input:focus-visible{outline:2px solid #b98423;outline-offset:1px}
+.desktop{min-height:100vh;position:relative;padding:35px 45px}
+.text{max-width:400px;color:#34495a}.tiny{display:inline-block;font-size:11px;font-weight:800;letter-spacing:2px;background:rgba(255,255,255,.6);padding:8px 12px;border-radius:7px}
+h1{font-size:25px;font-weight:800;margin:14px 0 8px;color:#223243}.description{font-size:13px;line-height:1.85;margin:0;color:#46606f}
+.steps{margin-top:24px;padding:15px 19px;background:rgba(255,255,255,.42);border:1px solid rgba(255,255,255,.6);border-radius:10px;max-width:360px}.steps div{font-size:12px;color:#3d5661;line-height:2}
+.macnote{position:absolute;left:min(51vw,720px);top:90px;width:340px;height:270px;border:1px solid #e1c970;border-radius:9px;background:#fff3ac;box-shadow:0 25px 70px rgba(34,50,52,.29),0 3px 12px rgba(34,35,30,.12);overflow:hidden;display:flex;flex-direction:column;user-select:none}
+.titlebar{height:46px;flex-shrink:0;border-bottom:1px solid rgba(164,135,60,.18);background:linear-gradient(180deg,#fff8ce,#fff3ac);display:flex;align-items:center;gap:7px;padding:0 10px 0 12px;cursor:grab}.titlebar:active{cursor:grabbing}.head-spark{color:#b5832a;font-size:17px}.appname{font-size:13px;font-weight:800;white-space:nowrap}.count{font-size:10px;font-weight:700;color:#8e6d23;background:#fce58a;border-radius:14px;padding:4px 6px;margin-right:auto}.controls{display:flex;gap:1px}.ic{border:none;background:transparent;width:25px;height:27px;border-radius:5px;color:#8c713b;display:grid;place-items:center;font-size:14px}.ic:hover,.ic.active{background:rgba(186,144,51,.18)}
+.note-items{flex:1;display:flex;flex-direction:column;gap:2px;padding:5px 9px;overflow:hidden}.row{flex:0 0 35px;border:1px solid rgba(184,146,42,.16);border-radius:6px;background:rgba(255,255,255,.43);width:100%;display:flex;align-items:center;text-align:left;gap:9px;color:#4d422b;padding:0 8px;min-width:0}.row:hover{background:rgba(255,255,255,.82);border-color:#d4b85a}.row.copied{background:#e6f4d5;border-color:#9cbe8b}.idx{color:#bf9953;width:17px;flex-shrink:0;font-size:10px;font-weight:800}.name{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11.5px;font-weight:680}.copy{font-size:13px;color:#97742c}.empty{flex:0 0 35px;border:1px dashed #ddc478;border-radius:6px;background:rgba(255,255,255,.15);display:flex;justify-content:center;align-items:center;color:#af9559;font-size:11px}
+.note-footer{height:30px;flex-shrink:0;display:flex;justify-content:space-between;align-items:center;padding:0 12px;border-top:1px solid rgba(158,125,43,.17);color:#907b4d;font-size:10px}.note-footer button{background:none;border:none;color:#906816;font-size:10px;font-weight:780}
+.manager,.template{position:absolute;inset:46px 0 0;background:#fff5bd;display:none;flex-direction:column}.manager.show,.template.show{display:flex}.panel-title{display:flex;align-items:center;justify-content:space-between;height:37px;padding:0 11px;border-bottom:1px solid #ebd98e;font-size:11px;font-weight:750}.panel-title button{border:0;background:none;color:#88662c;font-size:11px}.panel-scroll{padding:8px;overflow:auto;flex:1}.m-row{display:flex;gap:6px;align-items:center;margin-bottom:5px;background:rgba(255,255,255,.5);border-radius:6px;padding:4px 6px;height:31px}.m-row span{font-size:10.5px;white-space:nowrap;text-overflow:ellipsis;overflow:hidden;min-width:0;flex:1}.m-row button{border:1px solid #dec87e;background:#fff9da;border-radius:4px;font-size:10px;color:#775d2b;padding:4px 6px}.m-row button:disabled{opacity:.36}.template label{display:block;font-size:11px;font-weight:600;margin-bottom:6px}.template input{background:#fffdf3;border:1px solid #d9c17f;border-radius:6px;padding:7px;width:100%;font-size:12px}.template .go{background:#90701f;color:#fff;border:none;border-radius:6px;width:100%;padding:8px;font-size:11px;margin-top:12px}.toast{position:absolute;left:10px;right:10px;bottom:33px;background:#324834;color:#fff;padding:8px;text-align:center;border-radius:6px;font-size:10px;opacity:0;pointer-events:none;transition:opacity .15s}.toast.show{opacity:1}
+.mininote-close{display:none;position:absolute;z-index:10;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff5bf;padding:15px;border-radius:12px;border:1px solid #d2ad55;box-shadow:0 15px 44px #58674d50;text-align:center;font-size:12px}
+.mininote-close.show{display:block}.mininote-close button{margin-top:10px;border:0;background:#8c6c28;color:white;border-radius:7px;padding:8px 14px}
+@media(max-width:860px){.desktop{padding:20px}.text{max-width:340px}.steps{display:none}.macnote{position:relative;left:0;top:22px;width:min(340px,100%);margin:0 auto}}
+</style>
+</head>
+<body>
+<main class="desktop">
+  <div class="text"><span class="tiny">PROMPTDOCK · STICKY MODE</span><h1>五条提示词，随手复制。</h1><p class="description">一张桌面便签大小的独立小窗口。只显示你置顶的五条提示词名称，点击整行，复制的是完整正文。</p><div class="steps"><div>01 · 点击任意一条，复制整段提示词</div><div>02 · 顶部拖动，可放在任意角落</div><div>03 · 点击 ⚙ 调整顺序或移除</div><div>04 · 点击 ◇ 切换置顶状态演示</div><div>05 · 实际跨软件置顶由 Tauri 实现</div></div></div>
+  <section class="macnote" id="note" aria-label="PromptDock 五条快捷便签">
+    <header class="titlebar" id="dragHandle"><span class="head-spark">✦</span><span class="appname">快捷便签</span><span class="count" id="count">5 / 5</span><div class="controls"><button class="ic active" id="top" title="切换始终置顶（浏览器模拟）" aria-label="切换始终置顶">◇</button><button class="ic" id="manage" title="管理置顶" aria-label="管理置顶">⚙</button><button class="ic" id="close" title="收起便签" aria-label="收起便签">×</button></div></header>
+    <div class="note-items" id="list"></div>
+    <footer class="note-footer"><span>整行点击 · 复制全文</span><button id="manageFoot">管理置顶 ↗</button></footer>
+    <div class="manager" id="manager"><div class="panel-title"><span>管理 5 个快捷位置</span><button id="back">返回便签 ×</button></div><div class="panel-scroll" id="managerList"></div></div>
+    <div class="template" id="template"><div class="panel-title"><span id="tempTitle">填写模板变量</span><button id="cancelTemplate">返回 ×</button></div><div class="panel-scroll" id="tempFields"></div></div>
+    <div class="toast" id="toast">已复制</div>
+  </section>
+  <div class="mininote-close" id="closed">便签已收起。<div><button id="reopen">重新打开便签</button></div></div>
+</main>
+<script>
+(()=>{'use strict';
+  const demos=[
+  {id:'1',title:'执行反馈与验收提醒',body:'这是执行反馈，请你先核对真实执行证据，再给出下一个可验收任务，并生成可复制的执行提示词。'},
+  {id:'2',title:'Codex 源码审查与验收',body:'你是一名独立代码审查员。请核查当前分支、文件变更与实际测试结果，列出通过项、缺陷与修复步骤。'},
+  {id:'3',title:'复杂任务拆解为执行清单',body:'请将我的目标拆分为可实施的独立任务，明确前置条件、交付文件、质量标准和风险。'},
+  {id:'4',title:'AI 产品需求分析（变量模板）',body:'你是产品负责人。请分析「{{产品名称}}」的目标用户和核心价值，并给出最小化MVP方案。'},
+  {id:'5',title:'财报质量与预期差分析',body:'你是一名严谨的买方研究员，请检查营收、归母、扣非、现金流、估值和预期差，并逐项引用数据来源。'}];
+  let data=demos.slice(),top=true,closing=false,activeTemplate=null;
+  const el=id=>document.getElementById(id);
+  const esc=x=>String(x||'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  const variables=text=>[...new Set([...text.matchAll(/\{\{\s*([^{}]+?)\s*\}\}/g)].map(m=>m[1].trim()))];
+  function render(){el('count').textContent=`${data.length} / 5`;el('list').innerHTML=data.map((x,i)=>`<button class="row" data-id="${esc(x.id)}" title="${esc(x.title)}"><span class="idx">${String(i+1).padStart(2,'0')}</span><span class="name">${esc(x.title)}</span><span class="copy">${variables(x.body).length?'{}':'⧉'}</span></button>`).join('')+Array.from({length:5-data.length},(_,i)=>`<div class="empty">＋ 空位 ${data.length+i+1} · 在主库中添加</div>`).join('');renderManager()}
+  function renderManager(){el('managerList').innerHTML=data.map((x,i)=>`<div class="m-row"><span title="${esc(x.title)}">${i+1} · ${esc(x.title)}</span><button data-action="up" data-id="${esc(x.id)}" ${i===0?'disabled':''}>↑</button><button data-action="down" data-id="${esc(x.id)}" ${i===data.length-1?'disabled':''}>↓</button><button data-action="remove" data-id="${esc(x.id)}">移除</button></div>`).join('')||'<p style="font-size:12px">暂无置顶条目。请在主窗口添加。</p>'}
+  let timer;
+  function toast(t){el('toast').textContent=t;el('toast').classList.add('show');clearTimeout(timer);timer=setTimeout(()=>el('toast').classList.remove('show'),1600)}
+  async function copy(text,title){let ok=false;try{await navigator.clipboard.writeText(text);ok=true}catch(e){}if(!ok){try{const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.left='-9999px';document.body.append(ta);ta.select();ok=document.execCommand('copy');ta.remove()}catch(e){}}
+    if(ok){toast('✓ 已复制「'+title+'」完整正文');return true}else{toast('剪贴板被浏览器限制，正式 App 使用系统接口');return false}}
+  el('list').addEventListener('click',e=>{const row=e.target.closest('[data-id]');if(!row)return;const x=data.find(p=>p.id===row.dataset.id);if(!x)return;const vars=variables(x.body);if(vars.length){activeTemplate=x;el('tempTitle').textContent=x.title;el('tempFields').innerHTML=vars.map((v,i)=>`<div style="margin:8px 0 11px"><label for="v${i}">${esc(v)}</label><input id="v${i}" data-var="${esc(v)}" placeholder="输入${esc(v)}"></div>`).join('')+'<button class="go" id="doTemplate">填写完成并复制</button>';el('template').classList.add('show');el('tempFields').querySelector('input')?.focus()}else{copy(x.body,x.title)}});
+  el('tempFields').addEventListener('click',e=>{if(e.target.id!=='doTemplate'||!activeTemplate)return;const values={};for(const input of el('tempFields').querySelectorAll('input')){if(!input.value.trim()){input.focus();toast('请把变量填写完整');return}values[input.dataset.var]=input.value.trim()}const full=activeTemplate.body.replace(/\{\{\s*([^{}]+?)\s*\}\}/g,(_,k)=>values[k.trim()]??'');copy(full,activeTemplate.title).then(ok=>{if(ok){el('template').classList.remove('show');activeTemplate=null}})});
+  function manage(on){el('manager').classList.toggle('show',on)}
+  el('manage').onclick=()=>manage(true);el('manageFoot').onclick=()=>manage(true);el('back').onclick=()=>manage(false);
+  el('managerList').addEventListener('click',e=>{const b=e.target.closest('button[data-action]');if(!b)return;const i=data.findIndex(x=>x.id===b.dataset.id);if(i<0)return;const action=b.dataset.action;if(action==='remove'){data.splice(i,1)}else{const j=i+(action==='up'?-1:1);if(j<0||j>=data.length)return;[data[i],data[j]]=[data[j],data[i]]}render()});
+  el('cancelTemplate').onclick=()=>{el('template').classList.remove('show');activeTemplate=null};
+  el('top').onclick=e=>{top=!top;e.target.classList.toggle('active',top);toast(top?'原型模拟：保持置顶':'原型模拟：取消置顶')};
+  el('close').onclick=()=>{el('note').style.display='none';el('closed').classList.add('show')};
+  el('reopen').onclick=()=>{el('note').style.display='flex';el('closed').classList.remove('show')};
+  const handle=el('dragHandle'),note=el('note');let drag=null;
+  const clamp=(left,top)=>({left:Math.min(Math.max(8,left),Math.max(8,innerWidth-note.offsetWidth-8)),top:Math.min(Math.max(8,top),Math.max(8,innerHeight-note.offsetHeight-8))});
+  handle.addEventListener('pointerdown',e=>{if(e.button!==0||e.target.closest('button'))return;const r=note.getBoundingClientRect();drag={x:e.clientX,y:e.clientY,left:r.left,top:r.top};handle.setPointerCapture(e.pointerId)});
+  handle.addEventListener('pointermove',e=>{if(!drag)return;const c=clamp(drag.left+e.clientX-drag.x,drag.top+e.clientY-drag.y);note.style.left=c.left+'px';note.style.top=c.top+'px'});
+  handle.addEventListener('pointerup',()=>drag=null);handle.addEventListener('pointercancel',()=>drag=null);
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(el('template').classList.contains('show'))el('cancelTemplate').click();else if(el('manager').classList.contains('show'))manage(false)}});
+  render();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+请在当前 PromptDock 工程目录中先完整阅读 AGENTS.md 和 docs/product/ 下的 README.md、PRD.md、UI_DESIGN_SPEC.md、TECH_ARCHITECTURE.md、CODEX_TASKS.md、UI_PROTOTYPE.html、reference/schema.sql。
+
+这是我个人使用的 macOS 本地提示词管理软件。按文档使用 Tauri 2 + Vue 3 + TypeScript + Rust + SQLite，禁止账号、联网、iCloud、远程 API 和自动粘贴。以已认可的 HTML 原型作为视觉基线，但正式数据必须来自本地 SQLite。
+
+先检查 Git 分支/工作区及开发环境，新建独立功能分支。**本轮只实际执行 CODEX_TASKS.md 阶段 0 + 阶段 1**：工程初始化、真实 SQLite 迁移、默认分类、Rust CRUD、TypeScript IPC、必要测试。不要只写方案，不要跨阶段做快捷面板/导入导出，也不要 push 或 merge。
+
+最终反馈必须包含实际变更文件、Git 分支、构建/测试命令及真实结果、数据库实际存放路径、重启后的数据持久化证据、尚未验证的事项。缺少运行环境时清楚说明阻塞，不得伪造通过。
+
+V1.1 增量任务说明：完成阶段 3 后增加阶段 3B：独立五条置顶小便签。完整增量要求：docs/product/STICKY_MODE_CODEX_PROMPT.md 与 PRD FR-17。禁止将 HTML fixed DIV 当作可跨软件置顶的 macOS 窗口；必须由 Tauri 创建第三窗 sticky。

@@ -1,0 +1,25 @@
+{
+  "app": "PromptDock",
+  "version": 1,
+  "exportedAt": "2026-10-13T09:00:00.000Z",
+  "categories": [
+    "技术研发",
+    "通用效率"
+  ],
+  "prompts": [
+    {
+      "id": "demo-import-1",
+      "title": "变量模板测试",
+      "body": "你是{{角色}}。请为{{项目名称}}设计方案。项目名称：{{项目名称}}。",
+      "description": "校验旧版 JSON 与重复变量",
+      "category": "技术研发",
+      "tags": ["测试", "Codex"],
+      "favorite": true,
+      "pinned": true,
+      "uses": 2,
+      "createdAt": 1791870000000,
+      "updatedAt": 1791870000000,
+      "lastUsed": null
+    }
+  ]
+}
