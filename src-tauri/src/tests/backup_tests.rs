@@ -230,7 +230,7 @@ async fn failed_import_rolls_back_categories_and_prompts() {
             title: "无效正文".to_string(),
             description: "".to_string(),
             body: "".to_string(),
-            category_id: category_id,
+            category_id,
             tags: vec![],
             is_favorite: false,
             is_pinned: false,

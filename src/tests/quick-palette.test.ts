@@ -39,4 +39,18 @@ describe("QuickPalette", () => {
     await input.trigger("keydown", { key: "Escape" });
     expect(wrapper.emitted("close")).toHaveLength(1);
   });
+
+  it("filters Chinese text in the embedded main-window palette", async () => {
+    const prompts = [
+      item(1),
+      { ...item(2), title: "季度经营复盘", body: "检查现金流" },
+    ];
+    const wrapper = mount(QuickPalette, {
+      props: { initialPrompts: prompts, embedded: true },
+    });
+    await wrapper.get("input").setValue("现金流");
+    const results = wrapper.findAll("[data-test='quick-result']");
+    expect(results).toHaveLength(1);
+    expect(results[0].text()).toContain("季度经营复盘");
+  });
 });

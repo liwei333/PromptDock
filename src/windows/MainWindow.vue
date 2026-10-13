@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { listen } from "@tauri-apps/api/event";
+import { confirm } from "@tauri-apps/plugin-dialog";
 import { onBeforeUnmount, onMounted, ref } from "vue";
 
 import { backupApi, categoryApi, windowApi } from "@/api/commands";
+import CategoryCreateDialog from "@/components/CategoryCreateDialog.vue";
 import ImportPreviewDialog from "@/components/ImportPreviewDialog.vue";
 import PromptCard from "@/components/PromptCard.vue";
 import PromptDetailDrawer from "@/components/PromptDetailDrawer.vue";
 import PromptEditorDialog from "@/components/PromptEditorDialog.vue";
 import QuickPalette from "@/components/QuickPalette.vue";
+import RuntimeInfoDialog from "@/components/RuntimeInfoDialog.vue";
 import StickyManagerDialog from "@/components/StickyManagerDialog.vue";
 import { extractTemplateVariables } from "@/composables/useTemplateVariables";
 import { copyPromptText } from "@/services/clipboard";
@@ -26,6 +29,8 @@ const editing = ref<Prompt | null | undefined>(undefined);
 const variableMode = ref(false);
 const quickOpen = ref(false);
 const stickyManagerOpen = ref(false);
+const runtimeOpen = ref(false);
+const categoryDialogOpen = ref(false);
 const importPreview = ref<ImportPreview | null>(null);
 const importing = ref(false);
 const importError = ref("");
@@ -118,7 +123,12 @@ async function save(input: PromptInput, id?: string): Promise<void> {
 }
 
 async function remove(prompt: Prompt): Promise<void> {
-  if (!window.confirm(`确定删除「${prompt.title}」吗？此操作不可撤销。`))
+  if (
+    !(await confirm(`确定删除「${prompt.title}」吗？此操作不可撤销。`, {
+      title: "删除提示词？",
+      kind: "warning",
+    }))
+  )
     return;
   try {
     await store.remove(prompt.id);
@@ -130,12 +140,11 @@ async function remove(prompt: Prompt): Promise<void> {
   }
 }
 
-async function createCategory(): Promise<void> {
-  const name = window.prompt("分类名称（1–18 个字符）")?.trim();
-  if (!name) return;
+async function createCategory(name: string): Promise<void> {
   try {
     await categoryApi.create(name);
     await store.load();
+    categoryDialogOpen.value = false;
     notify("分类已创建");
   } catch (reason) {
     notify(reason instanceof Error ? reason.message : String(reason), "error");
@@ -173,9 +182,10 @@ async function commitImport(mode: ImportMode): Promise<void> {
   if (!importPreview.value) return;
   if (
     mode === "replace" &&
-    !window.confirm(
+    !(await confirm(
       "替换会清空当前分类和提示词。应用会先创建安全备份，确定继续吗？",
-    )
+      { title: "确认替换现有库？", kind: "warning" },
+    ))
   ) {
     return;
   }
@@ -213,7 +223,9 @@ function keydown(event: KeyboardEvent): void {
 onMounted(async () => {
   window.addEventListener("keydown", keydown);
   await store.load();
-  stopListening = await listen("prompts-changed", () => void store.load());
+  if ("__TAURI_INTERNALS__" in window) {
+    stopListening = await listen("prompts-changed", () => void store.load());
+  }
 });
 onBeforeUnmount(() => {
   window.removeEventListener("keydown", keydown);
@@ -259,7 +271,9 @@ onBeforeUnmount(() => {
         </button>
         <div class="nav-heading nav-heading-row">
           <span>分类管理</span
-          ><button aria-label="新建分类" @click="createCategory">＋</button>
+          ><button aria-label="新建分类" @click="categoryDialogOpen = true">
+            ＋
+          </button>
         </div>
         <button
           v-for="category in store.categories"
@@ -289,6 +303,9 @@ onBeforeUnmount(() => {
         </button>
         <button @click="stickyManagerOpen = true">
           <span>↕ 管理置顶</span><small>{{ store.pinned.length }}/5</small>
+        </button>
+        <button @click="runtimeOpen = true">
+          <span>ⓘ 运行信息</span><small>本机</small>
         </button>
         <p>本机 SQLite 保存<br /><small>离线可用 · 不上传云端</small></p>
       </div>
@@ -508,6 +525,12 @@ onBeforeUnmount(() => {
       :error="importError"
       @cancel="cancelImport"
       @commit="commitImport"
+    />
+    <RuntimeInfoDialog v-if="runtimeOpen" @close="runtimeOpen = false" />
+    <CategoryCreateDialog
+      v-if="categoryDialogOpen"
+      @close="categoryDialogOpen = false"
+      @create="createCategory"
     />
     <div v-if="toast" class="toast" :class="toast.kind" aria-live="polite">
       {{ toast.kind === "success" ? "✓" : "!" }} {{ toast.text }}

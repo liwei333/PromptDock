@@ -30,9 +30,26 @@ const templatePrompt = ref<Prompt | null>(null);
 let searchSequence = 0;
 let stopSelectListener: (() => void) | null = null;
 
-const results = computed(() =>
-  (props.initialPrompts ?? remoteResults.value).slice(0, 12),
-);
+function matches(prompt: Prompt, keyword: string): boolean {
+  if (!keyword) return true;
+  const haystack = [
+    prompt.title,
+    prompt.description,
+    prompt.body,
+    prompt.categoryName,
+    ...prompt.tags,
+  ]
+    .join("\n")
+    .toLocaleLowerCase();
+  return haystack.includes(keyword.toLocaleLowerCase());
+}
+
+const results = computed(() => {
+  const source = props.initialPrompts ?? remoteResults.value;
+  return source
+    .filter((prompt) => matches(prompt, search.value.trim()))
+    .slice(0, 12);
+});
 
 async function load(): Promise<void> {
   if (props.initialPrompts) return;

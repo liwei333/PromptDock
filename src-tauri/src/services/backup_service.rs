@@ -302,10 +302,10 @@ fn validate_document(mut document: BackupDocument) -> Result<BackupDocument, App
         prompt.description = normalized.description;
         prompt.tags = normalized.tags;
         prompt.copy_count = prompt.copy_count.max(0);
-        if let Some(order) = prompt.pin_order {
-            if !prompt.is_pinned || !(1..=5).contains(&order) || !pin_orders.insert(order) {
-                return Err(AppError::Conflict("备份中的便签顺序无效".to_string()));
-            }
+        if let Some(order) = prompt.pin_order
+            && (!prompt.is_pinned || !(1..=5).contains(&order) || !pin_orders.insert(order))
+        {
+            return Err(AppError::Conflict("备份中的便签顺序无效".to_string()));
         }
     }
     Ok(document)
@@ -425,17 +425,16 @@ async fn insert_categories(
     let mut mapping = HashMap::new();
     let mut added = 0;
     for category in &document.categories {
-        if !replace {
-            if let Some(existing_id) = sqlx::query_scalar::<_, String>(
+        if !replace
+            && let Some(existing_id) = sqlx::query_scalar::<_, String>(
                 "SELECT id FROM categories WHERE name = ? COLLATE NOCASE",
             )
             .bind(&category.name)
             .fetch_optional(&mut **transaction)
             .await?
-            {
-                mapping.insert(category.id.clone(), existing_id);
-                continue;
-            }
+        {
+            mapping.insert(category.id.clone(), existing_id);
+            continue;
         }
         let id_in_use: bool =
             sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM categories WHERE id = ?)")

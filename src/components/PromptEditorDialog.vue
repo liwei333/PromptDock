@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive } from "vue";
+import { confirm } from "@tauri-apps/plugin-dialog";
 
 import type { Category, Prompt, PromptInput } from "@/types/prompt";
 
@@ -47,10 +48,13 @@ const validation = computed(() => {
   return "";
 });
 
-function close(): void {
+async function close(): Promise<void> {
   if (
     JSON.stringify(form) !== initial &&
-    !window.confirm("当前修改尚未保存，确定放弃吗？")
+    !(await confirm("当前修改尚未保存，确定放弃吗？", {
+      title: "放弃未保存修改？",
+      kind: "warning",
+    }))
   ) {
     return;
   }
@@ -125,7 +129,7 @@ function save(): void {
           <span>说明</span>
           <input
             v-model="form.description"
-            maxlength="240"
+            maxlength="160"
             placeholder="一句话说明使用场景"
           />
         </label>
