@@ -2,12 +2,16 @@ pub mod commands;
 pub mod db;
 pub mod domain;
 pub mod repositories;
+pub mod services;
 pub mod state;
 
-use commands::{categories, prompts, windows};
+use commands::{backup, categories, prompts, windows};
 use db::Database;
 use state::AppState;
-use tauri::{Manager, WindowEvent};
+use tauri::{
+    Manager, WindowEvent,
+    menu::{Menu, MenuItem, PredefinedMenuItem, Submenu},
+};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 #[cfg(test)]
@@ -22,10 +26,53 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .menu(|handle| {
+            let open_main =
+                MenuItem::with_id(handle, "open-main", "打开主窗口", true, None::<&str>)?;
+            let toggle_sticky = MenuItem::with_id(
+                handle,
+                "toggle-sticky",
+                "显示/收起快捷便签",
+                true,
+                None::<&str>,
+            )?;
+            let separator = PredefinedMenuItem::separator(handle)?;
+            let quit = MenuItem::with_id(handle, "quit", "退出 PromptDock", true, Some("Cmd+Q"))?;
+            let app_menu = Submenu::with_items(
+                handle,
+                "PromptDock",
+                true,
+                &[&open_main, &toggle_sticky, &separator, &quit],
+            )?;
+            Menu::with_items(handle, &[&app_menu])
+        })
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            "open-main" => windows::focus_main_window(app),
+            "toggle-sticky" => {
+                if let Some(window) = app.get_webview_window("sticky") {
+                    let visible = window.is_visible().unwrap_or(false);
+                    if visible {
+                        let _ = window.hide();
+                    } else {
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                    }
+                    let app = app.clone();
+                    let state = app.state::<AppState>().inner().clone();
+                    tauri::async_runtime::spawn(async move {
+                        let _ = windows::capture_sticky_window_state(&app, &state, !visible).await;
+                    });
+                }
+            }
+            "quit" => app.exit(0),
+            _ => {}
+        })
         .setup(|app| {
             let database_path = app.path().app_data_dir()?.join("promptdock.sqlite3");
             let database = tauri::async_runtime::block_on(Database::connect_path(&database_path))?;
             app.manage(AppState::new(database, database_path));
+            let state = app.state::<AppState>().inner().clone();
+            tauri::async_runtime::block_on(windows::restore_sticky_window(app.handle(), &state))?;
 
             let shortcut_result =
                 app.global_shortcut()
@@ -43,10 +90,22 @@ pub fn run() {
 
             if let Some(sticky) = app.get_webview_window("sticky") {
                 let sticky_for_events = sticky.clone();
+                let app_for_events = app.handle().clone();
                 sticky.on_window_event(move |event| {
                     if let WindowEvent::CloseRequested { api, .. } = event {
                         api.prevent_close();
                         let _ = sticky_for_events.hide();
+                        let app = app_for_events.clone();
+                        let state = app.state::<AppState>().inner().clone();
+                        tauri::async_runtime::spawn(async move {
+                            let _ = windows::capture_sticky_window_state(&app, &state, false).await;
+                        });
+                    } else if matches!(event, WindowEvent::Moved(_)) {
+                        let app = app_for_events.clone();
+                        let state = app.state::<AppState>().inner().clone();
+                        tauri::async_runtime::spawn(async move {
+                            let _ = windows::capture_sticky_window_state(&app, &state, true).await;
+                        });
                     }
                 });
             }
@@ -77,6 +136,10 @@ pub fn run() {
             categories::create_category,
             categories::rename_category,
             categories::delete_category,
+            backup::export_backup,
+            backup::preview_import_backup,
+            backup::commit_import_backup,
+            backup::cancel_import_backup,
             windows::show_quick_window,
             windows::hide_quick_window,
             windows::show_sticky_window,

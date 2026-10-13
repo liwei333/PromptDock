@@ -1,11 +1,20 @@
 use std::{
+    collections::HashMap,
     path::PathBuf,
-    sync::{Arc, RwLock},
+    sync::{Arc, Mutex, RwLock},
+    time::Instant,
 };
 
 use serde::Serialize;
 
 use crate::db::Database;
+use crate::services::backup_service::BackupDocument;
+
+#[derive(Clone)]
+pub struct PendingImport {
+    pub document: BackupDocument,
+    pub created_at: Instant,
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -30,6 +39,7 @@ pub struct AppState {
     pub database: Database,
     pub database_path: PathBuf,
     pub shortcut: Arc<RwLock<ShortcutStatus>>,
+    pub pending_imports: Arc<Mutex<HashMap<String, PendingImport>>>,
 }
 
 impl AppState {
@@ -38,6 +48,7 @@ impl AppState {
             database,
             database_path,
             shortcut: Arc::new(RwLock::new(ShortcutStatus::default())),
+            pending_imports: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 }

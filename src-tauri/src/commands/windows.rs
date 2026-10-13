@@ -67,7 +67,7 @@ fn native_error(error: impl ToString) -> ErrorPayload {
     AppError::Native(error.to_string()).into()
 }
 
-async fn read_sticky_settings(state: &AppState) -> Result<StickySettings, AppError> {
+pub(crate) async fn read_sticky_settings(state: &AppState) -> Result<StickySettings, AppError> {
     let repository = SettingsRepository::new(state.database.pool().clone());
     repository
         .get(STICKY_SETTINGS_KEY)
@@ -78,13 +78,79 @@ async fn read_sticky_settings(state: &AppState) -> Result<StickySettings, AppErr
         .map(|value| value.unwrap_or_default())
 }
 
-async fn write_sticky_settings(
+pub(crate) async fn write_sticky_settings(
     state: &AppState,
     settings: &StickySettings,
 ) -> Result<(), AppError> {
     SettingsRepository::new(state.database.pool().clone())
         .set(STICKY_SETTINGS_KEY, &serde_json::to_value(settings)?)
         .await
+}
+
+pub(crate) async fn capture_sticky_window_state(
+    app: &AppHandle,
+    state: &AppState,
+    visible: bool,
+) -> Result<StickySettings, AppError> {
+    let window = app
+        .get_webview_window("sticky")
+        .ok_or_else(|| AppError::Native("找不到便签窗口".to_string()))?;
+    let mut settings = read_sticky_settings(state).await?;
+    settings.visible = visible;
+    if let Ok(position) = window.outer_position() {
+        settings.x = Some(position.x);
+        settings.y = Some(position.y);
+    }
+    settings.scale_factor = window.scale_factor().ok();
+    settings.monitor_name = window
+        .current_monitor()
+        .ok()
+        .flatten()
+        .and_then(|monitor| monitor.name().map(ToOwned::to_owned));
+    write_sticky_settings(state, &settings).await?;
+    Ok(settings)
+}
+
+pub(crate) async fn restore_sticky_window(
+    app: &AppHandle,
+    state: &AppState,
+) -> Result<(), AppError> {
+    let settings = read_sticky_settings(state).await?;
+    let window = app
+        .get_webview_window("sticky")
+        .ok_or_else(|| AppError::Native("找不到便签窗口".to_string()))?;
+    window
+        .set_always_on_top(settings.always_on_top)
+        .map_err(|error| AppError::Native(error.to_string()))?;
+    if let (Some(x), Some(y)) = (settings.x, settings.y) {
+        let size = window
+            .outer_size()
+            .map_err(|error| AppError::Native(error.to_string()))?;
+        let monitor = window
+            .available_monitors()
+            .map_err(|error| AppError::Native(error.to_string()))?
+            .into_iter()
+            .find(|monitor| monitor.name().map(String::as_str) == settings.monitor_name.as_deref())
+            .or_else(|| window.current_monitor().ok().flatten());
+        if let Some(monitor) = monitor {
+            let origin = monitor.position();
+            let area = monitor.size();
+            let max_x = origin.x + area.width.saturating_sub(size.width) as i32;
+            let max_y = origin.y + area.height.saturating_sub(size.height) as i32;
+            window
+                .set_position(PhysicalPosition::new(
+                    x.clamp(origin.x, max_x),
+                    y.clamp(origin.y, max_y),
+                ))
+                .map_err(|error| AppError::Native(error.to_string()))?;
+        }
+    }
+    if settings.visible {
+        window
+            .show()
+            .map_err(|error| AppError::Native(error.to_string()))?;
+    }
+    Ok(())
 }
 
 pub fn focus_main_window(app: &AppHandle) {
@@ -160,19 +226,7 @@ pub async fn hide_sticky_window(
     let window = app
         .get_webview_window("sticky")
         .ok_or_else(|| native_error("找不到便签窗口"))?;
-    if let Ok(position) = window.outer_position() {
-        let mut settings = read_sticky_settings(&state).await?;
-        settings.visible = false;
-        settings.x = Some(position.x);
-        settings.y = Some(position.y);
-        settings.scale_factor = window.scale_factor().ok();
-        settings.monitor_name = window
-            .current_monitor()
-            .ok()
-            .flatten()
-            .and_then(|monitor| monitor.name().map(ToOwned::to_owned));
-        write_sticky_settings(&state, &settings).await?;
-    }
+    capture_sticky_window_state(&app, &state, false).await?;
     window.hide().map_err(native_error)?;
     Ok(HiddenResult { hidden: true })
 }

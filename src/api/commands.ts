@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { open, save } from "@tauri-apps/plugin-dialog";
 
 import type {
   Category,
@@ -10,6 +11,12 @@ import type {
   PromptQuery,
 } from "@/types/prompt";
 import type { RuntimeInfo, StickySettings } from "@/types/runtime";
+import type {
+  ExportResult,
+  ImportMode,
+  ImportPreview,
+  ImportResult,
+} from "@/types/backup";
 
 export const promptApi = {
   list: (query: PromptQuery = {}) =>
@@ -50,4 +57,35 @@ export const windowApi = {
   setStickySettings: (settings: Partial<StickySettings>) =>
     invoke<StickySettings>("set_sticky_settings", { settings }),
   runtimeInfo: () => invoke<RuntimeInfo>("get_runtime_info"),
+};
+
+export const backupApi = {
+  exportWithDialog: async (): Promise<ExportResult> => {
+    const now = new Date();
+    const stamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}_${String(now.getHours()).padStart(2, "0")}-${String(now.getMinutes()).padStart(2, "0")}`;
+    const destinationPath = await save({
+      title: "导出 PromptDock 备份",
+      defaultPath: `PromptDock_backup_${stamp}.json`,
+      filters: [{ name: "PromptDock JSON", extensions: ["json"] }],
+    });
+    return invoke<ExportResult>("export_backup", { destinationPath });
+  },
+  previewWithDialog: async (): Promise<ImportPreview | null> => {
+    const sourcePath = await open({
+      title: "选择 PromptDock JSON 备份",
+      multiple: false,
+      directory: false,
+      filters: [{ name: "PromptDock JSON", extensions: ["json"] }],
+    });
+    const result = await invoke<{
+      cancelled: boolean;
+      token: string | null;
+      summary: ImportPreview["summary"] | null;
+    }>("preview_import_backup", { sourcePath });
+    if (result.cancelled || !result.token || !result.summary) return null;
+    return { token: result.token, summary: result.summary };
+  },
+  commit: (token: string, mode: ImportMode) =>
+    invoke<ImportResult>("commit_import_backup", { token, mode }),
+  cancel: (token: string) => invoke<void>("cancel_import_backup", { token }),
 };

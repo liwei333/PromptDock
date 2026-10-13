@@ -1,6 +1,6 @@
 [package]
 name = "promptdock"
-version = "0.1.0"
+version = "1.1.0"
 description = "Offline macOS prompt library with quick search and sticky prompts"
 authors = ["PromptDock"]
 edition = "2024"
