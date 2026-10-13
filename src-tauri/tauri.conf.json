@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "promptdock",
+  "productName": "PromptDock",
   "version": "0.1.0",
   "identifier": "com.promptdock.local",
   "build": {
@@ -12,9 +12,45 @@
   "app": {
     "windows": [
       {
-        "title": "promptdock",
-        "width": 800,
-        "height": 600
+        "label": "main",
+        "title": "PromptDock",
+        "width": 1360,
+        "height": 860,
+        "minWidth": 1024,
+        "minHeight": 700,
+        "center": true
+      },
+      {
+        "label": "quick",
+        "title": "PromptDock 快速搜索",
+        "url": "index.html?window=quick",
+        "width": 680,
+        "height": 520,
+        "minWidth": 560,
+        "minHeight": 420,
+        "center": true,
+        "visible": false,
+        "resizable": false,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true
+      },
+      {
+        "label": "sticky",
+        "title": "PromptDock 便签",
+        "url": "index.html?window=sticky",
+        "width": 340,
+        "height": 270,
+        "minWidth": 340,
+        "minHeight": 270,
+        "maxWidth": 340,
+        "maxHeight": 270,
+        "visible": false,
+        "resizable": false,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": true
       }
     ],
     "security": {

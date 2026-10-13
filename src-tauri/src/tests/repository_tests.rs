@@ -267,6 +267,79 @@ async fn categories_are_case_insensitively_unique() {
 }
 
 #[tokio::test]
+async fn categories_can_be_renamed_and_deleted_after_moving_prompts() {
+    let directory = tempdir().expect("temporary directory");
+    let database = Database::connect_path(directory.path().join("promptdock.sqlite3"))
+        .await
+        .expect("database");
+    let categories = CategoryRepository::new(database.pool().clone());
+    let prompts = PromptRepository::new(database.pool().clone());
+
+    let source = categories.create("待整理").await.expect("source category");
+    let target = categories.create("已整理").await.expect("target category");
+    let renamed = categories
+        .rename(&source.id, "进行中")
+        .await
+        .expect("rename category");
+    assert_eq!(renamed.name, "进行中");
+
+    let mut input = prompt_input("分类移动", "删除分类时保留提示词");
+    input.category_id = source.id.clone();
+    let prompt = prompts.create(input).await.expect("prompt in source");
+
+    categories
+        .delete_and_move(&source.id, &target.id)
+        .await
+        .expect("delete and move");
+    assert_eq!(
+        prompts
+            .get(&prompt.id)
+            .await
+            .expect("moved prompt")
+            .category_id,
+        target.id
+    );
+    assert_eq!(
+        categories
+            .get(&source.id)
+            .await
+            .expect_err("source deleted")
+            .code(),
+        "NOT_FOUND"
+    );
+}
+
+#[tokio::test]
+async fn category_delete_rejects_same_or_missing_move_target() {
+    let directory = tempdir().expect("temporary directory");
+    let database = Database::connect_path(directory.path().join("promptdock.sqlite3"))
+        .await
+        .expect("database");
+    let categories = CategoryRepository::new(database.pool().clone());
+    let source = categories
+        .create("临时分类")
+        .await
+        .expect("source category");
+
+    assert_eq!(
+        categories
+            .delete_and_move(&source.id, &source.id)
+            .await
+            .expect_err("same target rejected")
+            .code(),
+        "CONFLICT"
+    );
+    assert_eq!(
+        categories
+            .delete_and_move(&source.id, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+            .await
+            .expect_err("missing target rejected")
+            .code(),
+        "CATEGORY_NOT_FOUND"
+    );
+}
+
+#[tokio::test]
 async fn sticky_slots_reject_a_sixth_prompt_and_keep_stable_manual_order() {
     let directory = tempdir().expect("temporary directory");
     let database = Database::connect_path(directory.path().join("promptdock.sqlite3"))

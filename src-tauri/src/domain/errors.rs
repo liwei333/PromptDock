@@ -23,6 +23,8 @@ pub enum AppError {
     Conflict(String),
     #[error("数据格式无效")]
     Serialization(#[from] serde_json::Error),
+    #[error("原生功能不可用：{0}")]
+    Native(String),
 }
 
 #[derive(Debug, Serialize)]
@@ -45,6 +47,7 @@ impl From<AppError> for ErrorPayload {
             AppError::PinLimitReached => "PIN_LIMIT_REACHED",
             AppError::Conflict(_) => "CONFLICT",
             AppError::Serialization(_) => "SERIALIZATION_ERROR",
+            AppError::Native(_) => "NATIVE_ERROR",
         };
         Self {
             code,
@@ -66,6 +69,7 @@ impl AppError {
             Self::PinLimitReached => "PIN_LIMIT_REACHED",
             Self::Conflict(_) => "CONFLICT",
             Self::Serialization(_) => "SERIALIZATION_ERROR",
+            Self::Native(_) => "NATIVE_ERROR",
         }
     }
 }
