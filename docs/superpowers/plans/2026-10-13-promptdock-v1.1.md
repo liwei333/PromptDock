@@ -24,14 +24,14 @@
 
 **Files:** `src-tauri/migrations/*.sql`, `src-tauri/src/domain/*`, `src-tauri/src/db/mod.rs`, `src-tauri/src/repositories/*`, `src-tauri/src/tests/*`
 
-- [ ] Write failing migration/seed tests: first start creates six categories and zero prompts; second start is idempotent.
-- [ ] Run `cargo test --manifest-path src-tauri/Cargo.toml repository_tests` and confirm the missing-module failure.
-- [ ] Implement SQLite options (`foreign_keys`, WAL, busy timeout), migration execution, and seed transaction.
-- [ ] Write failing validation and CRUD tests for whitespace, Unicode lengths, invalid categories, multiline bodies, tags, special SQL characters, filters, sorting, and restart persistence.
-- [ ] Implement minimal models, validation, parameterized repository CRUD, dashboard statistics, favorite, and successful-copy recording.
-- [ ] Write failing sticky tests for 0/1/5 slots, sixth-slot rejection, duplicate pins, compact removal, reorder validation, delete compaction, and legacy overflow preservation.
-- [ ] Implement transactional pin/unpin/reorder and settings persistence; rerun all Rust tests.
-- [ ] Commit `feat: add persistent SQLite prompt domain`.
+- [x] Write failing migration/seed tests: first start creates six categories and zero prompts; second start is idempotent.
+- [x] Run `cargo test --manifest-path src-tauri/Cargo.toml repository_tests` and confirm the missing-module failure.
+- [x] Implement SQLite options (`foreign_keys`, WAL, busy timeout), migration execution, and seed transaction.
+- [x] Write failing validation and CRUD tests for whitespace, Unicode lengths, invalid categories, multiline bodies, tags, special SQL characters, filters, sorting, and restart persistence.
+- [x] Implement minimal models, validation, parameterized repository CRUD, dashboard statistics, favorite, and successful-copy recording.
+- [x] Write failing sticky tests for 0/1/5 slots, sixth-slot rejection, duplicate pins, compact removal, reorder validation, delete compaction, and legacy overflow preservation.
+- [x] Implement transactional pin/unpin/reorder and settings persistence; rerun all Rust tests.
+- [x] Commit `feat: add persistent SQLite prompt domain`.
 
 ### Task 3: Expose typed IPC and frontend core services
 
