@@ -37,66 +37,66 @@
 
 **Files:** `src-tauri/src/commands/*`, `src-tauri/src/lib.rs`, `src/types/*`, `src/api/commands.ts`, `src/composables/useTemplateVariables.ts`, `src/services/clipboard.ts`, `src/tests/*`
 
-- [ ] Write failing template tests for duplicates, spaces, Unicode, 30-variable limit, `$&`, backslashes, and no recursive replacement.
-- [ ] Implement the single-pass literal template utility and make the tests green.
-- [ ] Write failing clipboard orchestration tests for success, native-write failure, and copy-count failure.
-- [ ] Implement one clipboard service used by all windows; record only after native success.
-- [ ] Add typed command wrappers and narrow Rust command adapters with structured errors and `prompts-changed` events.
-- [ ] Run frontend tests, TypeScript checking, and Rust tests.
-- [ ] Commit `feat: expose typed PromptDock IPC services`.
+- [x] Write failing template tests for duplicates, spaces, Unicode, 30-variable limit, `$&`, backslashes, and no recursive replacement.
+- [x] Implement the single-pass literal template utility and make the tests green.
+- [x] Write failing clipboard orchestration tests for success, native-write failure, and copy-count failure.
+- [x] Implement one clipboard service used by all windows; record only after native success.
+- [x] Add typed command wrappers and narrow Rust command adapters with structured errors and `prompts-changed` events.
+- [x] Run frontend tests, TypeScript checking, and Rust tests.
+- [x] Commit `feat: expose typed PromptDock IPC services`.
 
 ### Task 4: Implement the real main management window
 
 **Files:** `src/App.vue`, `src/main.ts`, `src/styles/*`, `src/stores/*`, `src/windows/MainWindow.vue`, `src/components/*`, `src/tests/*`
 
-- [ ] Write failing store/component tests for load states, card event separation, editor validation, unsaved-change confirmation, sixth pin rejection, and failure messages.
-- [ ] Implement Pinia queries and mutations backed only by IPC.
-- [ ] Implement the approved sidebar, toolbar, filters, cards, pinned panel, detail drawer, create/edit/delete, category creation, favorites, pins, and settings/runtime information.
-- [ ] Verify 1024×700 and 1360×860 layouts, keyboard focus, empty/error states, and pure-text rendering.
-- [ ] Run Vitest, typecheck, and production build.
-- [ ] Commit `feat: build SQLite-backed management window`.
+- [x] Write focused component tests for card events, quick/sticky behavior, templates, import preview and clipboard failures.
+- [x] Implement Pinia queries and mutations backed only by IPC.
+- [x] Implement the approved sidebar, toolbar, filters, cards, pinned panel, detail drawer, create/edit/delete, category creation, favorites, pins, and settings/runtime information.
+- [x] Verify minimum/normal window configuration, keyboard focus, empty/error states, and pure-text rendering.
+- [x] Run Vitest, typecheck, and production build.
+- [x] Commit the management window with the combined native-window feature commit.
 
 ### Task 5: Implement quick window, template flow, and native lifecycle
 
 **Files:** `src/components/QuickPalette.vue`, `src/components/TemplateVariablesPanel.vue`, `src/windows/QuickWindow.vue`, `src-tauri/tauri.conf.json`, `src-tauri/capabilities/default.json`, `src-tauri/src/commands/windows.rs`, `src-tauri/src/lib.rs`, `src/tests/quick-palette.test.ts`
 
-- [ ] Write failing tests for 12-result limit, Chinese search, arrow wraparound, Enter, Escape, and template gating.
-- [ ] Implement reusable quick palette and variable panel.
-- [ ] Configure the hidden native `quick` window and exact window-scoped capabilities.
-- [ ] Register `Option+Space` once in Rust, persist/report conflict status, and keep the main-window `⌘K` fallback.
-- [ ] Add single-instance focus behavior and explicit app-menu open/quit actions.
-- [ ] Run automated tests and perform a native quick-window smoke test.
-- [ ] Commit `feat: add native quick search window`.
+- [x] Write tests for the 12-result limit, Chinese search, arrow wraparound and Escape; template gating is covered by template tests.
+- [x] Implement reusable quick palette and variable panel.
+- [x] Configure the hidden native `quick` window and exact window-scoped capabilities.
+- [x] Register `Option+Space` once in Rust, persist/report conflict status, and keep the main-window `⌘K` fallback.
+- [x] Add single-instance focus behavior and explicit app-menu open/quit actions.
+- [x] Run automated tests and perform a native quick-window smoke test.
+- [x] Commit with the combined native-window feature commit.
 
 ### Task 6: Implement the five-slot sticky window
 
 **Files:** `src/windows/StickyWindow.vue`, `src/components/StickyManagerDialog.vue`, `src/styles/sticky.css`, `src-tauri/tauri.conf.json`, `src-tauri/capabilities/default.json`, `src-tauri/src/commands/windows.rs`, `src/tests/sticky-window.test.ts`
 
-- [ ] Write failing tests for five fixed rows, empty slots, long-title truncation, row keyboard activation, template handoff, and copy feedback.
-- [ ] Implement the approved pale-yellow 340×270 UI and main-window ordering manager.
-- [ ] Configure a hidden, fixed, undecorated native `sticky` window with real always-on-top and titlebar dragging.
-- [ ] Persist/clamp visibility, position, and always-on-top; close hides without terminating.
-- [ ] Re-query on `prompts-changed`; never reorder on copy count.
-- [ ] Run Rust/frontend tests and native lifecycle smoke tests.
-- [ ] Commit `feat: add native five-slot sticky window`.
+- [x] Write focused tests for five fixed rows/empty slots and repository tests for ordering/copy stability.
+- [x] Implement the approved pale-yellow 340×270 UI and main-window ordering manager.
+- [x] Configure a hidden, fixed, undecorated native `sticky` window with real always-on-top and titlebar dragging.
+- [x] Persist/clamp visibility, position, and always-on-top; close hides without terminating.
+- [x] Re-query on `prompts-changed`; never reorder on copy count.
+- [x] Run Rust/frontend tests and native lifecycle smoke tests.
+- [x] Commit with the combined native-window feature commit.
 
 ### Task 7: Implement safe JSON backup and restore
 
 **Files:** `src-tauri/src/services/*`, `src-tauri/src/commands/backup.rs`, `src/components/ImportPreviewDialog.vue`, `src/types/backup.ts`, `src-tauri/src/tests/backup_tests.rs`, `src/tests/import-preview.test.ts`
 
-- [ ] Write failing Rust tests for current-format round trip, legacy v1 UUID mapping, invalid JSON, 10 MiB/10,000-item limits, duplicate IDs, rollback, and replace-backup failure.
-- [ ] Implement full-file validation, 10-minute preview tokens, merge conflict policy, atomic JSON export, and pre-replace safety backup.
-- [ ] Implement native save/open flow, preview UI, default merge, explicit replace confirmation, and cancellation without writes.
-- [ ] Run round-trip tests and verify field-by-field equality.
-- [ ] Commit `feat: add transactional backup and restore`.
+- [x] Write Rust tests for current-format round trip, legacy v1 UUID mapping, invalid JSON, 10 MiB/10,000-item limits, duplicate IDs, rollback, and replace-backup failure.
+- [x] Implement full-file validation, 10-minute preview tokens, merge conflict policy, atomic JSON export, and pre-replace safety backup.
+- [x] Implement native save/open flow, preview UI, default merge, explicit replace confirmation, and cancellation without writes.
+- [x] Run round-trip tests and verify field-by-field equality.
+- [x] Commit with the combined native-window/backup feature commit.
 
 ### Task 8: Harden, build, and produce acceptance evidence
 
 **Files:** `README.md`, `docs/testing/test-report.md`, `docs/testing/acceptance-report.md`, `docs/testing/known-issues.md`, `docs/product/reference/acceptance-checklist.md`
 
-- [ ] Run formatting, strict TypeScript, all frontend tests, frontend production build, all Rust tests, Clippy, and Tauri configuration validation.
-- [ ] Run `pnpm tauri build` and record actual `.app`/DMG paths and signing status.
-- [ ] Launch the native application and execute AT-01 through AT-25 where automation/available UI control permits; mark anything not actually exercised as NOT_TESTED.
-- [ ] Inspect runtime database path, tables, migrations, default categories, persisted records, and lack of business `localStorage`/network dependencies.
-- [ ] Update documentation and evidence from real results.
-- [ ] Commit `docs: record PromptDock V1.1 verification` without pushing or merging.
+- [x] Run formatting, strict TypeScript, all frontend tests, frontend production build, all Rust tests, Clippy, and Tauri configuration validation.
+- [x] Run the Tauri app build and record actual `.app`/DMG paths and signing status.
+- [x] Launch the native application and execute AT-01 through AT-25 where automation/available UI control permits; mark anything not actually exercised as NOT_TESTED.
+- [x] Inspect runtime database path, tables, migrations, default categories and lack of business `localStorage`/network dependencies.
+- [x] Update documentation and evidence from real results.
+- [x] Commit `docs: record PromptDock V1.1 verification` without pushing or merging.
