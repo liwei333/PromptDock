@@ -1,0 +1,11 @@
+import { afterEach } from "vitest";
+import { config } from "@vue/test-utils";
+
+afterEach(() => {
+  document.body.innerHTML = "";
+  localStorage.clear();
+});
+
+config.global.stubs = {
+  Teleport: true,
+};

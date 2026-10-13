@@ -14,11 +14,11 @@
 
 **Files:** `package.json`, `vite.config.ts`, `src-tauri/Cargo.toml`, `src/tests/setup.ts`, `docs/testing/environment.md`
 
-- [ ] Add Pinia, official Tauri frontend plugins, Vitest, Vue Test Utils, jsdom, and coverage tooling.
-- [ ] Add SQLx, Tokio, UUID, chrono, tempfile, error, and official Tauri Rust plugins.
-- [ ] Add `typecheck`, `test`, `test:run`, and format-check scripts.
-- [ ] Run the empty frontend and Rust suites and record exact versions.
-- [ ] Commit `chore: configure PromptDock toolchain and tests`.
+- [x] Add Pinia, official Tauri frontend plugins, Vitest, Vue Test Utils, jsdom, and coverage tooling.
+- [x] Add SQLx, Tokio, UUID, chrono, tempfile, error, and official Tauri Rust plugins.
+- [x] Add `typecheck`, `test`, `test:run`, and format-check scripts.
+- [x] Run the empty frontend and Rust suites and record exact versions.
+- [x] Commit `chore: configure PromptDock toolchain and tests`.
 
 ### Task 2: Build the SQLite domain through TDD
 
