@@ -6,7 +6,7 @@ The local release is ad-hoc/linker signed only. It is not signed with an Apple D
 
 ## DMG cosmetic packaging
 
-Tauri generated the `.app` successfully. Its bundled `create-dmg` Finder AppleScript failed during cosmetic window-layout automation on macOS 26.4.1. The disk contents were verified (`PromptDock.app`, Applications link, volume icon) and a compressed DMG was produced with `hdiutil`; `hdiutil verify` reports a valid checksum. The installer is functional, but its Finder icon placement may use the system default rather than the intended custom layout.
+Tauri generated the `.app` successfully. Its bundled `create-dmg` Finder AppleScript failed during cosmetic window-layout automation on macOS 26.4.1. A compressed DMG was therefore produced directly from the exact accepted signed app with `hdiutil`. The mounted top level contains only `PromptDock.app` and the Applications link; `hdiutil verify` and the mounted app's strict signature verification pass. The installer is functional, but Finder icon placement uses the system default rather than the intended custom layout.
 
 ## Manual acceptance still required
 
@@ -15,8 +15,11 @@ The following release-candidate checks need a person to run them on the intended
 - Paste a normal and a template prompt into both Notes and VS Code and compare every character.
 - Put Safari/VS Code in front, press Option+Space, and verify focus/keyboard behavior.
 - Force-terminate the app immediately after a committed write and confirm recovery.
+- Exercise the complete dirty-editor/Esc discard-confirmation sequence.
 - Exercise merge/replace import through the native open/save dialogs using a disposable library.
-- Verify always-on-top across Spaces/full-screen apps and after unplugging an external display.
+- Drag the sticky window, relaunch, and confirm its exact native position is restored; also verify always-on-top across Spaces/full-screen apps and after unplugging an external display.
+- Run VoiceOver and verify the visible window-mode status/error feedback is spoken as intended.
+- Exercise sticky views with 1 and 4 real prompts, long-title truncation/full-body copying, the sixth-pin rejection UI, and template-row copying.
 - Exercise simultaneous main/quick/sticky mutations with real prompts.
 - Run the full CRUD/export workflow while the Mac network interface is disabled.
 
