@@ -638,6 +638,7 @@ Require:
 - Sticky has no `.sticky-traffic` or Unicode control glyphs;
 - settings, return, hide, reorder, copy, and empty-slot controls have accessible names and visible Tooltip text when icon-only;
 - always-on-top is a `role="switch"` reflecting state;
+- activating settings opens a named `dialog`, moves focus inside it, `Escape` dismisses it, and focus returns to the settings icon button;
 - comfortable renders five slots with descriptions;
 - compact renders five title rows without descriptions.
 
@@ -653,13 +654,14 @@ Use `Search`, `Copy`, `Check`, and `Braces`. Preserve initial focus, arrow wrapp
 - Keep `data-tauri-drag-region` on the title region.
 - Use `Settings`, `PanelTopOpen`, `Minus`, `GripVertical`, `Copy`, `Check`, and `Plus` only for real existing actions. Every icon-only action uses `PdIconButton` or the equivalent shared Tooltip contract and has a focused-Tooltip test.
 - Replace handmade always-on-top with `PdSwitch`, still calling the existing async handler and preserving rollback/error feedback.
+- Replace `.sticky-settings-layer` and its hand-built `role="dialog"` section with `PdDialog`. The settings button is the captured return-focus target; Reka owns modal focus lock and initial focus; Escape and the shared close action set `settingsOpen = false`; close auto-focus restores the settings button. The overlay contains no unsaved form state, so outside dismissal is allowed when no density transition is busy and prevented while a density change is in flight.
 
 - [ ] **Step 4: Refit exact density contracts**
 
 - Comfortable: 420×695 logical points, five slots, title plus up to two description lines.
 - Compact: 340×270 logical points, five title-only rows.
 - Use shared tokens adapted to `--pd-paper` and `--pd-paper-border`.
-- The settings layer must fit both sizes without horizontal overflow.
+- The shared `PdDialog` settings content must fit both densities without horizontal overflow, including the 340×270 compact window, without bypassing its focus/Escape/return-focus behavior.
 
 - [ ] **Step 5: Run focused and full suites**
 
