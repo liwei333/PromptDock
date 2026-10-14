@@ -1,6 +1,8 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import auxiliaryCapability from "../../src-tauri/capabilities/auxiliary.json";
+
 const { promptApi, windowApi } = vi.hoisted(() => ({
   promptApi: { listSticky: vi.fn() },
   windowApi: {
@@ -42,6 +44,22 @@ describe("StickyWindow", () => {
       monitorName: "Built-in Retina Display",
       scaleFactor: 2,
     });
+  });
+
+  it("grants the sticky window permission to start native dragging", () => {
+    expect(auxiliaryCapability.windows).toContain("sticky");
+    expect(auxiliaryCapability.permissions).toContain(
+      "core:window:allow-start-dragging",
+    );
+  });
+
+  it("marks the complete titlebar as a native deep drag region", () => {
+    const wrapper = mount(StickyWindow);
+
+    expect(
+      wrapper.get(".sticky-titlebar").attributes("data-tauri-drag-region"),
+    ).toBe("deep");
+    wrapper.unmount();
   });
 
   it("always renders five fixed slots when the library has no pins", async () => {

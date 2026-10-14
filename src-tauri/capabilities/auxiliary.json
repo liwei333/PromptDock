@@ -5,6 +5,7 @@
   "windows": ["quick", "sticky"],
   "permissions": [
     "core:default",
+    "core:window:allow-start-dragging",
     "clipboard-manager:allow-write-text"
   ]
 }

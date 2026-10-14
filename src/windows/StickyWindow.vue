@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 
 import { promptApi, windowApi } from "@/api/commands";
@@ -76,11 +75,6 @@ async function hideSticky(): Promise<void> {
   }
 }
 
-function startDragging(event: MouseEvent): void {
-  if ((event.target as HTMLElement).closest("button")) return;
-  if ("__TAURI_INTERNALS__" in window) void getCurrentWindow().startDragging();
-}
-
 onMounted(async () => {
   await load();
   if ("__TAURI_INTERNALS__" in window) {
@@ -94,7 +88,7 @@ onBeforeUnmount(() => stopListening?.());
 
 <template>
   <main class="sticky-window">
-    <header class="sticky-titlebar" @mousedown="startDragging">
+    <header class="sticky-titlebar" data-tauri-drag-region="deep">
       <div>
         <span class="sticky-pin">⌁</span><strong>快捷便签</strong
         ><small>{{ prompts.length }}/5</small>
