@@ -517,7 +517,7 @@ expect(wrapper.text()).not.toContain("▣");
 Also assert invalid-variable feedback has status semantics and edit/new/export keep existing emits. Add fake-timer coverage for a distinct copy-success signal:
 
 - while the clipboard promise is pending, the row receives `copyingId` and remains disabled;
-- after either resolved clipboard result (`copied` or `copied_usage_failed`), `copyingId` clears and `copiedId` identifies that row for 1.2 seconds;
+- after either resolved clipboard result (`copied` or the real nonfatal discriminant `copied-with-stats-error`), `copyingId` clears and `copiedId` identifies that row for 1.2 seconds;
 - after a rejected clipboard write, `copiedId` is never set;
 - a second successful copy clears the prior timer, moves `copiedId`, and Main unmount clears the timer.
 
@@ -535,11 +535,11 @@ Run focused tests; expect the new assertions to fail.
 
 - [ ] **Step 3: Convert detail actions and warnings**
 
-Use `Copy`, `Pencil`, `Plus`, and `Download`; copy is the only primary action. Use `PdStatusMessage` for invalid template syntax. Render prompt bodies as plain text with the semantic monospace stack; preserve empty state and all events.
+Use `FileText`, `Pin`, `Code2`, `ChevronDown`, `Copy`, `Pencil`, `Plus`, and `Download` to replace every current detail glyph, including `▤`, `⌖`, `〈/〉`, and `⌄`; copy is the only primary action. Use `PdStatusMessage` for invalid template syntax. Render prompt bodies as plain text with the semantic monospace stack; preserve empty state and all events.
 
 - [ ] **Step 4: Refine Main status actions**
 
-Replace text separators/raw buttons with low-emphasis `PdButton` actions using `Pin`, `Upload`, and `DatabaseBackup`. Keep the same Sticky manager/import/export handlers.
+Replace text separators/raw buttons with low-emphasis `PdButton` actions using `Pin`, `Upload`, and `DatabaseBackup`. Replace Main's `✓`/`!` toast text prefix with decorative `CircleCheck`/`CircleAlert` SVG icons while retaining the existing live-region text and toast kind. Keep the same Sticky manager/import/export handlers.
 
 - [ ] **Step 5: Run regressions**
 
@@ -572,16 +572,17 @@ git commit -m "feat: refine prompt browsing surfaces"
 - Modify: `src/components/TemplateVariablesPanel.vue`
 - Modify: `src/tests/category-manager.test.ts`
 - Modify: `src/tests/import-preview.test.ts`
+- Create: `src/tests/prompt-editor.test.ts`
 - Modify: `src/tests/runtime-info.test.ts`
 - Modify: `src/tests/template-variables.test.ts`
 - Modify: `src/styles/global.css`
 
 - [ ] **Step 1: Add failing shared-overlay expectations**
 
-Assert named dialog roles, no raw `<select>` in category transfer/editor category selection, no glyph close buttons, and unchanged outcomes. Add a dirty-editor test proving dismiss still routes through the existing confirmation.
+Assert named dialog roles, no raw `<select>` in category transfer/editor category selection, no glyph close buttons, and unchanged outcomes. Create `src/tests/prompt-editor.test.ts` to mount the real editor (not Main's stub), modify a field, request Dialog dismissal, mock the native confirmation once false and once true, and prove the first request keeps the editor open while the second emits close without saving.
 
 ```bash
-pnpm vitest run src/tests/category-manager.test.ts src/tests/import-preview.test.ts src/tests/runtime-info.test.ts src/tests/template-variables.test.ts
+pnpm vitest run src/tests/category-manager.test.ts src/tests/import-preview.test.ts src/tests/prompt-editor.test.ts src/tests/runtime-info.test.ts src/tests/template-variables.test.ts
 ```
 
 Expected: new structural expectations fail; existing business assertions remain green.
@@ -595,16 +596,16 @@ Expected: new structural expectations fail; existing business assertions remain 
 
 - [ ] **Step 3: Migrate runtime and import overlays**
 
-Runtime keeps `windowApi.runtimeInfo()` and the Rust-provided accelerator. Import keeps merge/replace radio semantics, validation summary, safe-backup wording, and transaction states; it cannot accidentally backdrop-close while busy.
+Runtime keeps `windowApi.runtimeInfo()` and the Rust-provided accelerator. Import keeps merge/replace radio semantics, validation summary, safe-backup wording, and transaction states; replace its `✓` status glyph with a decorative `CircleCheck` plus unchanged text, and prevent accidental backdrop close while busy.
 
 - [ ] **Step 4: Migrate editor, Sticky manager, and template presentation**
 
-Prompt Editor retains native dirty-close confirmation and validation; editor category uses `PdSelect`. Sticky Manager keeps manual order/five pins. Template Variables keeps one-pass literal substitution and incomplete-field blocking. `PdDialog` only emits dismiss; features decide safety.
+Prompt Editor retains native dirty-close confirmation and validation; editor category uses `PdSelect`. Sticky Manager keeps manual order/five pins and replaces `↑`/`↓` text with Tooltip-backed `ArrowUp`/`ArrowDown` icon buttons. Template Variables keeps one-pass literal substitution and incomplete-field blocking. `PdDialog` only emits dismiss; features decide safety.
 
 - [ ] **Step 5: Run overlay/data-safety regressions**
 
 ```bash
-pnpm vitest run src/tests/category-manager.test.ts src/tests/import-preview.test.ts src/tests/runtime-info.test.ts src/tests/template-variables.test.ts src/tests/window-api.test.ts
+pnpm vitest run src/tests/category-manager.test.ts src/tests/import-preview.test.ts src/tests/prompt-editor.test.ts src/tests/runtime-info.test.ts src/tests/template-variables.test.ts src/tests/window-api.test.ts
 pnpm typecheck
 pnpm vitest run
 ```
@@ -614,7 +615,7 @@ Expected: PASS with unchanged command payloads and persistence behavior.
 - [ ] **Step 6: Commit overlay migration**
 
 ```bash
-git add src/components/CategoryManagerDialog.vue src/components/CategoryDeleteDialog.vue src/components/CategoryCreateDialog.vue src/components/RuntimeInfoDialog.vue src/components/ImportPreviewDialog.vue src/components/PromptEditorDialog.vue src/components/StickyManagerDialog.vue src/components/TemplateVariablesPanel.vue src/styles/global.css src/tests/category-manager.test.ts src/tests/import-preview.test.ts src/tests/runtime-info.test.ts src/tests/template-variables.test.ts
+git add src/components/CategoryManagerDialog.vue src/components/CategoryDeleteDialog.vue src/components/CategoryCreateDialog.vue src/components/RuntimeInfoDialog.vue src/components/ImportPreviewDialog.vue src/components/PromptEditorDialog.vue src/components/StickyManagerDialog.vue src/components/TemplateVariablesPanel.vue src/styles/global.css src/tests/category-manager.test.ts src/tests/import-preview.test.ts src/tests/prompt-editor.test.ts src/tests/runtime-info.test.ts src/tests/template-variables.test.ts
 git commit -m "feat: unify accessible app dialogs"
 ```
 
@@ -684,15 +685,24 @@ git commit -m "feat: polish quick and sticky windows"
 **Files:**
 - Modify as needed: `src/components/PromptCard.vue`
 - Modify as needed: `src/components/PromptDetailDrawer.vue`
+- Modify if audit finds a missed glyph: `src/components/PromptDetailPane.vue`
+- Modify if audit finds a missed glyph: `src/components/ImportPreviewDialog.vue`
+- Modify if audit finds a missed glyph: `src/components/StickyManagerDialog.vue`
+- Modify if audit finds a missed glyph: `src/components/QuickPalette.vue`
+- Modify if audit finds a missed glyph: `src/windows/MainWindow.vue`
+- Modify if audit finds a missed glyph: `src/windows/StickyWindow.vue`
 - Modify: `src/styles/global.css`
 - Modify: `src/tests/prompt-card.test.ts`
-- Modify if legacy stubs change: `src/tests/main-window.test.ts`
+- Modify if audit cleanup changes a mounted surface: `src/tests/main-window.test.ts`
+- Modify if audit cleanup changes a mounted surface: `src/tests/import-preview.test.ts`
+- Modify if audit cleanup changes a mounted surface: `src/tests/quick-palette.test.ts`
+- Modify if audit cleanup changes a mounted surface: `src/tests/sticky-window.test.ts`
 
 - [ ] **Step 1: Run and classify the source audit**
 
 ```bash
 rg -n '[⌂☆★▢▤⚙＋×⌕▣✎⇩⌖⌁⌄↑↓✓]' src --glob '*.vue' --glob '*.ts'
-rg -n '〈/〉|⇅|!\{\}|"\{\}"|quick-icon[^\n]*>P<' src --glob '*.vue' --glob '*.ts'
+rg -n '〈/〉|⇅|!\{\}|"\{\}"|"✓" : "!"|quick-icon[^\n]*>P<' src --glob '*.vue' --glob '*.ts'
 rg -n '<select|mac-lights|sticky-traffic' src --glob '*.vue'
 ```
 
@@ -735,7 +745,7 @@ Expected: PASS. Record bundle sizes against V3's CSS 38.34 kB and JS 125.96 kB a
 Before staging, run `git diff --name-only` and stage only the explicit Task 8 paths that actually changed.
 
 ```bash
-git add src/components/PromptCard.vue src/components/PromptDetailDrawer.vue src/styles/global.css src/tests/prompt-card.test.ts src/tests/main-window.test.ts
+git add src/components/PromptCard.vue src/components/PromptDetailDrawer.vue src/components/PromptDetailPane.vue src/components/ImportPreviewDialog.vue src/components/StickyManagerDialog.vue src/components/QuickPalette.vue src/windows/MainWindow.vue src/windows/StickyWindow.vue src/styles/global.css src/tests/prompt-card.test.ts src/tests/main-window.test.ts src/tests/import-preview.test.ts src/tests/quick-palette.test.ts src/tests/sticky-window.test.ts
 git diff --cached --name-only
 git commit -m "refactor: complete native UI component migration"
 ```
