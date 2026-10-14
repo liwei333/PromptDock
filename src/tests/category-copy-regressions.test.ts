@@ -179,19 +179,20 @@ describe("category and raw-copy regressions", () => {
     wrapper.unmount();
   });
 
-  it("deletes a custom category after confirming prompts move to General", async () => {
+  it("deletes a category only after choosing a transfer target", async () => {
     const wrapper = mount(MainWindow, { global: { plugins: [createPinia()] } });
     await flushPromises();
 
+    await wrapper.get("[data-test='sidebar-category-manager']").trigger("click");
     await wrapper
       .get(`[data-test="delete-category-${CUSTOM_CATEGORY_ID}"]`)
       .trigger("click");
+    await wrapper
+      .get("[data-test='category-transfer-target']")
+      .setValue(GENERAL_CATEGORY_ID);
+    await wrapper.get("[data-test='confirm-category-delete']").trigger("click");
     await flushPromises();
 
-    expect(confirmDialog).toHaveBeenCalledWith(
-      expect.stringContaining("通用效率"),
-      expect.objectContaining({ kind: "warning" }),
-    );
     expect(categoryApi.delete).toHaveBeenCalledWith(
       CUSTOM_CATEGORY_ID,
       GENERAL_CATEGORY_ID,

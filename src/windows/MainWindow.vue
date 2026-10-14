@@ -4,7 +4,7 @@ import { confirm } from "@tauri-apps/plugin-dialog";
 import { onBeforeUnmount, onMounted, ref } from "vue";
 
 import { backupApi, categoryApi, windowApi } from "@/api/commands";
-import CategoryCreateDialog from "@/components/CategoryCreateDialog.vue";
+import CategoryManagerDialog from "@/components/CategoryManagerDialog.vue";
 import ImportPreviewDialog from "@/components/ImportPreviewDialog.vue";
 import PromptCard from "@/components/PromptCard.vue";
 import PromptDetailDrawer from "@/components/PromptDetailDrawer.vue";
@@ -16,23 +16,12 @@ import { inspectTemplateVariables } from "@/composables/useTemplateVariables";
 import { copyPromptText } from "@/services/clipboard";
 import { usePromptStore } from "@/stores/promptStore";
 import type {
-  Category,
   Prompt,
   PromptInput,
   PromptTab,
   PromptView,
 } from "@/types/prompt";
 import type { ImportMode, ImportPreview } from "@/types/backup";
-
-const GENERAL_CATEGORY_ID = "10000000-0000-4000-8000-000000000006";
-const DEFAULT_CATEGORY_IDS = new Set([
-  "10000000-0000-4000-8000-000000000001",
-  "10000000-0000-4000-8000-000000000002",
-  "10000000-0000-4000-8000-000000000003",
-  "10000000-0000-4000-8000-000000000004",
-  "10000000-0000-4000-8000-000000000005",
-  GENERAL_CATEGORY_ID,
-]);
 
 const store = usePromptStore();
 const selected = ref<Prompt | null>(null);
@@ -41,7 +30,9 @@ const variableMode = ref(false);
 const quickOpen = ref(false);
 const stickyManagerOpen = ref(false);
 const runtimeOpen = ref(false);
-const categoryDialogOpen = ref(false);
+const categoryManagerOpen = ref(false);
+const categoryBusy = ref(false);
+const categoryError = ref("");
 const importPreview = ref<ImportPreview | null>(null);
 const importing = ref(false);
 const importError = ref("");
@@ -160,36 +151,45 @@ async function remove(prompt: Prompt): Promise<void> {
 }
 
 async function createCategory(name: string): Promise<void> {
+  categoryBusy.value = true;
+  categoryError.value = "";
   try {
     await categoryApi.create(name);
     await store.load();
-    categoryDialogOpen.value = false;
     notify("分类已创建");
   } catch (reason) {
-    notify(reason instanceof Error ? reason.message : String(reason), "error");
+    categoryError.value =
+      reason instanceof Error ? reason.message : String(reason);
+  } finally {
+    categoryBusy.value = false;
   }
 }
 
-function isCustomCategory(category: Category): boolean {
-  return !DEFAULT_CATEGORY_IDS.has(category.id);
+async function renameCategory(id: string, name: string): Promise<void> {
+  categoryBusy.value = true;
+  categoryError.value = "";
+  try {
+    await categoryApi.rename(id, name);
+    await store.load();
+    notify("分类已重命名");
+  } catch (reason) {
+    categoryError.value =
+      reason instanceof Error ? reason.message : String(reason);
+  } finally {
+    categoryBusy.value = false;
+  }
 }
 
-async function deleteCategory(category: Category): Promise<void> {
-  if (!isCustomCategory(category)) return;
-  const promptNotice = category.promptCount
-    ? `其中 ${category.promptCount} 条提示词会移动到「通用效率」。`
-    : "这个分类目前没有提示词，无需移动到「通用效率」。";
-  if (
-    !(await confirm(
-      `确定删除分类「${category.name}」吗？${promptNotice}此操作不可撤销。`,
-      { title: "删除分类？", kind: "warning" },
-    ))
-  )
-    return;
+async function deleteCategory(
+  sourceId: string,
+  targetId: string,
+): Promise<void> {
+  categoryBusy.value = true;
+  categoryError.value = "";
   try {
-    await categoryApi.delete(category.id, GENERAL_CATEGORY_ID);
+    await categoryApi.delete(sourceId, targetId);
     await store.load(
-      store.query.categoryId === category.id
+      store.query.categoryId === sourceId
         ? {
             view: "all",
             tab: "all",
@@ -198,9 +198,12 @@ async function deleteCategory(category: Category): Promise<void> {
           }
         : undefined,
     );
-    notify("分类已删除，关联提示词已移到通用效率");
+    notify("分类已删除，提示词已安全迁移");
   } catch (reason) {
-    notify(reason instanceof Error ? reason.message : "删除分类失败", "error");
+    categoryError.value =
+      reason instanceof Error ? reason.message : "删除分类失败";
+  } finally {
+    categoryBusy.value = false;
   }
 }
 
@@ -341,8 +344,12 @@ onBeforeUnmount(() => {
         </button>
         <div class="nav-heading nav-heading-row">
           <span>分类管理</span
-          ><button aria-label="新建分类" @click="categoryDialogOpen = true">
-            ＋
+          ><button
+            data-test="sidebar-category-manager"
+            aria-label="管理分类"
+            @click="categoryManagerOpen = true"
+          >
+            ⚙
           </button>
         </div>
         <div
@@ -351,7 +358,6 @@ onBeforeUnmount(() => {
           class="category-nav-item"
           :class="{
             active: store.query.categoryId === category.id,
-            deletable: isCustomCategory(category),
           }"
         >
           <button
@@ -364,16 +370,6 @@ onBeforeUnmount(() => {
                 category.name
               }}</span
             ><b>{{ category.promptCount }}</b>
-          </button>
-          <button
-            v-if="isCustomCategory(category)"
-            class="category-delete"
-            :data-test="`delete-category-${category.id}`"
-            :aria-label="`删除分类 ${category.name}`"
-            :title="`删除分类 ${category.name}`"
-            @click.stop="deleteCategory(category)"
-          >
-            ×
           </button>
         </div>
       </nav>
@@ -621,10 +617,18 @@ onBeforeUnmount(() => {
       @commit="commitImport"
     />
     <RuntimeInfoDialog v-if="runtimeOpen" @close="runtimeOpen = false" />
-    <CategoryCreateDialog
-      v-if="categoryDialogOpen"
-      @close="categoryDialogOpen = false"
+    <CategoryManagerDialog
+      v-if="categoryManagerOpen"
+      :categories="store.categories"
+      :busy="categoryBusy"
+      :error="categoryError"
+      @close="
+        categoryManagerOpen = false;
+        categoryError = '';
+      "
       @create="createCategory"
+      @rename="renameCategory"
+      @delete="deleteCategory"
     />
     <div
       data-test="main-live-region"
