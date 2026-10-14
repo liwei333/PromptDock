@@ -287,6 +287,8 @@ pub(crate) async fn reconcile_startup_mode(
     let target = if snapshot.settings.visible {
         WindowMode::Sticky
     } else {
+        // Restore the hidden sticky before Main captures its position for persistence.
+        runtime.configure_sticky(&snapshot.settings)?;
         WindowMode::Main
     };
     transition_from_snapshot(runtime, snapshot, target).await
