@@ -141,6 +141,7 @@ select {
   font-size: 18px;
 }
 .sidebar nav > button,
+.category-select,
 .sidebar-bottom > button {
   display: flex;
   align-items: center;
@@ -158,33 +159,67 @@ select {
   transition: 0.14s ease;
 }
 .sidebar nav > button:hover,
+.category-select:hover,
 .sidebar-bottom > button:hover {
   color: #fff;
   background: #ffffff0d;
 }
-.sidebar nav > button.active {
+.sidebar nav > button.active,
+.category-nav-item.active .category-select {
   color: #fff;
   background: linear-gradient(90deg, #586ae355, #6577ed20);
   box-shadow: inset 3px 0 #7180ee;
 }
-.sidebar nav > button span {
+.sidebar nav > button span,
+.category-select span {
   display: flex;
   align-items: center;
   gap: 9px;
   overflow: hidden;
   white-space: nowrap;
 }
-.sidebar nav > button i {
+.sidebar nav > button i,
+.category-select i {
   display: inline-block;
   width: 7px;
   height: 7px;
   border-radius: 50%;
   box-shadow: 0 0 0 3px #ffffff0d;
 }
-.sidebar nav b {
+.sidebar nav b,
+.category-select b {
   color: #77839b;
   font-size: 10px;
   font-weight: 600;
+}
+.category-nav-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  gap: 2px;
+  align-items: center;
+}
+.category-select {
+  min-width: 0;
+}
+.category-nav-item:not(.deletable) .category-select {
+  grid-column: 1 / -1;
+}
+.category-delete {
+  display: grid;
+  place-items: center;
+  width: 27px;
+  height: 27px;
+  padding: 0;
+  color: #8f9ab0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 16px;
+  line-height: 1;
+}
+.category-delete:hover {
+  color: #fff;
+  background: #dc536033;
 }
 .sidebar-bottom {
   margin-top: auto;

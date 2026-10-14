@@ -16,12 +16,23 @@ import { extractTemplateVariables } from "@/composables/useTemplateVariables";
 import { copyPromptText } from "@/services/clipboard";
 import { usePromptStore } from "@/stores/promptStore";
 import type {
+  Category,
   Prompt,
   PromptInput,
   PromptTab,
   PromptView,
 } from "@/types/prompt";
 import type { ImportMode, ImportPreview } from "@/types/backup";
+
+const GENERAL_CATEGORY_ID = "10000000-0000-4000-8000-000000000006";
+const DEFAULT_CATEGORY_IDS = new Set([
+  "10000000-0000-4000-8000-000000000001",
+  "10000000-0000-4000-8000-000000000002",
+  "10000000-0000-4000-8000-000000000003",
+  "10000000-0000-4000-8000-000000000004",
+  "10000000-0000-4000-8000-000000000005",
+  GENERAL_CATEGORY_ID,
+]);
 
 const store = usePromptStore();
 const selected = ref<Prompt | null>(null);
@@ -49,7 +60,7 @@ function notify(text: string, kind: "success" | "error" = "success"): void {
 }
 
 function setView(view: PromptView, categoryId?: string): void {
-  void store.load({ view, categoryId, search: undefined });
+  void store.load({ view, categoryId, search: undefined, tab: "all" });
 }
 
 function setTab(tab: PromptTab): void {
@@ -148,6 +159,40 @@ async function createCategory(name: string): Promise<void> {
     notify("分类已创建");
   } catch (reason) {
     notify(reason instanceof Error ? reason.message : String(reason), "error");
+  }
+}
+
+function isCustomCategory(category: Category): boolean {
+  return !DEFAULT_CATEGORY_IDS.has(category.id);
+}
+
+async function deleteCategory(category: Category): Promise<void> {
+  if (!isCustomCategory(category)) return;
+  const promptNotice = category.promptCount
+    ? `其中 ${category.promptCount} 条提示词会移动到「通用效率」。`
+    : "这个分类目前没有提示词，无需移动到「通用效率」。";
+  if (
+    !(await confirm(
+      `确定删除分类「${category.name}」吗？${promptNotice}此操作不可撤销。`,
+      { title: "删除分类？", kind: "warning" },
+    ))
+  )
+    return;
+  try {
+    await categoryApi.delete(category.id, GENERAL_CATEGORY_ID);
+    await store.load(
+      store.query.categoryId === category.id
+        ? {
+            view: "all",
+            tab: "all",
+            categoryId: undefined,
+            search: undefined,
+          }
+        : undefined,
+    );
+    notify("分类已删除，关联提示词已移到通用效率");
+  } catch (reason) {
+    notify(reason instanceof Error ? reason.message : "删除分类失败", "error");
   }
 }
 
@@ -275,18 +320,37 @@ onBeforeUnmount(() => {
             ＋
           </button>
         </div>
-        <button
+        <div
           v-for="category in store.categories"
           :key="category.id"
-          :class="{ active: store.query.categoryId === category.id }"
-          @click="setView('all', category.id)"
+          class="category-nav-item"
+          :class="{
+            active: store.query.categoryId === category.id,
+            deletable: isCustomCategory(category),
+          }"
         >
-          <span
-            ><i :style="{ background: category.color }" />{{
-              category.name
-            }}</span
-          ><b>{{ category.promptCount }}</b>
-        </button>
+          <button
+            class="category-select"
+            :data-test="`category-${category.id}`"
+            @click="setView('all', category.id)"
+          >
+            <span
+              ><i :style="{ background: category.color }" />{{
+                category.name
+              }}</span
+            ><b>{{ category.promptCount }}</b>
+          </button>
+          <button
+            v-if="isCustomCategory(category)"
+            class="category-delete"
+            :data-test="`delete-category-${category.id}`"
+            :aria-label="`删除分类 ${category.name}`"
+            :title="`删除分类 ${category.name}`"
+            @click.stop="deleteCategory(category)"
+          >
+            ×
+          </button>
+        </div>
       </nav>
       <div class="sidebar-bottom">
         <button @click="quickOpen = true">
