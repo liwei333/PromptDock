@@ -40,6 +40,7 @@ pub struct AppState {
     pub database_path: PathBuf,
     pub shortcut: Arc<RwLock<ShortcutStatus>>,
     pub pending_imports: Arc<Mutex<HashMap<String, PendingImport>>>,
+    pub mode_transition: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl AppState {
@@ -49,6 +50,7 @@ impl AppState {
             database_path,
             shortcut: Arc::new(RwLock::new(ShortcutStatus::default())),
             pending_imports: Arc::new(Mutex::new(HashMap::new())),
+            mode_transition: Arc::new(tokio::sync::Mutex::new(())),
         }
     }
 }

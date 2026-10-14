@@ -5,6 +5,7 @@ pub mod menu;
 pub mod repositories;
 pub mod services;
 pub mod state;
+pub mod window_mode;
 
 use commands::{backup, categories, prompts, windows};
 use db::Database;
