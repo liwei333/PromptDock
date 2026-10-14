@@ -1,6 +1,7 @@
 pub mod commands;
 pub mod db;
 pub mod domain;
+pub mod menu;
 pub mod repositories;
 pub mod services;
 pub mod state;
@@ -8,10 +9,7 @@ pub mod state;
 use commands::{backup, categories, prompts, windows};
 use db::Database;
 use state::AppState;
-use tauri::{
-    Manager, WindowEvent,
-    menu::{Menu, MenuItem, PredefinedMenuItem, Submenu},
-};
+use tauri::{Manager, WindowEvent};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 #[cfg(test)]
@@ -26,26 +24,7 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .menu(|handle| {
-            let open_main =
-                MenuItem::with_id(handle, "open-main", "打开主窗口", true, None::<&str>)?;
-            let toggle_sticky = MenuItem::with_id(
-                handle,
-                "toggle-sticky",
-                "显示/收起快捷便签",
-                true,
-                None::<&str>,
-            )?;
-            let separator = PredefinedMenuItem::separator(handle)?;
-            let quit = MenuItem::with_id(handle, "quit", "退出 PromptDock", true, Some("Cmd+Q"))?;
-            let app_menu = Submenu::with_items(
-                handle,
-                "PromptDock",
-                true,
-                &[&open_main, &toggle_sticky, &separator, &quit],
-            )?;
-            Menu::with_items(handle, &[&app_menu])
-        })
+        .menu(menu::build_menu)
         .on_menu_event(|app, event| match event.id().as_ref() {
             "open-main" => windows::focus_main_window(app),
             "toggle-sticky" => {
