@@ -46,29 +46,30 @@ The initial browser-preview server attempt was denied by the execution sandbox w
 ## V3 visual and native observations
 
 - The main workbench was rendered at 1280×720 in the local application frontend. The combined controls remained on one row, all four cards were visible, and the list/detail panes retained the requested split without horizontal overflow.
-- The category manager was opened from the V3 UI and visually inspected with its safety explanation, category count area, create action, and completion action.
-- The comfortable sticky UI was rendered at an exact 420×695 viewport. All five slots, yellow card treatment, title/subtitle, management/sort actions, and always-on-top control fit without clipping.
+- After the Mac was unlocked, the exact packaged V3 bundle was attached and the native main workbench was inspected against the real SQLite library. It showed the 84 px rail, one-row combined filters, real values `total=4`, `todayCopies=0`, `favorites=3`, and `pinned=4/5`, all four prompt rows, and the 44/56 list/detail split.
+- The native category manager was opened from the V3 UI and inspected with its safety explanation plus all six real category rows and counts (`0, 1, 0, 0, 0, 3`). Create, rename, guarded-delete, and completion controls were visible. It was closed without mutating the user's categories or prompts.
+- The independent native sticky window was opened from Main in comfortable density. Its Retina capture measured 840×1390 pixels at scale factor 2.0, exactly 420×695 points. Four real pinned prompts plus one empty slot, the yellow card treatment, descriptions, management/sort actions, and footer all fit without clipping.
+- The native density control was used to switch to compact. Its Retina capture measured 680×540 pixels at scale factor 2.0, exactly 340×270 points; five title rows and the footer fit. Density was then restored to `comfortable`, and the sticky footer returned exclusively to Main.
+- The native Main → Sticky → Main transition left only the selected application window visible at each step.
 - The production `.app` was built at `/Users/qianduoduo/Desktop/AI_app/PromptDock/src-tauri/target/release/bundle/macos/PromptDock.app`, has a 7.2 MiB on-disk size, and contains a Mach-O arm64 executable. The executable SHA-256 observed during acceptance was `a74c109a4da03cafe1790a1e0b199bf75ae57e9e832c02d1e2ebf33f0a2d156a`.
 - After replacing the previously running installed instance, the new bundle executable was observed running from the repository bundle path.
 - Read-only inspection of the real app-data database after V3 launch returned `categories=6`, `prompts=4`, `daily_copy_stats=0`, and `migrations=3`. Existing sticky settings were successfully read as JSON containing `"density":"comfortable"`; no prompt/category mutation was performed for this inspection.
 
 ## V3 native items not fully exercised
 
-The Mac became locked before native accessibility/screenshot interaction could attach to the newly launched V3 process. The following are therefore explicitly `UNVERIFIED_MACOS_RUNTIME` for this V3 candidate, even where deterministic tests or prior-version observations exist:
+Native attachment was initially delayed while the Mac was locked. After unlock, the packaged V3 Main, category manager, comfortable sticky, compact sticky, density restoration, and exclusive window transition were inspected successfully as listed above. The following narrower system-level scenarios remain explicitly `UNVERIFIED_MACOS_RUNTIME`, even where deterministic tests or prior-version observations exist:
 
-- visible inspection and click-through of the packaged V3 main window against the real SQLite rows;
-- native comfortable → compact → comfortable resize and exact point-size measurement;
 - real drag-position restoration, multi-display clamping, Spaces behavior, and always-on-top against another application;
 - cross-application clipboard comparison in Notes/VS Code, variable-template copy, and Option+Space foreground focus;
 - live cross-window refresh after a real mutation;
 - destructive category transfer through the native UI (intentionally not run against the user's four real prompts);
 - VoiceOver spoken output.
 
-These are not presented as passed. The production process launch, database migration/read, automated runtime compensation tests, and exact-size frontend rendering are partial evidence only.
+These remaining scenarios are not presented as passed. The corresponding implementation and deterministic coverage are evidence only where the complete physical scenario was not performed.
 
 ## V3 conclusion
 
-The requested V3 implementation, data migration, category safety invariants, native density contract, automated checks, release build, signature verification, and non-destructive real-database startup check all passed. There are no known P0/P1 implementation failures in the tested scope. Release status is **conditional pass** pending the explicitly listed `UNVERIFIED_MACOS_RUNTIME` interaction checks after the Mac is unlocked.
+The requested V3 implementation, data migration, category safety invariants, native density contract, automated checks, release build, signature verification, non-destructive real-database startup check, and the listed packaged native UI observations all passed. There are no known P0/P1 implementation failures in the tested scope. Release status remains **conditional pass** pending the narrower system-level `UNVERIFIED_MACOS_RUNTIME` interaction checks listed above.
 
 ---
 
