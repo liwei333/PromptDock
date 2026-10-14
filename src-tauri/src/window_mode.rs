@@ -1,9 +1,15 @@
 use std::future::Future;
 
 use serde::Serialize;
+use tauri::{AppHandle, Manager, PhysicalPosition, WebviewWindow};
 use tokio::sync::Mutex;
 
-use crate::{commands::windows::StickySettings, domain::errors::AppError};
+use crate::{
+    commands::windows::StickySettings, domain::errors::AppError,
+    repositories::settings_repo::SettingsRepository, state::AppState,
+};
+
+const STICKY_SETTINGS_KEY: &str = "sticky_window";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -39,6 +45,142 @@ pub(crate) trait WindowModeRuntime: Send + Sync {
     fn configure_sticky(&self, settings: &StickySettings) -> Result<(), AppError>;
     fn capture_sticky_position(&self, settings: &mut StickySettings) -> Result<(), AppError>;
     fn set_sticky_always_on_top(&self, value: bool) -> Result<(), AppError>;
+}
+
+pub(crate) struct TauriWindowModeRuntime {
+    app: AppHandle,
+    state: AppState,
+}
+
+impl TauriWindowModeRuntime {
+    pub(crate) fn new(app: AppHandle, state: AppState) -> Self {
+        Self { app, state }
+    }
+
+    fn window(&self, window: ProductWindow) -> Result<WebviewWindow, AppError> {
+        let (label, message) = match window {
+            ProductWindow::Main => ("main", "找不到主窗口"),
+            ProductWindow::Sticky => ("sticky", "找不到便签窗口"),
+        };
+        self.app
+            .get_webview_window(label)
+            .ok_or_else(|| AppError::Native(message.to_string()))
+    }
+}
+
+impl WindowModeRuntime for TauriWindowModeRuntime {
+    async fn read_settings(&self) -> Result<StickySettings, AppError> {
+        SettingsRepository::new(self.state.database.pool().clone())
+            .get(STICKY_SETTINGS_KEY)
+            .await?
+            .map(serde_json::from_value)
+            .transpose()
+            .map_err(Into::into)
+            .map(|value| value.unwrap_or_default())
+    }
+
+    async fn write_settings(&self, settings: &StickySettings) -> Result<(), AppError> {
+        SettingsRepository::new(self.state.database.pool().clone())
+            .set(STICKY_SETTINGS_KEY, &serde_json::to_value(settings)?)
+            .await
+    }
+
+    fn is_visible(&self, window: ProductWindow) -> Result<bool, AppError> {
+        self.window(window)?
+            .is_visible()
+            .map_err(|_| AppError::Native("无法读取窗口可见状态".to_string()))
+    }
+
+    fn show(&self, window: ProductWindow) -> Result<(), AppError> {
+        self.window(window)?
+            .show()
+            .map_err(|_| AppError::Native("无法显示窗口".to_string()))
+    }
+
+    fn hide(&self, window: ProductWindow) -> Result<(), AppError> {
+        self.window(window)?
+            .hide()
+            .map_err(|_| AppError::Native("无法隐藏窗口".to_string()))
+    }
+
+    fn focus(&self, window: ProductWindow) -> Result<(), AppError> {
+        self.window(window)?
+            .set_focus()
+            .map_err(|_| AppError::Native("无法聚焦窗口".to_string()))
+    }
+
+    fn unminimize(&self, window: ProductWindow) -> Result<(), AppError> {
+        self.window(window)?
+            .unminimize()
+            .map_err(|_| AppError::Native("无法恢复最小化窗口".to_string()))
+    }
+
+    fn configure_sticky(&self, settings: &StickySettings) -> Result<(), AppError> {
+        self.set_sticky_always_on_top(settings.always_on_top)?;
+        let (Some(x), Some(y)) = (settings.x, settings.y) else {
+            return Ok(());
+        };
+        let window = self.window(ProductWindow::Sticky)?;
+        let saved_monitor = match settings.monitor_name.as_deref() {
+            Some(name) => window
+                .available_monitors()
+                .map_err(|_| AppError::Native("无法读取显示器列表".to_string()))?
+                .into_iter()
+                .find(|monitor| monitor.name().map(String::as_str) == Some(name)),
+            None => None,
+        };
+        let monitor = match saved_monitor {
+            Some(monitor) => Some(monitor),
+            None => window
+                .current_monitor()
+                .map_err(|_| AppError::Native("无法读取便签所在显示器".to_string()))?,
+        };
+        if let Some(monitor) = monitor {
+            let origin = monitor.position();
+            let area = monitor.size();
+            if area.width == 0 || area.height == 0 {
+                return Ok(());
+            }
+            let size = window
+                .outer_size()
+                .map_err(|_| AppError::Native("无法读取便签窗口尺寸".to_string()))?;
+            let clamp_axis = |value: i32, origin: i32, available: u32, size: u32| {
+                let maximum = i64::from(origin) + i64::from(available.saturating_sub(size));
+                i64::from(value).clamp(i64::from(origin), maximum) as i32
+            };
+            window
+                .set_position(PhysicalPosition::new(
+                    clamp_axis(x, origin.x, area.width, size.width),
+                    clamp_axis(y, origin.y, area.height, size.height),
+                ))
+                .map_err(|_| AppError::Native("无法恢复便签窗口位置".to_string()))?;
+        }
+        Ok(())
+    }
+
+    fn capture_sticky_position(&self, settings: &mut StickySettings) -> Result<(), AppError> {
+        let window = self.window(ProductWindow::Sticky)?;
+        let position = window
+            .outer_position()
+            .map_err(|_| AppError::Native("无法读取便签窗口位置".to_string()))?;
+        let scale_factor = window
+            .scale_factor()
+            .map_err(|_| AppError::Native("无法读取便签窗口缩放比例".to_string()))?;
+        let monitor = window
+            .current_monitor()
+            .map_err(|_| AppError::Native("无法读取便签所在显示器".to_string()))?;
+        settings.x = Some(position.x);
+        settings.y = Some(position.y);
+        settings.monitor_name = monitor.and_then(|monitor| monitor.name().cloned());
+        settings.scale_factor = Some(scale_factor);
+        Ok(())
+    }
+
+    fn set_sticky_always_on_top(&self, value: bool) -> Result<(), AppError> {
+        self.window(ProductWindow::Sticky)?
+            .set_always_on_top(value)
+            .map_err(|_| AppError::Native("无法设置便签窗口置顶".to_string()))
+    }
 }
 
 pub(crate) async fn transition_to(
