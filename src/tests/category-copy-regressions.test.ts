@@ -157,20 +157,21 @@ describe("category and raw-copy regressions", () => {
     });
   });
 
-  it("clears quick filters when switching from favorites to a category", async () => {
+  it("combines favorite and category filters in the V3 workbench", async () => {
     const wrapper = mount(MainWindow, { global: { plugins: [createPinia()] } });
     await flushPromises();
 
-    await wrapper.get(".tabs button:nth-child(2)").trigger("click");
+    await wrapper.get("[data-test='rail-favorites']").trigger("click");
     await flushPromises();
     await wrapper
-      .get('[data-test="category-10000000-0000-4000-8000-000000000002"]')
-      .trigger("click");
+      .get("[data-test='filter-category']")
+      .setValue("10000000-0000-4000-8000-000000000002");
     await flushPromises();
 
     expect(promptApi.list).toHaveBeenLastCalledWith(
       expect.objectContaining({
         categoryId: "10000000-0000-4000-8000-000000000002",
+        favoriteOnly: true,
         search: undefined,
         tab: "all",
         view: "all",
@@ -183,7 +184,7 @@ describe("category and raw-copy regressions", () => {
     const wrapper = mount(MainWindow, { global: { plugins: [createPinia()] } });
     await flushPromises();
 
-    await wrapper.get("[data-test='sidebar-category-manager']").trigger("click");
+    await wrapper.get("[data-test='rail-categories']").trigger("click");
     await wrapper
       .get(`[data-test="delete-category-${CUSTOM_CATEGORY_ID}"]`)
       .trigger("click");
@@ -208,10 +209,10 @@ describe("category and raw-copy regressions", () => {
     const wrapper = mount(MainWindow, { global: { plugins: [createPinia()] } });
     await flushPromises();
 
-    expect(wrapper.get(".prompt-card").text()).toContain(
+    expect(wrapper.get("[data-test='prompt-list-row']").text()).toContain(
       invalidTemplatePrompt.title,
     );
-    await wrapper.get(".prompt-card [data-test='copy']").trigger("click");
+    await wrapper.get("[data-test='list-copy']").trigger("click");
     await flushPromises();
 
     expect(copyPromptText).toHaveBeenCalledWith({
@@ -219,8 +220,7 @@ describe("category and raw-copy regressions", () => {
       text: invalidTemplatePrompt.body,
     });
 
-    await wrapper.get(".prompt-card").trigger("click");
-    const detailCopy = wrapper.get(".detail-drawer .primary-button");
+    const detailCopy = wrapper.get(".prompt-detail-pane .primary-button");
     expect(detailCopy.attributes("disabled")).toBeUndefined();
     expect(detailCopy.text()).toContain("复制");
     wrapper.unmount();

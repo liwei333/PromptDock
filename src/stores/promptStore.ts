@@ -42,12 +42,12 @@ export const usePromptStore = defineStore("prompts", () => {
     try {
       const [page, categoryRows, dashboard, stickyRows, tagRows] =
         await Promise.all([
-        promptApi.list({ ...query.value, limit: 200 }),
-        categoryApi.list(),
-        promptApi.stats(),
-        promptApi.listSticky(),
-        promptApi.listTags(),
-      ]);
+          promptApi.list({ ...query.value, limit: 200 }),
+          categoryApi.list(),
+          promptApi.stats(),
+          promptApi.listSticky(),
+          promptApi.listTags(),
+        ]);
       prompts.value = page.items;
       total.value = page.total;
       categories.value = categoryRows;

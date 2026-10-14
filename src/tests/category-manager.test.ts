@@ -36,9 +36,15 @@ describe("CategoryDeleteDialog", () => {
 
     expect(wrapper.text()).toContain("3 条提示词");
     expect(wrapper.find(`option[value="category-a"]`).exists()).toBe(false);
-    expect(wrapper.get("[data-test='confirm-category-delete']").attributes("disabled")).toBeDefined();
+    expect(
+      wrapper
+        .get("[data-test='confirm-category-delete']")
+        .attributes("disabled"),
+    ).toBeDefined();
 
-    await wrapper.get("[data-test='category-transfer-target']").setValue("category-b");
+    await wrapper
+      .get("[data-test='category-transfer-target']")
+      .setValue("category-b");
     await wrapper.get("[data-test='confirm-category-delete']").trigger("click");
 
     expect(wrapper.emitted("confirm")).toEqual([["category-a", "category-b"]]);
@@ -66,26 +72,36 @@ describe("CategoryManagerDialog", () => {
     await wrapper.get("[data-test='open-category-create']").trigger("click");
     await wrapper.get("[data-test='submit-category-create']").trigger("click");
     expect(wrapper.text()).toContain("请输入分类名称");
-    await wrapper.get("[data-test='category-create-input']").setValue("  新分类  ");
+    await wrapper
+      .get("[data-test='category-create-input']")
+      .setValue("  新分类  ");
     await wrapper.get("[data-test='submit-category-create']").trigger("click");
     expect(wrapper.emitted("create")).toEqual([["新分类"]]);
 
-    await wrapper.get("[data-test='rename-category-category-a']").trigger("click");
-    await wrapper.get("[data-test='category-rename-input']").setValue("  工程研发  ");
+    await wrapper
+      .get("[data-test='rename-category-category-a']")
+      .trigger("click");
+    await wrapper
+      .get("[data-test='category-rename-input']")
+      .setValue("  工程研发  ");
     await wrapper.get("[data-test='submit-category-rename']").trigger("click");
     expect(wrapper.emitted("rename")).toEqual([["category-a", "工程研发"]]);
   });
 
   it("opens safe deletion and disables deleting the final category", async () => {
     const wrapper = mount(CategoryManagerDialog, { props: { categories } });
-    await wrapper.get("[data-test='delete-category-category-a']").trigger("click");
+    await wrapper
+      .get("[data-test='delete-category-category-a']")
+      .trigger("click");
     expect(wrapper.findComponent(CategoryDeleteDialog).exists()).toBe(true);
 
     const only = mount(CategoryManagerDialog, {
       props: { categories: [categories[0]] },
     });
     expect(
-      only.get("[data-test='delete-category-category-a']").attributes("disabled"),
+      only
+        .get("[data-test='delete-category-category-a']")
+        .attributes("disabled"),
     ).toBeDefined();
   });
 

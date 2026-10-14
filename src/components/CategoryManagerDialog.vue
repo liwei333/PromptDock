@@ -88,29 +88,46 @@ function submitRename(): void {
           <h2 id="category-manager-title">分类管理</h2>
           <p>新增 · 重命名 · 删除 · 安全迁移提示词</p>
         </div>
-        <button type="button" class="icon-button" aria-label="关闭分类管理" @click="emit('close')">
+        <button
+          type="button"
+          class="icon-button"
+          aria-label="关闭分类管理"
+          @click="emit('close')"
+        >
           ×
         </button>
       </header>
 
       <div class="category-manager-intro">
         <span aria-hidden="true">▢</span>
-        <p><strong>分类只是组织提示词的方式。</strong> 删除分类前必须选择新的归属分类，提示词不会被删除。</p>
+        <p>
+          <strong>分类只是组织提示词的方式。</strong>
+          删除分类前必须选择新的归属分类，提示词不会被删除。
+        </p>
       </div>
 
       <div class="category-manager-toolbar">
-        <strong>全部分类 <small>({{ categories.length }})</small></strong>
+        <strong
+          >全部分类 <small>({{ categories.length }})</small></strong
+        >
         <button
           type="button"
           class="primary-button"
           data-test="open-category-create"
-          @click="creating = true; localError = ''"
+          @click="
+            creating = true;
+            localError = '';
+          "
         >
           ＋ 新增分类
         </button>
       </div>
 
-      <form v-if="creating" class="category-inline-form" @submit.prevent="submitCreate">
+      <form
+        v-if="creating"
+        class="category-inline-form"
+        @submit.prevent="submitCreate"
+      >
         <input
           v-model="newName"
           data-test="category-create-input"
@@ -118,7 +135,9 @@ function submitRename(): void {
           autofocus
           placeholder="分类名称"
         />
-        <button type="button" class="ghost-button" @click="creating = false">取消</button>
+        <button type="button" class="ghost-button" @click="creating = false">
+          取消
+        </button>
         <button
           type="button"
           class="primary-button"
@@ -145,7 +164,13 @@ function submitRename(): void {
               @keydown.esc="editingId = null"
               @keydown.enter.prevent="submitRename"
             />
-            <button type="button" class="ghost-button" @click="editingId = null">取消</button>
+            <button
+              type="button"
+              class="ghost-button"
+              @click="editingId = null"
+            >
+              取消
+            </button>
             <button
               type="button"
               class="primary-button"
@@ -157,7 +182,12 @@ function submitRename(): void {
             </button>
           </template>
           <template v-else>
-            <span class="category-color" :style="{ background: category.color }" aria-hidden="true">▢</span>
+            <span
+              class="category-color"
+              :style="{ background: category.color }"
+              aria-hidden="true"
+              >▢</span
+            >
             <span class="category-manager-name">
               <strong>{{ category.name }}</strong>
               <small>{{ category.promptCount }} 条提示词</small>
@@ -176,7 +206,11 @@ function submitRename(): void {
               class="danger-button"
               :data-test="`delete-category-${category.id}`"
               :disabled="busy || categories.length <= 1"
-              :title="categories.length <= 1 ? '不能删除最后一个分类' : `删除 ${category.name}`"
+              :title="
+                categories.length <= 1
+                  ? '不能删除最后一个分类'
+                  : `删除 ${category.name}`
+              "
               @click="deleteSource = category"
             >
               删除
@@ -189,7 +223,9 @@ function submitRename(): void {
         {{ localError || error }}
       </p>
       <footer>
-        <button type="button" class="ghost-button" @click="emit('close')">完成</button>
+        <button type="button" class="ghost-button" @click="emit('close')">
+          完成
+        </button>
       </footer>
 
       <CategoryDeleteDialog

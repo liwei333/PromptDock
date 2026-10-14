@@ -24,6 +24,8 @@ const { categoryApi, pinnedPrompt, promptApi, windowApi } = vi.hoisted(() => {
     categoryApi: {
       list: vi.fn(),
       create: vi.fn(),
+      rename: vi.fn(),
+      delete: vi.fn(),
     },
     promptApi: {
       list: vi.fn(),
@@ -57,11 +59,7 @@ vi.mock("@/api/commands", () => ({
 
 import MainWindow from "@/windows/MainWindow.vue";
 
-const STICKY_ENTRY_SELECTORS = [
-  "[data-test='sidebar-sticky-mode']",
-  "[data-test='toolbar-sticky-mode']",
-  "[data-test='pinned-sticky-mode']",
-];
+const STICKY_ENTRY_SELECTOR = "[data-test='rail-sticky-mode']";
 
 async function mountMainWindow() {
   const wrapper = mount(MainWindow, {
@@ -83,7 +81,7 @@ async function mountMainWindow() {
   return wrapper;
 }
 
-describe("MainWindow exclusive sticky-mode controls", () => {
+describe("MainWindow V3 workbench", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     promptApi.list.mockResolvedValue({ items: [], total: 0 });
@@ -96,23 +94,51 @@ describe("MainWindow exclusive sticky-mode controls", () => {
     });
     promptApi.listSticky.mockResolvedValue([pinnedPrompt]);
     promptApi.listTags.mockResolvedValue([]);
-    categoryApi.list.mockResolvedValue([]);
+    categoryApi.list.mockResolvedValue([
+      {
+        id: "category-1",
+        name: "通用效率",
+        icon: "sparkles",
+        color: "#6687AE",
+        sortOrder: 1,
+        createdAt: 1,
+        updatedAt: 1,
+        promptCount: 1,
+      },
+      {
+        id: "category-2",
+        name: "写作创作",
+        icon: "pen",
+        color: "#7B75B5",
+        sortOrder: 2,
+        createdAt: 1,
+        updatedAt: 1,
+        promptCount: 0,
+      },
+    ]);
     windowApi.enterStickyMode.mockResolvedValue({ mode: "sticky" });
   });
 
-  it("routes all three full-window entry points through enterStickyMode", async () => {
+  it("renders the V3 rail, four real stats, filters, and split workbench", async () => {
     const wrapper = await mountMainWindow();
 
-    for (const selector of STICKY_ENTRY_SELECTORS) {
-      await wrapper.get(selector).trigger("click");
-      await flushPromises();
-    }
+    expect(wrapper.find(".workbench-rail").exists()).toBe(true);
+    expect(wrapper.findAll(".dashboard-stat-grid article")).toHaveLength(4);
+    expect(wrapper.find("[data-test='filter-category']").exists()).toBe(true);
+    expect(wrapper.find(".prompt-list-pane").exists()).toBe(true);
+    expect(wrapper.find(".prompt-detail-pane").exists()).toBe(true);
+    expect(wrapper.get("[data-test='stat-today']").text()).toContain(
+      "今日复制次数",
+    );
 
-    expect(windowApi.enterStickyMode).toHaveBeenCalledTimes(3);
+    await wrapper.get(STICKY_ENTRY_SELECTOR).trigger("click");
+    await flushPromises();
+
+    expect(windowApi.enterStickyMode).toHaveBeenCalledOnce();
     wrapper.unmount();
   });
 
-  it("suppresses repeated transitions and disables every entry while pending", async () => {
+  it("suppresses repeated sticky transitions while the native call is pending", async () => {
     let resolveTransition!: (value: { mode: "sticky" }) => void;
     windowApi.enterStickyMode.mockReturnValueOnce(
       new Promise((resolve) => {
@@ -120,23 +146,22 @@ describe("MainWindow exclusive sticky-mode controls", () => {
       }),
     );
     const wrapper = await mountMainWindow();
-    const toolbar = wrapper.get(STICKY_ENTRY_SELECTORS[1]);
-    const sidebar = wrapper.get(STICKY_ENTRY_SELECTORS[0]);
+    const entry = wrapper.get(STICKY_ENTRY_SELECTOR);
 
-    const firstClick = toolbar.trigger("click");
-    const secondClick = sidebar.trigger("click");
+    const firstClick = entry.trigger("click");
+    const secondClick = entry.trigger("click");
     await Promise.all([firstClick, secondClick]);
 
     expect(windowApi.enterStickyMode).toHaveBeenCalledOnce();
-    for (const selector of STICKY_ENTRY_SELECTORS) {
-      expect(wrapper.get(selector).attributes("disabled")).toBeDefined();
-    }
+    expect(
+      wrapper.get(STICKY_ENTRY_SELECTOR).attributes("disabled"),
+    ).toBeDefined();
 
     resolveTransition({ mode: "sticky" });
     await flushPromises();
-    for (const selector of STICKY_ENTRY_SELECTORS) {
-      expect(wrapper.get(selector).attributes("disabled")).toBeUndefined();
-    }
+    expect(
+      wrapper.get(STICKY_ENTRY_SELECTOR).attributes("disabled"),
+    ).toBeUndefined();
     wrapper.unmount();
   });
 
@@ -150,7 +175,7 @@ describe("MainWindow exclusive sticky-mode controls", () => {
 
     expect(liveRegion.text()).toBe("");
 
-    await wrapper.get(STICKY_ENTRY_SELECTORS[1]).trigger("click");
+    await wrapper.get(STICKY_ENTRY_SELECTOR).trigger("click");
     await flushPromises();
 
     const updatedLiveRegion = wrapper.get("[data-test='main-live-region']");
@@ -168,6 +193,23 @@ describe("MainWindow exclusive sticky-mode controls", () => {
     await wrapper.vm.$nextTick();
 
     expect(wrapper.find(".palette-overlay").exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it("opens category management from rail, list, and category filter", async () => {
+    const wrapper = await mountMainWindow();
+
+    for (const selector of [
+      "[data-test='rail-categories']",
+      "[data-test='list-manage-categories']",
+    ]) {
+      await wrapper.get(selector).trigger("click");
+      expect(wrapper.find(".category-manager-dialog").exists()).toBe(true);
+      await wrapper.get("[aria-label='关闭分类管理']").trigger("click");
+    }
+
+    await wrapper.get("[data-test='filter-category']").setValue("__manage__");
+    expect(wrapper.find(".category-manager-dialog").exists()).toBe(true);
     wrapper.unmount();
   });
 });

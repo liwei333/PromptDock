@@ -38,7 +38,12 @@ function confirmTransfer(): void {
           <h2 id="category-delete-title">删除分类 · 安全迁移</h2>
           <p>不会删除提示词内容</p>
         </div>
-        <button type="button" class="icon-button" aria-label="取消删除" @click="emit('cancel')">
+        <button
+          type="button"
+          class="icon-button"
+          aria-label="取消删除"
+          @click="emit('cancel')"
+        >
           ×
         </button>
       </header>
@@ -46,15 +51,24 @@ function confirmTransfer(): void {
       <div class="category-delete-warning">
         <strong>确认删除分类「{{ source.name }}」？</strong>
         <p>
-          该分类包含 {{ source.promptCount }} 条提示词。删除的只是分类，提示词会安全迁移。
+          该分类包含
+          {{ source.promptCount }} 条提示词。删除的只是分类，提示词会安全迁移。
         </p>
       </div>
 
       <label class="category-transfer-field">
         <span>提示词转移至 *</span>
-        <select v-model="targetId" data-test="category-transfer-target" :disabled="busy">
+        <select
+          v-model="targetId"
+          data-test="category-transfer-target"
+          :disabled="busy"
+        >
           <option value="" disabled>请选择目标分类</option>
-          <option v-for="category in targets" :key="category.id" :value="category.id">
+          <option
+            v-for="category in targets"
+            :key="category.id"
+            :value="category.id"
+          >
             {{ category.name }}
           </option>
         </select>

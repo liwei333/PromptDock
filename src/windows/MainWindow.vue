@@ -1,30 +1,31 @@
 <script setup lang="ts">
 import { listen } from "@tauri-apps/api/event";
 import { confirm } from "@tauri-apps/plugin-dialog";
-import { onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
 import { backupApi, categoryApi, windowApi } from "@/api/commands";
 import CategoryManagerDialog from "@/components/CategoryManagerDialog.vue";
+import DashboardStatCards from "@/components/DashboardStatCards.vue";
 import ImportPreviewDialog from "@/components/ImportPreviewDialog.vue";
-import PromptCard from "@/components/PromptCard.vue";
-import PromptDetailDrawer from "@/components/PromptDetailDrawer.vue";
+import PromptDetailPane from "@/components/PromptDetailPane.vue";
 import PromptEditorDialog from "@/components/PromptEditorDialog.vue";
+import PromptListPane from "@/components/PromptListPane.vue";
 import QuickPalette from "@/components/QuickPalette.vue";
 import RuntimeInfoDialog from "@/components/RuntimeInfoDialog.vue";
 import StickyManagerDialog from "@/components/StickyManagerDialog.vue";
+import WorkbenchFilters from "@/components/WorkbenchFilters.vue";
+import WorkbenchIconRail from "@/components/WorkbenchIconRail.vue";
 import { inspectTemplateVariables } from "@/composables/useTemplateVariables";
 import { copyPromptText } from "@/services/clipboard";
 import { usePromptStore } from "@/stores/promptStore";
-import type {
-  Prompt,
-  PromptInput,
-  PromptTab,
-  PromptView,
-} from "@/types/prompt";
 import type { ImportMode, ImportPreview } from "@/types/backup";
+import type { Prompt, PromptInput, PromptQuery } from "@/types/prompt";
 
 const store = usePromptStore();
-const selected = ref<Prompt | null>(null);
+const selectedId = ref<string | null>(null);
+const selected = computed(
+  () => store.prompts.find((prompt) => prompt.id === selectedId.value) ?? null,
+);
 const editing = ref<Prompt | null | undefined>(undefined);
 const variableMode = ref(false);
 const quickOpen = ref(false);
@@ -44,6 +45,21 @@ const toast = ref<{ text: string; kind: "success" | "error" } | null>(null);
 let stopListening: (() => void) | null = null;
 let searchTimer: ReturnType<typeof setTimeout> | null = null;
 
+watch(
+  () => store.prompts.map((prompt) => prompt.id).join("|"),
+  () => {
+    if (!store.prompts.length) {
+      selectedId.value = null;
+      variableMode.value = false;
+      return;
+    }
+    if (!store.prompts.some((prompt) => prompt.id === selectedId.value)) {
+      selectedId.value = store.prompts[0].id;
+      variableMode.value = false;
+    }
+  },
+);
+
 function notify(text: string, kind: "success" | "error" = "success"): void {
   toast.value = { text, kind };
   window.setTimeout(() => {
@@ -51,26 +67,41 @@ function notify(text: string, kind: "success" | "error" = "success"): void {
   }, 2600);
 }
 
-function setView(view: PromptView, categoryId?: string): void {
-  void store.load({ view, categoryId, search: undefined, tab: "all" });
+function selectPrompt(prompt: Prompt): void {
+  selectedId.value = prompt.id;
+  variableMode.value = false;
 }
 
-function setTab(tab: PromptTab): void {
-  void store.load({ tab });
+function applyFilters(patch: PromptQuery): void {
+  void store.load({ view: "all", tab: "all", ...patch });
 }
 
 function updateSearch(value: string): void {
   if (searchTimer) window.clearTimeout(searchTimer);
   searchTimer = window.setTimeout(
-    () => void store.load({ search: value }),
+    () => void store.load({ search: value || undefined }),
     150,
   );
+}
+
+async function showFavorites(): Promise<void> {
+  await store.load({
+    view: "all",
+    tab: "all",
+    search: undefined,
+    categoryId: undefined,
+    tag: undefined,
+    favoriteOnly: true,
+    pinnedOnly: false,
+    recentOnly: false,
+    templateOnly: false,
+  });
 }
 
 async function copy(prompt: Prompt): Promise<void> {
   const template = inspectTemplateVariables(prompt.body);
   if (!template.error && template.variables.length) {
-    selected.value = prompt;
+    selectedId.value = prompt.id;
     variableMode.value = true;
     return;
   }
@@ -94,12 +125,6 @@ async function copy(prompt: Prompt): Promise<void> {
   }
 }
 
-function promptActionLabel(prompt: Prompt): string {
-  const template = inspectTemplateVariables(prompt.body);
-  if (template.error) return "复制原文";
-  return template.variables.length ? "填写变量" : "复制全文";
-}
-
 async function toggleFavorite(prompt: Prompt): Promise<void> {
   try {
     await store.favorite(prompt);
@@ -117,13 +142,13 @@ async function togglePin(prompt: Prompt): Promise<void> {
   }
 }
 
-async function save(input: PromptInput, id?: string): Promise<void> {
+async function savePrompt(input: PromptInput, id?: string): Promise<void> {
   saving.value = true;
   saveError.value = "";
   try {
     const saved = await store.save(input, id);
     editing.value = undefined;
-    selected.value = saved;
+    selectedId.value = saved.id;
     notify(id ? "修改已保存" : "提示词已保存到本机");
   } catch (reason) {
     saveError.value = reason instanceof Error ? reason.message : String(reason);
@@ -132,7 +157,7 @@ async function save(input: PromptInput, id?: string): Promise<void> {
   }
 }
 
-async function remove(prompt: Prompt): Promise<void> {
+async function removePrompt(prompt: Prompt): Promise<void> {
   if (
     !(await confirm(`确定删除「${prompt.title}」吗？此操作不可撤销。`, {
       title: "删除提示词？",
@@ -143,7 +168,7 @@ async function remove(prompt: Prompt): Promise<void> {
   try {
     await store.remove(prompt.id);
     editing.value = undefined;
-    selected.value = null;
+    selectedId.value = null;
     notify("提示词已删除");
   } catch (reason) {
     notify(reason instanceof Error ? reason.message : "删除失败", "error");
@@ -190,12 +215,7 @@ async function deleteCategory(
     await categoryApi.delete(sourceId, targetId);
     await store.load(
       store.query.categoryId === sourceId
-        ? {
-            view: "all",
-            tab: "all",
-            categoryId: undefined,
-            search: undefined,
-          }
+        ? { categoryId: undefined, search: undefined }
         : undefined,
     );
     notify("分类已删除，提示词已安全迁移");
@@ -254,9 +274,8 @@ async function commitImport(mode: ImportMode): Promise<void> {
       "替换会清空当前分类和提示词。应用会先创建安全备份，确定继续吗？",
       { title: "确认替换现有库？", kind: "warning" },
     ))
-  ) {
+  )
     return;
-  }
   importing.value = true;
   importError.value = "";
   try {
@@ -290,6 +309,13 @@ function keydown(event: KeyboardEvent): void {
   ) {
     event.preventDefault();
     document.querySelector<HTMLInputElement>("#main-search")?.focus();
+  } else if (
+    commandModifier &&
+    event.key.toLowerCase() === "n" &&
+    !editingText
+  ) {
+    event.preventDefault();
+    editing.value = null;
   }
 }
 
@@ -308,284 +334,84 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="app-shell">
-    <aside class="sidebar">
-      <div class="brand">
-        <span class="brand-mark">P</span><span>PromptDock</span>
-      </div>
-      <p class="workspace-label">我的工作空间</p>
-      <nav>
-        <p class="nav-heading">工作台</p>
-        <button
-          :class="{
-            active: store.query.view === 'all' && !store.query.categoryId,
-          }"
-          @click="setView('all')"
-        >
-          <span>▦ 全部提示词</span><b>{{ store.stats.total }}</b>
-        </button>
-        <button
-          :class="{ active: store.query.view === 'recent' }"
-          @click="setView('recent')"
-        >
-          <span>◷ 最近使用</span><b>{{ store.stats.recent }}</b>
-        </button>
-        <button
-          :class="{ active: store.query.view === 'favorite' }"
-          @click="setView('favorite')"
-        >
-          <span>☆ 我的收藏</span><b>{{ store.stats.favorites }}</b>
-        </button>
-        <button
-          :class="{ active: store.query.view === 'pinned' }"
-          @click="setView('pinned')"
-        >
-          <span>⌁ 快捷置顶</span><b>{{ store.stats.pinned }}</b>
-        </button>
-        <div class="nav-heading nav-heading-row">
-          <span>分类管理</span
-          ><button
-            data-test="sidebar-category-manager"
-            aria-label="管理分类"
-            @click="categoryManagerOpen = true"
-          >
-            ⚙
-          </button>
-        </div>
-        <div
-          v-for="category in store.categories"
-          :key="category.id"
-          class="category-nav-item"
-          :class="{
-            active: store.query.categoryId === category.id,
-          }"
-        >
-          <button
-            class="category-select"
-            :data-test="`category-${category.id}`"
-            @click="setView('all', category.id)"
-          >
-            <span
-              ><i :style="{ background: category.color }" />{{
-                category.name
-              }}</span
-            ><b>{{ category.promptCount }}</b>
-          </button>
-        </div>
-      </nav>
-      <div class="sidebar-bottom">
-        <button @click="quickOpen = true">
-          <span>⌘/Ctrl 快捷取用</span><kbd>⌘/Ctrl K</kbd>
-        </button>
-        <button
-          data-test="sidebar-sticky-mode"
-          :disabled="switchingMode"
-          @click="enterStickyMode"
-        >
-          <span>▤ 便签模式</span><small>5 槽位</small>
-        </button>
-        <button @click="stickyManagerOpen = true">
-          <span>↕ 管理置顶</span><small>{{ store.pinned.length }}/5</small>
-        </button>
-        <button @click="runtimeOpen = true">
-          <span>ⓘ 运行信息</span><small>本机</small>
-        </button>
-        <p>本机 SQLite 保存<br /><small>离线可用 · 不上传云端</small></p>
-      </div>
-    </aside>
+  <div class="v3-app-shell">
+    <WorkbenchIconRail
+      :favorite-active="Boolean(store.query.favoriteOnly)"
+      :switching-sticky="switchingMode"
+      @home="store.resetFilters()"
+      @favorites="showFavorites"
+      @categories="categoryManagerOpen = true"
+      @sticky="enterStickyMode"
+      @settings="runtimeOpen = true"
+    />
 
-    <main class="main-area">
-      <header class="topbar">
-        <div>
-          <span class="muted">工作台</span><span class="crumb">/</span
-          ><strong>提示词库</strong>
-        </div>
-        <div class="toolbar-actions">
-          <button class="ghost-button" @click="previewImport">导入</button>
-          <button class="ghost-button" @click="exportBackup">导出</button>
-          <button
-            data-test="toolbar-sticky-mode"
-            class="ghost-button"
-            :disabled="switchingMode"
-            @click="enterStickyMode"
-          >
-            ▤ 便签模式
-          </button>
-          <button class="primary-button" @click="editing = null">
-            ＋ 新建提示词
-          </button>
-        </div>
-      </header>
+    <main class="v3-main-area">
+      <WorkbenchFilters
+        :query="store.query"
+        :categories="store.categories"
+        :tags="store.tags"
+        @change="applyFilters"
+        @search="updateSearch"
+        @clear="store.resetFilters()"
+        @manage-categories="categoryManagerOpen = true"
+      />
+      <DashboardStatCards :stats="store.stats" />
 
-      <div class="content">
-        <div class="title-row">
-          <div>
-            <h1>我的提示词库</h1>
-            <p>整理、检索并复制你的常用 AI 工作流。</p>
-          </div>
-          <span class="local-badge">仅保存在这台 Mac</span>
-        </div>
-        <section class="search-panel">
-          <label class="main-search"
-            ><span>⌕</span
-            ><input
-              id="main-search"
-              :value="store.query.search ?? ''"
-              placeholder="搜索标题、正文、标签或分类…"
-              @input="updateSearch(($event.target as HTMLInputElement).value)"
-          /></label>
-          <div class="tabs">
-            <button
-              :class="{ active: store.query.tab === 'all' }"
-              @click="setTab('all')"
-            >
-              全部
-            </button>
-            <button
-              :class="{ active: store.query.tab === 'favorite' }"
-              @click="setTab('favorite')"
-            >
-              已收藏
-            </button>
-            <button
-              :class="{ active: store.query.tab === 'template' }"
-              @click="setTab('template')"
-            >
-              变量模板
-            </button>
-          </div>
-          <select
-            :value="store.query.sort"
-            aria-label="排序"
-            @change="
-              store.load({
-                sort: ($event.target as HTMLSelectElement).value as
-                  'recent' | 'popular' | 'name',
-              })
-            "
-          >
-            <option value="recent">最近更新</option>
-            <option value="popular">最常使用</option>
-            <option value="name">标题排序</option>
-          </select>
-        </section>
-
-        <section v-if="store.pinned.length" class="pinned-panel">
-          <header>
-            <div>
-              <span class="section-icon">⌁</span
-              ><span
-                ><strong>快捷复制</strong><small>前 3 条便签置顶</small></span
-              >
-            </div>
-            <div>
-              <button @click="stickyManagerOpen = true">管理顺序</button>
-              <button
-                data-test="pinned-sticky-mode"
-                :disabled="switchingMode"
-                @click="enterStickyMode"
-              >
-                打开便签窗 →
-              </button>
-            </div>
-          </header>
-          <div class="pinned-grid">
-            <button
-              v-for="prompt in store.pinned.slice(0, 3)"
-              :key="prompt.id"
-              @click="copy(prompt)"
-            >
-              <span>{{ prompt.pinOrder?.toString().padStart(2, "0") }}</span
-              ><strong>{{ prompt.title }}</strong
-              ><small>{{ promptActionLabel(prompt) }}</small>
-            </button>
-          </div>
-        </section>
-
-        <div class="list-heading">
-          <div>
-            <h2>提示词列表</h2>
-            <span>{{ store.total }} 条</span>
-          </div>
-          <span class="muted">点击卡片查看完整正文</span>
-        </div>
-        <div v-if="store.loading" class="empty-state">
-          <span class="spinner" />正在读取本机数据库…
-        </div>
-        <div v-else-if="store.error" class="empty-state error-state">
-          <strong>无法读取提示词</strong>
-          <p>{{ store.error }}</p>
-          <button class="primary-button" @click="store.load()">重试</button>
-        </div>
-        <div v-else-if="!store.prompts.length" class="empty-state">
-          <span class="empty-icon">P</span
-          ><strong>{{
-            store.query.search ? "没有匹配结果" : "提示词库还是空的"
-          }}</strong>
-          <p>
-            {{
-              store.query.search
-                ? "换个关键词，或清除搜索后重试。"
-                : "创建第一条提示词，所有内容都会保存在本机 SQLite。"
-            }}
-          </p>
-          <button
-            class="primary-button"
-            @click="
-              store.query.search
-                ? store.load({ search: undefined })
-                : (editing = null)
-            "
-          >
-            {{ store.query.search ? "清除搜索" : "新建提示词" }}
+      <section class="v3-workbench">
+        <PromptListPane
+          :prompts="store.prompts"
+          :selected-id="selectedId"
+          :total="store.total"
+          :loading="store.loading"
+          :error="store.error"
+          :copying-id="copyingId"
+          @select="selectPrompt"
+          @copy="copy"
+          @favorite="toggleFavorite"
+          @pin="togglePin"
+          @manage-categories="categoryManagerOpen = true"
+          @new="editing = null"
+          @retry="store.load()"
+        />
+        <PromptDetailPane
+          :prompt="selected"
+          :variable-mode="variableMode"
+          @copy="copy"
+          @edit="editing = $event"
+          @new="editing = null"
+          @export="exportBackup"
+          @cancel-variables="variableMode = false"
+          @copied="
+            notify('替换后的全文已复制');
+            variableMode = false;
+            store.load();
+          "
+        />
+      </section>
+      <footer class="v3-statusbar">
+        <span>本机 SQLite · 离线可用 · 不上传云端</span>
+        <span>
+          <button data-test="manage-sticky" @click="stickyManagerOpen = true">
+            管理置顶
           </button>
-        </div>
-        <div v-else class="card-grid">
-          <PromptCard
-            v-for="prompt in store.prompts"
-            :key="prompt.id"
-            :prompt="prompt"
-            :copying="copyingId === prompt.id"
-            @select="
-              selected = $event;
-              variableMode = false;
-            "
-            @copy="copy"
-            @favorite="toggleFavorite"
-            @pin="togglePin"
-          />
-        </div>
-      </div>
+          · <button @click="previewImport">导入</button> ·
+          <button @click="exportBackup">JSON 备份</button>
+        </span>
+      </footer>
     </main>
 
-    <PromptDetailDrawer
-      v-if="selected"
-      :prompt="selected"
-      :variable-mode="variableMode"
-      @close="
-        selected = null;
-        variableMode = false;
-      "
-      @edit="editing = $event"
-      @copy="copy"
-      @copied="
-        notify('替换后的全文已复制');
-        selected = null;
-        store.load();
-      "
-    />
     <PromptEditorDialog
       v-if="editing !== undefined"
       :prompt="editing"
       :categories="store.categories"
       :saving="saving"
       :server-error="saveError"
-      @save="save"
+      @save="savePrompt"
       @close="
         editing = undefined;
         saveError = '';
       "
-      @delete="remove"
+      @delete="removePrompt"
     />
     <div
       v-if="quickOpen"
