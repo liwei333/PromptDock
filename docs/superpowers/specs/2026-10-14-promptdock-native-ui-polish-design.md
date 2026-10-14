@@ -1,7 +1,7 @@
 # PromptDock macOS-inspired native UI polish design
 
 Date: 2026-10-14  
-Status: User-approved design, first-review issues addressed
+Status: User-approved design, second-review issues addressed
 Target branch: `feat/promptdock-ui-native-polish`
 
 ## 1. Context
@@ -33,7 +33,7 @@ The remaining constraints are:
 3. A Windows native build and smoke pass is a release gate. If no Windows runner is available during this local macOS task, the result must be reported as `UNVERIFIED_WINDOWS_RUNTIME`; automated and macOS results must not be presented as Windows acceptance.
 4. Business data remains in `app_data_dir/promptdock.sqlite3`; the UI library must not introduce `localStorage` as a business store.
 5. Rust commands remain the only data-operation API. No generic SQL IPC, remote API, telemetry, CDN, updater, AI SDK, or runtime font/icon fetch may be added.
-6. Existing clipboard, copy-count, variable-template, Option+Space, JSON import/export, five-pin limit, pin ordering, window coordination, and cross-window refresh behavior must remain unchanged.
+6. Existing clipboard, copy-count, variable-template, JSON import/export, five-pin limit, pin ordering, window coordination, and cross-window refresh behavior must remain unchanged. Shortcut behavior and displayed hints must remain platform-aware: `⌘K` plus `Option+Space` on macOS, and `Ctrl+K` plus the existing `Ctrl+Alt+Space` global accelerator on Windows.
 7. User content remains plain text. No `v-html` or executable template behavior may be introduced.
 8. This is a presentation and interaction-component refactor. It requires no database migration.
 
@@ -166,11 +166,12 @@ Decorative characters may remain inside user content, but application controls a
 - Use Lucide icons, 18 px default size, consistent hit targets, and `PdTooltip` for names/shortcuts.
 - Selected rail items use a soft accent capsule plus an explicit semantic pressed/current state.
 - The rail settings action remains anchored at the bottom.
+- Shortcut text in rail Tooltips, search hints, runtime information, and related status copy uses the current platform's values rather than hard-coded macOS symbols. The global accelerator source of truth remains the existing Rust runtime status (`Option+Space` on macOS and `Ctrl+Alt+Space` on Windows).
 
 ### 9.2 Search and filters
 
 - Retain the one-row combined filter requirement at supported desktop widths.
-- Search is the visually dominant control, with `Search` and the `⌘K` hint.
+- Search is the visually dominant control, with `Search` and a platform-aware local shortcut hint: `⌘K` on macOS and `Ctrl+K` on Windows.
 - Category and tag use `PdSelect`.
 - Favorite, pinned, recent-use, and template-only filters become `PdToggle` chips with icon and short text.
 - Sort uses a compact `PdSelect` with `ArrowUpDown`; no separate feature-level menu primitive is introduced for this requirement.
@@ -297,8 +298,9 @@ No business decision moves into the `Pd*` layer. Existing error levels, copy-bef
 - `cargo test --manifest-path src-tauri/Cargo.toml`
 - `cargo clippy --manifest-path src-tauri/Cargo.toml --locked --offline --all-targets --all-features -- -D warnings`
 - `git diff --check`
-- `pnpm tauri build --bundles app`
-- `codesign --verify --deep --strict` on the local app bundle after any required ad-hoc re-signing
+- macOS runner: `pnpm tauri build --bundles app`
+- macOS runner: `codesign --verify --deep --strict` on the local app bundle after any required ad-hoc re-signing
+- Windows x64 runner: `pnpm tauri build`, producing and smoke-testing the configured Windows-native bundle target
 
 The macOS runner executes the macOS bundle and signature checks. A Windows 10/11 x64 runner must also build the Windows target and smoke-test Main, Quick, and Sticky before cross-platform release acceptance. Lack of a Windows runner is reported as `UNVERIFIED_WINDOWS_RUNTIME`, not silently waived.
 
@@ -319,7 +321,9 @@ The macOS runner executes the macOS bundle and signature checks. A Windows 10/11
 - Shared workbench layout, filter overlays, category dialogs, and keyboard focus remain usable at the supported minimum window size.
 - Quick and Sticky undecorated windows expose functional close/return/settings actions and never depend on macOS-only decorative controls.
 - Sticky comfortable and compact logical dimensions retain five-slot fit under Windows display scaling.
-- System clipboard, application-data paths, and shortcuts continue using the existing platform-specific service paths.
+- System clipboard and application-data paths continue using the existing platform-specific service paths.
+- The search hint renders `Ctrl+K`; global-shortcut Tooltips and runtime information render the existing `Ctrl+Alt+Space` accelerator. No macOS-only `⌘` or `Option` hint is shown on Windows.
+- A Windows Narrator keyboard/focus observation is recorded, or explicitly remains `UNVERIFIED_WINDOWS_RUNTIME`.
 - Results require a Windows 10/11 x64 runner. Until observed, these items remain `UNVERIFIED_WINDOWS_RUNTIME`.
 
 ## 15. Acceptance criteria
