@@ -24,6 +24,12 @@ pub(crate) enum ProductWindow {
     Sticky,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum MainPositionPolicy {
+    CaptureCurrent,
+    PreserveSaved,
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct ModeSnapshot {
     pub main_visible: bool,
@@ -287,11 +293,10 @@ pub(crate) async fn reconcile_startup_mode(
     let target = if snapshot.settings.visible {
         WindowMode::Sticky
     } else {
-        // Restore the hidden sticky before Main captures its position for persistence.
-        runtime.configure_sticky(&snapshot.settings)?;
         WindowMode::Main
     };
-    transition_from_snapshot(runtime, snapshot, target).await
+    transition_with_position_policy(runtime, snapshot, target, MainPositionPolicy::PreserveSaved)
+        .await
 }
 
 pub(crate) async fn snapshot_mode(
@@ -311,6 +316,22 @@ pub(crate) async fn transition_from_snapshot(
     snapshot: ModeSnapshot,
     target: WindowMode,
 ) -> Result<(), AppError> {
+    transition_with_position_policy(
+        runtime,
+        snapshot,
+        target,
+        MainPositionPolicy::CaptureCurrent,
+    )
+    .await
+}
+
+// The caller holds the shared mutex, including startup configuration and compensation.
+async fn transition_with_position_policy(
+    runtime: &impl WindowModeRuntime,
+    snapshot: ModeSnapshot,
+    target: WindowMode,
+    main_position_policy: MainPositionPolicy,
+) -> Result<(), AppError> {
     let mut settings = snapshot.settings.clone();
     let mut persistence_attempted = false;
     let result = async {
@@ -323,10 +344,17 @@ pub(crate) async fn transition_from_snapshot(
                 ProductWindow::Main
             }
             WindowMode::Main => {
+                if main_position_policy == MainPositionPolicy::PreserveSaved {
+                    // macOS may apply this position asynchronously after setup returns.
+                    // Keep the saved fields instead of capturing the fresh hidden window.
+                    runtime.configure_sticky(&settings)?;
+                }
                 runtime.show(ProductWindow::Main)?;
                 runtime.unminimize(ProductWindow::Main)?;
                 runtime.focus(ProductWindow::Main)?;
-                runtime.capture_sticky_position(&mut settings)?;
+                if main_position_policy == MainPositionPolicy::CaptureCurrent {
+                    runtime.capture_sticky_position(&mut settings)?;
+                }
                 settings.visible = false;
                 ProductWindow::Sticky
             }

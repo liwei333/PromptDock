@@ -23,11 +23,18 @@ struct ModeledState {
     settings: StickySettings,
     sticky_position: (i32, i32),
     sticky_monitor: (&'static str, f64),
+    defer_sticky_placement: bool,
+    pending_sticky_placement: Option<StickyPlacement>,
     native_always_on_top: bool,
     operations: Vec<&'static str>,
     failures: VecDeque<InjectedFailure>,
     write_gate: Option<Arc<WriteGate>>,
     corrupt_captured_preferences: bool,
+}
+
+struct StickyPlacement {
+    position: (i32, i32),
+    monitor: (&'static str, f64),
 }
 
 struct FakeRuntime(Mutex<ModeledState>);
@@ -101,6 +108,8 @@ impl FakeRuntime {
             },
             sticky_position: (120, 240),
             sticky_monitor: ("Modeled monitor", 2.0),
+            defer_sticky_placement: false,
+            pending_sticky_placement: None,
             native_always_on_top: true,
             operations: Vec::new(),
             failures: VecDeque::new(),
@@ -147,11 +156,27 @@ impl FakeRuntime {
 
     fn assert_startup_mode(&self, target: WindowMode) {
         self.assert_exclusive_mode(target);
-        let mut expected = expected_operations(target);
-        if target == WindowMode::Main {
-            expected.insert(3, "configure_sticky");
-        }
-        assert_eq!(self.0.lock().unwrap().operations, expected);
+        assert_eq!(
+            self.0.lock().unwrap().operations,
+            expected_startup_operations(target)
+        );
+    }
+}
+
+fn expected_startup_operations(target: WindowMode) -> Vec<&'static str> {
+    match target {
+        WindowMode::Sticky => expected_operations(target),
+        WindowMode::Main => vec![
+            "snapshot_main",
+            "snapshot_sticky",
+            "snapshot_settings",
+            "configure_sticky",
+            "show_main",
+            "unminimize_main",
+            "focus_main",
+            "persist_visible_false",
+            "hide_sticky",
+        ],
     }
 }
 
@@ -278,12 +303,19 @@ impl WindowModeRuntime for FakeRuntime {
         let mut state = self.0.lock().unwrap();
         state.begin("configure_sticky")?;
         if let (Some(x), Some(y)) = (settings.x, settings.y) {
-            state.sticky_position = (x, y);
             // Restoring onto a saved display changes the native monitor and its scale.
-            if let Some(monitor) = [("Original monitor", 1.0), ("Modeled monitor", 2.0)]
+            let monitor = [("Original monitor", 1.0), ("Modeled monitor", 2.0)]
                 .into_iter()
                 .find(|(name, _)| Some(*name) == settings.monitor_name.as_deref())
-            {
+                .unwrap_or(state.sticky_monitor);
+            if state.defer_sticky_placement {
+                // macOS can queue placement until the main-thread setup hook returns.
+                state.pending_sticky_placement = Some(StickyPlacement {
+                    position: (x, y),
+                    monitor,
+                });
+            } else {
+                state.sticky_position = (x, y);
                 state.sticky_monitor = monitor;
             }
         }
@@ -376,7 +408,7 @@ async fn startup_reconciles_persisted_main_mode() {
 }
 
 #[tokio::test]
-async fn startup_main_restores_saved_sticky_position_before_capture() {
+async fn startup_main_restores_saved_sticky_position_without_recapturing() {
     let runtime = FakeRuntime::new(true, false, false);
     let saved = runtime.snapshot().2;
 
@@ -392,30 +424,96 @@ async fn startup_main_restores_saved_sticky_position_before_capture() {
 }
 
 #[tokio::test]
-async fn startup_main_restore_failure_does_not_capture_or_persist_fresh_position() {
-    for timing in [FailureTiming::Before, FailureTiming::After] {
-        let runtime = FakeRuntime::new(true, false, false);
-        let snapshot = runtime.snapshot();
-        runtime.fail("configure_sticky", timing, native_failure());
+async fn startup_main_preserves_saved_position_while_native_restore_is_pending() {
+    let runtime = FakeRuntime::new(true, false, false);
+    runtime.0.lock().unwrap().defer_sticky_placement = true;
+    let saved = runtime.snapshot().2;
 
-        let error = reconcile_startup_mode(&runtime, &AsyncMutex::new(()))
-            .await
-            .unwrap_err();
+    reconcile_startup_mode(&runtime, &AsyncMutex::new(()))
+        .await
+        .unwrap();
 
-        assert_eq!(error.code(), "NATIVE_ERROR");
-        assert_eq!(runtime.snapshot(), snapshot);
-        let state = runtime.0.lock().unwrap();
-        assert_eq!(
-            state.operations,
-            [
-                "snapshot_main",
-                "snapshot_sticky",
-                "snapshot_settings",
-                "configure_sticky",
-            ]
-        );
-        assert!(state.failures.is_empty());
+    assert_eq!(runtime.snapshot().2, saved);
+    runtime.assert_startup_mode(WindowMode::Main);
+    let state = runtime.0.lock().unwrap();
+    // A native capture here would still observe fresh values, not the queued saved placement.
+    assert_eq!(state.sticky_position, (120, 240));
+    assert_eq!(state.sticky_monitor, ("Modeled monitor", 2.0));
+    let pending = state.pending_sticky_placement.as_ref().unwrap();
+    assert_eq!(pending.position, (10, 20));
+    assert_eq!(pending.monitor, ("Original monitor", 1.0));
+}
+
+#[tokio::test]
+async fn startup_main_failure_compensates_snapshot_without_recapturing_position() {
+    for operation in [
+        "configure_sticky",
+        "show_main",
+        "unminimize_main",
+        "focus_main",
+        "persist_visible_false",
+        "hide_sticky",
+    ] {
+        for (main, sticky) in [(true, false), (false, true), (false, false), (true, true)] {
+            for timing in [FailureTiming::Before, FailureTiming::After] {
+                let runtime = FakeRuntime::new(main, sticky, false);
+                runtime.0.lock().unwrap().defer_sticky_placement = true;
+                let snapshot = runtime.snapshot();
+                let original = primary_failure(operation);
+                let original_code = original.code();
+                let original_message = original.to_string();
+                runtime.fail(operation, timing, original);
+
+                let error = reconcile_startup_mode(&runtime, &AsyncMutex::new(()))
+                    .await
+                    .unwrap_err();
+
+                assert_eq!(error.code(), original_code);
+                assert_eq!(error.to_string(), original_message);
+                assert_eq!(runtime.snapshot(), snapshot);
+                let mut expected = expected_startup_operations(WindowMode::Main);
+                let failed_index = expected.iter().position(|op| *op == operation).unwrap();
+                expected.truncate(failed_index + 1);
+                if matches!(operation, "persist_visible_false" | "hide_sticky") {
+                    expected.push("persist_visible_false");
+                }
+                expected.extend([
+                    if main { "show_main" } else { "hide_main" },
+                    if sticky { "show_sticky" } else { "hide_sticky" },
+                ]);
+                let state = runtime.0.lock().unwrap();
+                assert_eq!(state.operations, expected, "startup failed at {operation}");
+                assert!(state.failures.is_empty());
+            }
+        }
     }
+}
+
+#[tokio::test]
+async fn startup_main_holds_lock_through_saved_settings_persistence() {
+    let runtime = FakeRuntime::new(true, false, false);
+    runtime.0.lock().unwrap().defer_sticky_placement = true;
+    let saved = runtime.snapshot().2;
+    let mutex = AsyncMutex::new(());
+    let gate = runtime.pause_next_write();
+    let mut startup = Box::pin(reconcile_startup_mode(&runtime, &mutex));
+    assert_pending(startup.as_mut()).await;
+    gate.assert_entered().await;
+    let startup_operations = runtime.0.lock().unwrap().operations.clone();
+
+    let mut transition = Box::pin(transition_to(&runtime, &mutex, WindowMode::Sticky));
+    assert_pending(transition.as_mut()).await;
+    assert_eq!(runtime.0.lock().unwrap().operations, startup_operations);
+    gate.release.notify_one();
+    startup.await.unwrap();
+    assert_eq!(runtime.snapshot().2, saved);
+    runtime.assert_startup_mode(WindowMode::Main);
+    transition.await.unwrap();
+
+    runtime.assert_exclusive_mode(WindowMode::Sticky);
+    let mut expected = expected_startup_operations(WindowMode::Main);
+    expected.extend(expected_operations(WindowMode::Sticky));
+    assert_eq!(runtime.0.lock().unwrap().operations, expected);
 }
 
 #[tokio::test]
