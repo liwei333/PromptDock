@@ -1,7 +1,7 @@
-# PromptDock macOS-native UI polish design
+# PromptDock macOS-inspired native UI polish design
 
 Date: 2026-10-14  
-Status: User-approved design, pending spec review  
+Status: User-approved design, first-review issues addressed
 Target branch: `feat/promptdock-ui-native-polish`
 
 ## 1. Context
@@ -10,17 +10,32 @@ PromptDock UI V3 established the required workbench structure and real data path
 
 The user selected a lightweight macOS desktop-tool direction instead of an Ant Design Vue or Element Plus administration-dashboard style. The user approved adding `reka-ui` and `lucide-vue-next` as local open-source dependencies.
 
-## 2. Authority and constraints
+## 2. Authority, resolved conflicts, and constraints
 
 This polish must preserve the existing product and data constraints:
 
-1. `docs/product/PRD.md` remains authoritative for product scope and acceptance behavior.
-2. The confirmed V3 structure remains authoritative for the 84 px rail, combined filter area, four real statistics, 44/56 list/detail workbench, category safety, and Sticky comfortable/compact densities.
-3. Business data remains in `app_data_dir/promptdock.sqlite3`; the UI library must not introduce `localStorage` as a business store.
-4. Rust commands remain the only data-operation API. No generic SQL IPC, remote API, telemetry, CDN, updater, AI SDK, or runtime font/icon fetch may be added.
-5. Existing clipboard, copy-count, variable-template, Option+Space, JSON import/export, five-pin limit, pin ordering, window coordination, and cross-window refresh behavior must remain unchanged.
-6. User content remains plain text. No `v-html` or executable template behavior may be introduced.
-7. This is a presentation and interaction-component refactor. It requires no database migration.
+1. `docs/product/PRD.md`, including its V1.1.1 scope revision, remains authoritative for product behavior, data safety, and supported platforms.
+2. The product-owner-approved `docs/superpowers/specs/2026-10-14-promptdock-ui-v3-design.md` remains authoritative for the V3 visual and interaction clauses that it explicitly superseded.
+3. This user-approved polish design refines the presentation and component implementation of that V3 structure without reopening its information architecture.
+4. `docs/product/UI_DESIGN_SPEC.md` and the older body text in `PRD.md` continue to apply only where they do not conflict with the V1.1.1 revision or the approved V3 design.
+
+The approved V3 design explicitly resolves the following older visual conflicts for this work:
+
+- its 84 px icon rail supersedes the older 253 px dark sidebar requirement;
+- its continuous list plus fixed 44/56 detail pane supersedes the older card-grid and overlay/detail-drawer-only flow;
+- its category delete-and-transfer destination supersedes the older default-category-only transfer presentation;
+- its comfortable 420×695 and compact 340×270 Sticky densities supersede the older single fixed 340×270 presentation, while compact mode preserves the original FR-17 size and five-slot behavior.
+
+The remaining constraints are:
+
+1. The V1.1.1 supported platforms are macOS 13+ (Apple Silicon and Intel) and Windows 10/11 x64. Shared Vue UI changes must work on both. Platform-specific behavior must stay isolated.
+2. The selected visual direction is macOS-inspired, but the implementation must use the host platform's real decorated titlebar for Main: native macOS traffic lights on macOS and the native Windows frame controls on Windows. The Vue content must not simulate either platform's window controls.
+3. A Windows native build and smoke pass is a release gate. If no Windows runner is available during this local macOS task, the result must be reported as `UNVERIFIED_WINDOWS_RUNTIME`; automated and macOS results must not be presented as Windows acceptance.
+4. Business data remains in `app_data_dir/promptdock.sqlite3`; the UI library must not introduce `localStorage` as a business store.
+5. Rust commands remain the only data-operation API. No generic SQL IPC, remote API, telemetry, CDN, updater, AI SDK, or runtime font/icon fetch may be added.
+6. Existing clipboard, copy-count, variable-template, Option+Space, JSON import/export, five-pin limit, pin ordering, window coordination, and cross-window refresh behavior must remain unchanged.
+7. User content remains plain text. No `v-html` or executable template behavior may be introduced.
+8. This is a presentation and interaction-component refactor. It requires no database migration.
 
 ## 3. Goals
 
@@ -39,13 +54,13 @@ This polish must preserve the existing product and data constraints:
 - Adding dark mode, themes, plugin systems, animations for decoration, or Liquid Glass effects in this stage.
 - Adopting Tailwind CSS, a full shadcn-vue distribution, Element Plus, Ant Design Vue, Vuetify, or another opinionated visual framework.
 - Changing database schemas, command payloads, product copy rules, backup formats, or window-mode semantics.
-- Making an unsigned/ad-hoc local build distributable outside the user's Mac.
+- Solving production code signing, notarization, or installer distribution for either platform.
 
 ## 5. Selected approach
 
 Use a targeted headless-component architecture:
 
-- `reka-ui` supplies interaction primitives for Dialog, Select, Tooltip, Popover/Dropdown where required, Toggle, and Switch. Its output is styled exclusively through PromptDock CSS and component wrappers.
+- `reka-ui` supplies interaction primitives for Dialog, Select, Tooltip, Toggle, and Switch. Its output is styled exclusively through PromptDock CSS and component wrappers.
 - `lucide-vue-next` supplies direct-import SVG icons. Dynamic whole-library icon loading is prohibited so that unused icons remain tree-shakeable.
 - PromptDock owns a thin `src/components/ui/` layer. Business windows and feature components depend on `Pd*` wrappers rather than scattering third-party APIs throughout the app.
 - Existing CSS remains the build-time styling mechanism. Tailwind is not introduced.
@@ -145,7 +160,7 @@ Decorative characters may remain inside user content, but application controls a
 
 ### 9.1 Native titlebar and rail
 
-- Keep the real decorated macOS main window and its native traffic-light controls.
+- Keep the real decorated Main window and its host-native frame controls: macOS traffic lights on macOS and standard window controls on Windows.
 - Remove the simulated traffic-light group from the Vue rail.
 - Retain the 84 px rail and compact brand, but reduce brand prominence relative to navigation.
 - Use Lucide icons, 18 px default size, consistent hit targets, and `PdTooltip` for names/shortcuts.
@@ -158,7 +173,7 @@ Decorative characters may remain inside user content, but application controls a
 - Search is the visually dominant control, with `Search` and the `⌘K` hint.
 - Category and tag use `PdSelect`.
 - Favorite, pinned, recent-use, and template-only filters become `PdToggle` chips with icon and short text.
-- Sort uses a compact `PdSelect` or menu with `ArrowUpDown`.
+- Sort uses a compact `PdSelect` with `ArrowUpDown`; no separate feature-level menu primitive is introduced for this requirement.
 - Clear-filters appears only while at least one nondefault filter is active.
 - Existing `PromptQuery` patches and Rust query semantics stay unchanged.
 
@@ -278,12 +293,14 @@ No business decision moves into the `Pd*` layer. Existing error levels, copy-bef
 - `pnpm typecheck`
 - `pnpm vitest run`
 - `pnpm build`
-- `cargo fmt --check`
-- `cargo test`
-- `cargo clippy --locked --offline --all-targets --all-features -- -D warnings`
+- `cargo fmt --manifest-path src-tauri/Cargo.toml --check`
+- `cargo test --manifest-path src-tauri/Cargo.toml`
+- `cargo clippy --manifest-path src-tauri/Cargo.toml --locked --offline --all-targets --all-features -- -D warnings`
 - `git diff --check`
 - `pnpm tauri build --bundles app`
 - `codesign --verify --deep --strict` on the local app bundle after any required ad-hoc re-signing
+
+The macOS runner executes the macOS bundle and signature checks. A Windows 10/11 x64 runner must also build the Windows target and smoke-test Main, Quick, and Sticky before cross-platform release acceptance. Lack of a Windows runner is reported as `UNVERIFIED_WINDOWS_RUNTIME`, not silently waived.
 
 ### 14.5 Native macOS acceptance
 
@@ -296,18 +313,28 @@ No business decision moves into the `Pd*` layer. Existing error levels, copy-bef
 - No runtime network connection for UI assets.
 - VoiceOver observation is reported separately and must remain `UNVERIFIED_MACOS_RUNTIME` if not performed.
 
+### 14.6 Native Windows acceptance
+
+- Main uses the native decorated Windows frame with no simulated macOS traffic lights in Vue content.
+- Shared workbench layout, filter overlays, category dialogs, and keyboard focus remain usable at the supported minimum window size.
+- Quick and Sticky undecorated windows expose functional close/return/settings actions and never depend on macOS-only decorative controls.
+- Sticky comfortable and compact logical dimensions retain five-slot fit under Windows display scaling.
+- System clipboard, application-data paths, and shortcuts continue using the existing platform-specific service paths.
+- Results require a Windows 10/11 x64 runner. Until observed, these items remain `UNVERIFIED_WINDOWS_RUNTIME`.
+
 ## 15. Acceptance criteria
 
 The polish is accepted when:
 
 1. No V3 application control uses the identified Unicode characters as its icon.
-2. Main uses the real macOS traffic lights without a second simulated set in the Vue content.
+2. Main uses its host-native decorated frame without simulated window controls in Vue content.
 3. Rail, filters, statistics, prompt list, detail toolbar, category dialogs, and Sticky use the shared icon and token language.
 4. Raw category/tag selects and compatible hand-built dialogs are replaced by PromptDock wrappers backed by Reka primitives.
 5. The 1024×700 Main minimum and both Sticky densities render without clipping or horizontal overflow.
 6. All existing product behavior and database invariants remain unchanged.
 7. Approved dependencies are locked and bundled locally with no runtime network request.
-8. Automated gates pass, a macOS `.app` is built, and native observations are recorded conservatively.
+8. Automated gates pass, a macOS `.app` is built, and native macOS observations are recorded conservatively.
+9. Cross-platform release acceptance additionally requires the defined Windows runner build and smoke pass; until then the Windows scope is explicitly `UNVERIFIED_WINDOWS_RUNTIME`.
 
 ## 16. Risks and mitigations
 
@@ -316,6 +343,7 @@ The polish is accepted when:
 - **Snapshot/test brittleness:** Prefer roles, labels, and `data-test` selectors over SVG markup or generated DOM structure.
 - **Minimum-width overflow:** Validate the complete filter row at 1024 px before polishing secondary surfaces.
 - **Sticky density regression:** Treat 420×695 and 340×270 as hard contracts and keep explicit component/native tests.
+- **Cross-platform visual drift:** Keep shared Vue tokens and wrappers platform-neutral, use system-font fallbacks, isolate native window behavior, and require a Windows runner before cross-platform release acceptance.
 - **Third-party visual leakage:** All application code consumes PromptDock wrappers and semantic tokens; default library styling is not imported.
 - **Accidental behavior refactor:** Do not change Rust commands, database migrations, or business-event contracts in this stage.
 
