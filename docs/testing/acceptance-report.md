@@ -1,3 +1,77 @@
+# PromptDock UI V3 Acceptance Addendum
+
+Test date: 2026-10-14 (Asia/Shanghai)
+
+Candidate: branch `feat/promptdock-ui-v3-simplify`, application source through commit `92ce025` (`feat: add V3 sticky window densities`). The report commit, if present, is documentation-only and later than the tested application source.
+
+Environment: macOS 26.4.1, Apple Silicon arm64, Node 25.6.0, pnpm 10.34.5, Rust/Cargo 1.92.0, PromptDock 1.1.1.
+
+## V3 delivered scope
+
+- The full window is one SQLite-backed workbench with an 84 px icon rail, combined search/filter controls, four real dashboard statistics, a scrollable 44% list pane, and a fixed 56% detail pane.
+- Category management is reachable from the rail, list header, and category selector. It supports create, rename, and guarded delete-with-transfer. The repository prevents deletion of the final category and keeps prompt identity, body, tags, favorites, pin order, copy statistics, and timestamps unchanged during transfer.
+- A sequential migration, `0003_daily_copy_stats.sql`, adds a local-date aggregate used for the real “today copies” statistic. Copy count and the daily aggregate are updated in one transaction.
+- The independent native sticky window persists `comfortable` or `compact` density. Comfortable uses 420×695 points and shows up to two preview lines; compact uses 340×270 points and keeps five title rows. Density resize and settings persistence are compensated together on failure.
+- Existing SQLite CRUD, system clipboard orchestration, variable-template flow, quick window, Option+Space registration path, JSON import/export, five-pin limit, manual pin order, native window-mode coordination, and cross-window event refresh remain in place.
+
+## V3 automated gates
+
+| Command | Result | Evidence |
+| --- | --- | --- |
+| `pnpm format:check` | PASS | Prettier reported all matched files formatted. |
+| `pnpm typecheck` | PASS | `vue-tsc --noEmit`, exit 0. |
+| `pnpm vitest run` | PASS | 13 files, 45 tests passed; 0 failed. |
+| `pnpm build` | PASS | 62 modules; CSS 38.34 kB (8.74 kB gzip), JS 125.96 kB (45.18 kB gzip). |
+| `cargo fmt --check` | PASS | Exit 0. |
+| `cargo test` | PASS | 74 Rust tests passed; 0 failed; doc tests passed. |
+| `cargo clippy --locked --offline --all-targets --all-features -- -D warnings` | PASS | Exit 0 with warnings denied. |
+| `git diff --check` | PASS | No whitespace errors. |
+| `pnpm tauri build --bundles app` | PASS | Release binary and macOS `.app` generated. |
+| `codesign --verify --deep --strict` | PASS | The V3 `.app` is valid on disk and satisfies its ad-hoc designated requirement. |
+
+The initial browser-preview server attempt was denied by the execution sandbox with `listen EPERM`; it was rerun with the approved local `pnpm dev` permission. This was a sandbox restriction, not an application assertion failure.
+
+## V3 database and safety evidence
+
+- Repository tests compose category + tag + favorite + pinned + recent + template filters with bound values.
+- Copy tests record two successful copies and assert both lifetime and same-day totals without changing unrelated dashboard counts.
+- Tag tests prove distinct, sorted tag enumeration from JSON arrays.
+- Category transfer tests move three prompts, compare every persisted field other than category, compare body bytes, and assert total prompt count is unchanged.
+- Category error tests reject the final-category deletion, same source/target, and missing target.
+- Density runtime tests prove comfortable/compact persistence and restore both saved settings and native size when native resize or settings persistence fails before or after mutation.
+- Backward-compatibility deserialization proves existing `sticky_window` settings without a density field default to `comfortable`.
+- Source inspection found no business `localStorage`, `BroadcastChannel`, `v-html`, remote API, telemetry, updater, or arbitrary SQL IPC path. The only `localStorage` match in application sources is the Vitest setup cleanup; localhost URLs are limited to the Tauri/Vite development configuration.
+- `.superpowers/` remains an existing untracked user directory and was not staged or committed. No SQLite/DB file exists inside the repository.
+
+## V3 visual and native observations
+
+- The main workbench was rendered at 1280×720 in the local application frontend. The combined controls remained on one row, all four cards were visible, and the list/detail panes retained the requested split without horizontal overflow.
+- The category manager was opened from the V3 UI and visually inspected with its safety explanation, category count area, create action, and completion action.
+- The comfortable sticky UI was rendered at an exact 420×695 viewport. All five slots, yellow card treatment, title/subtitle, management/sort actions, and always-on-top control fit without clipping.
+- The production `.app` was built at `/Users/qianduoduo/Desktop/AI_app/PromptDock/src-tauri/target/release/bundle/macos/PromptDock.app`, has a 7.2 MiB on-disk size, and contains a Mach-O arm64 executable. The executable SHA-256 observed during acceptance was `a74c109a4da03cafe1790a1e0b199bf75ae57e9e832c02d1e2ebf33f0a2d156a`.
+- After replacing the previously running installed instance, the new bundle executable was observed running from the repository bundle path.
+- Read-only inspection of the real app-data database after V3 launch returned `categories=6`, `prompts=4`, `daily_copy_stats=0`, and `migrations=3`. Existing sticky settings were successfully read as JSON containing `"density":"comfortable"`; no prompt/category mutation was performed for this inspection.
+
+## V3 native items not fully exercised
+
+The Mac became locked before native accessibility/screenshot interaction could attach to the newly launched V3 process. The following are therefore explicitly `UNVERIFIED_MACOS_RUNTIME` for this V3 candidate, even where deterministic tests or prior-version observations exist:
+
+- visible inspection and click-through of the packaged V3 main window against the real SQLite rows;
+- native comfortable → compact → comfortable resize and exact point-size measurement;
+- real drag-position restoration, multi-display clamping, Spaces behavior, and always-on-top against another application;
+- cross-application clipboard comparison in Notes/VS Code, variable-template copy, and Option+Space foreground focus;
+- live cross-window refresh after a real mutation;
+- destructive category transfer through the native UI (intentionally not run against the user's four real prompts);
+- VoiceOver spoken output.
+
+These are not presented as passed. The production process launch, database migration/read, automated runtime compensation tests, and exact-size frontend rendering are partial evidence only.
+
+## V3 conclusion
+
+The requested V3 implementation, data migration, category safety invariants, native density contract, automated checks, release build, signature verification, and non-destructive real-database startup check all passed. There are no known P0/P1 implementation failures in the tested scope. Release status is **conditional pass** pending the explicitly listed `UNVERIFIED_MACOS_RUNTIME` interaction checks after the Mac is unlocked.
+
+---
+
 # PromptDock V1.1 Acceptance Report
 
 Test date: 2026-10-14 (Asia/Shanghai)
