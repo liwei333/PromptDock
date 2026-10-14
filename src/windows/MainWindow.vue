@@ -36,6 +36,7 @@ const importing = ref(false);
 const importError = ref("");
 const saving = ref(false);
 const saveError = ref("");
+const switchingMode = ref(false);
 const copyingId = ref<string | null>(null);
 const toast = ref<{ text: string; kind: "success" | "error" } | null>(null);
 let stopListening: (() => void) | null = null;
@@ -157,6 +158,18 @@ async function exportBackup(): Promise<void> {
     if (!result.cancelled) notify(`已导出 ${result.promptCount} 条提示词`);
   } catch (reason) {
     notify(reason instanceof Error ? reason.message : "导出失败", "error");
+  }
+}
+
+async function enterStickyMode(): Promise<void> {
+  if (switchingMode.value) return;
+  switchingMode.value = true;
+  try {
+    await windowApi.enterStickyMode();
+  } catch {
+    notify("无法切换到便签模式", "error");
+  } finally {
+    switchingMode.value = false;
   }
 }
 
@@ -293,11 +306,9 @@ onBeforeUnmount(() => {
           <span>⌘ 快捷取用</span><kbd>⌘K</kbd>
         </button>
         <button
-          @click="
-            windowApi
-              .showSticky()
-              .catch(() => notify('无法打开便签窗口', 'error'))
-          "
+          data-test="sidebar-sticky-mode"
+          :disabled="switchingMode"
+          @click="enterStickyMode"
         >
           <span>▤ 便签模式</span><small>5 槽位</small>
         </button>
@@ -320,7 +331,12 @@ onBeforeUnmount(() => {
         <div class="toolbar-actions">
           <button class="ghost-button" @click="previewImport">导入</button>
           <button class="ghost-button" @click="exportBackup">导出</button>
-          <button class="ghost-button" @click="windowApi.showSticky()">
+          <button
+            data-test="toolbar-sticky-mode"
+            class="ghost-button"
+            :disabled="switchingMode"
+            @click="enterStickyMode"
+          >
             ▤ 便签模式
           </button>
           <button class="primary-button" @click="editing = null">
@@ -392,7 +408,13 @@ onBeforeUnmount(() => {
             </div>
             <div>
               <button @click="stickyManagerOpen = true">管理顺序</button>
-              <button @click="windowApi.showSticky()">打开便签窗 →</button>
+              <button
+                data-test="pinned-sticky-mode"
+                :disabled="switchingMode"
+                @click="enterStickyMode"
+              >
+                打开便签窗 →
+              </button>
             </div>
           </header>
           <div class="pinned-grid">
