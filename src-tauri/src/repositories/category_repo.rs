@@ -141,6 +141,12 @@ impl CategoryRepository {
         if !source_exists {
             return Err(AppError::NotFound("分类"));
         }
+        let category_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM categories")
+            .fetch_one(&mut *transaction)
+            .await?;
+        if category_count <= 1 {
+            return Err(AppError::Conflict("不能删除最后一个分类".to_string()));
+        }
         let target_exists: bool =
             sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM categories WHERE id = ?)")
                 .bind(move_to_category_id)
@@ -149,10 +155,8 @@ impl CategoryRepository {
         if !target_exists {
             return Err(AppError::CategoryNotFound);
         }
-        let now = Utc::now().timestamp_millis();
-        sqlx::query("UPDATE prompts SET category_id = ?, updated_at = ? WHERE category_id = ?")
+        sqlx::query("UPDATE prompts SET category_id = ? WHERE category_id = ?")
             .bind(move_to_category_id)
-            .bind(now)
             .bind(id)
             .execute(&mut *transaction)
             .await?;

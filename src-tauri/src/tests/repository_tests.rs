@@ -452,6 +452,105 @@ async fn category_delete_rejects_same_or_missing_move_target() {
 }
 
 #[tokio::test]
+async fn category_transfer_preserves_prompt_content_and_metadata() {
+    let directory = tempdir().expect("temporary directory");
+    let database = Database::connect_path(directory.path().join("promptdock.sqlite3"))
+        .await
+        .expect("database");
+    let categories = CategoryRepository::new(database.pool().clone());
+    let prompts = PromptRepository::new(database.pool().clone());
+    let source = categories.create("待安全迁移").await.expect("source");
+    let target = categories.create("安全目标").await.expect("target");
+
+    let mut created_ids = Vec::new();
+    for index in 1..=3 {
+        let mut input = prompt_input(
+            &format!("迁移提示词 {index}"),
+            &format!("正文 {index}\n{{{{变量{index}}}}}"),
+        );
+        input.category_id = source.id.clone();
+        input.tags = vec![format!("标签{index}"), "保留".to_string()];
+        input.is_favorite = index == 1;
+        input.is_pinned = index <= 2;
+        created_ids.push(prompts.create(input).await.expect("source prompt").id);
+    }
+    prompts
+        .record_successful_copy(&created_ids[0])
+        .await
+        .expect("copy metadata");
+    sqlx::query("UPDATE prompts SET updated_at = updated_at - 10000 WHERE category_id = ?")
+        .bind(&source.id)
+        .execute(database.pool())
+        .await
+        .expect("make update timestamps distinctive");
+
+    let mut before = Vec::new();
+    for id in &created_ids {
+        before.push(prompts.get(id).await.expect("source snapshot"));
+    }
+    let total_before: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM prompts")
+        .fetch_one(database.pool())
+        .await
+        .expect("total before");
+
+    categories
+        .delete_and_move(&source.id, &target.id)
+        .await
+        .expect("transactional transfer");
+
+    let total_after: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM prompts")
+        .fetch_one(database.pool())
+        .await
+        .expect("total after");
+    let target_after = categories.get(&target.id).await.expect("target after");
+    assert_eq!(total_after, total_before);
+    assert_eq!(target_after.prompt_count, 3);
+
+    for original in before {
+        let moved = prompts.get(&original.id).await.expect("moved prompt");
+        assert_eq!(moved.category_id, target.id);
+        assert_eq!(moved.id, original.id);
+        assert_eq!(moved.title, original.title);
+        assert_eq!(moved.description, original.description);
+        assert_eq!(moved.body.as_bytes(), original.body.as_bytes());
+        assert_eq!(moved.tags, original.tags);
+        assert_eq!(moved.is_favorite, original.is_favorite);
+        assert_eq!(moved.is_pinned, original.is_pinned);
+        assert_eq!(moved.pin_order, original.pin_order);
+        assert_eq!(moved.copy_count, original.copy_count);
+        assert_eq!(moved.last_copied_at, original.last_copied_at);
+        assert_eq!(moved.created_at, original.created_at);
+        assert_eq!(moved.updated_at, original.updated_at);
+    }
+}
+
+#[tokio::test]
+async fn category_delete_rejects_the_final_category() {
+    let directory = tempdir().expect("temporary directory");
+    let database = Database::connect_path(directory.path().join("promptdock.sqlite3"))
+        .await
+        .expect("database");
+    let categories = CategoryRepository::new(database.pool().clone());
+    sqlx::query("DELETE FROM categories WHERE id != ?")
+        .bind(GENERAL_CATEGORY_ID)
+        .execute(database.pool())
+        .await
+        .expect("leave one category");
+
+    let error = categories
+        .delete_and_move(
+            GENERAL_CATEGORY_ID,
+            "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        )
+        .await
+        .expect_err("final category is protected");
+
+    assert_eq!(error.code(), "CONFLICT");
+    assert!(error.to_string().contains("最后一个分类"));
+    assert_eq!(categories.list().await.expect("categories remain").len(), 1);
+}
+
+#[tokio::test]
 async fn sticky_slots_reject_a_sixth_prompt_and_keep_stable_manual_order() {
     let directory = tempdir().expect("temporary directory");
     let database = Database::connect_path(directory.path().join("promptdock.sqlite3"))
