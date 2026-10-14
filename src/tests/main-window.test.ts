@@ -7,14 +7,19 @@ import type { Category, Prompt } from "@/types/prompt";
 const GENERAL_CATEGORY_ID = "10000000-0000-4000-8000-000000000006";
 const CUSTOM_CATEGORY_ID = "dff11ee5-155c-4942-a598-6ffa9b50bc9c";
 
-const { categoryDelete, categoryList, confirmDialog, promptList } = vi.hoisted(
-  () => ({
-    categoryDelete: vi.fn(),
-    categoryList: vi.fn(),
-    confirmDialog: vi.fn(),
-    promptList: vi.fn(),
-  }),
-);
+const {
+  categoryDelete,
+  categoryList,
+  confirmDialog,
+  copyPromptText,
+  promptList,
+} = vi.hoisted(() => ({
+  categoryDelete: vi.fn(),
+  categoryList: vi.fn(),
+  confirmDialog: vi.fn(),
+  copyPromptText: vi.fn(),
+  promptList: vi.fn(),
+}));
 
 vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn().mockResolvedValue(() => undefined),
@@ -22,6 +27,10 @@ vi.mock("@tauri-apps/api/event", () => ({
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   confirm: confirmDialog,
+}));
+
+vi.mock("@/services/clipboard", () => ({
+  copyPromptText,
 }));
 
 vi.mock("@/api/commands", () => ({
@@ -116,6 +125,10 @@ describe("MainWindow category navigation", () => {
     categoryList.mockResolvedValue(categories);
     categoryDelete.mockResolvedValue({ deleted: true });
     confirmDialog.mockResolvedValue(true);
+    copyPromptText.mockResolvedValue({
+      status: "copied",
+      stats: { copyCount: 1, lastCopiedAt: 2 },
+    });
   });
 
   it("clears quick filters when switching from favorites to a category", async () => {
@@ -173,5 +186,24 @@ describe("MainWindow category navigation", () => {
     expect(wrapper.get("[data-test='template-error']").text()).toContain(
       "变量名",
     );
+  });
+
+  it("copies the original body when a variable name is not recognized", async () => {
+    promptList.mockResolvedValue({ items: [invalidTemplatePrompt], total: 1 });
+    const wrapper = mount(MainWindow, { global: { plugins: [createPinia()] } });
+    await flushPromises();
+
+    await wrapper.get(".prompt-card [data-test='copy']").trigger("click");
+    await flushPromises();
+
+    expect(copyPromptText).toHaveBeenCalledWith({
+      id: invalidTemplatePrompt.id,
+      text: invalidTemplatePrompt.body,
+    });
+
+    await wrapper.get(".prompt-card").trigger("click");
+    const detailCopy = wrapper.get(".detail-drawer .primary-button");
+    expect(detailCopy.attributes("disabled")).toBeUndefined();
+    expect(detailCopy.text()).toContain("复制");
   });
 });

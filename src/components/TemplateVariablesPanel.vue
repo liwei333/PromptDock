@@ -26,8 +26,9 @@ async function copy(): Promise<void> {
   error.value = "";
   try {
     copying.value = true;
-    if (template.value.error) throw template.value.error;
-    const text = renderTemplate(props.prompt.body, values);
+    const text = template.value.error
+      ? props.prompt.body
+      : renderTemplate(props.prompt.body, values);
     await copyPromptText({ id: props.prompt.id, text });
     emit("copied");
   } catch (reason) {
@@ -66,7 +67,7 @@ async function copy(): Promise<void> {
       data-test="template-error"
       role="alert"
     >
-      {{ template.error.message }}。请返回编辑正文中的变量占位符。
+      {{ template.error.message }}。将按原始正文复制。
     </p>
     <div class="preview-block">
       <span>结果预览</span>
@@ -75,12 +76,14 @@ async function copy(): Promise<void> {
     <p v-if="error" class="form-error" role="alert">{{ error }}</p>
     <footer>
       <button class="ghost-button" @click="emit('cancel')">返回</button>
-      <button
-        class="primary-button"
-        :disabled="copying || Boolean(template.error)"
-        @click="copy"
-      >
-        {{ copying ? "正在复制…" : "复制替换后的全文" }}
+      <button class="primary-button" :disabled="copying" @click="copy">
+        {{
+          copying
+            ? "正在复制…"
+            : template.error
+              ? "复制原始正文"
+              : "复制替换后的全文"
+        }}
       </button>
     </footer>
   </section>

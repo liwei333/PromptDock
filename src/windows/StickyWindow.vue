@@ -27,16 +27,7 @@ async function load(): Promise<void> {
 
 async function activate(prompt: Prompt): Promise<void> {
   const template = inspectTemplateVariables(prompt.body);
-  if (template.error) {
-    feedback.value = {
-      id: prompt.id,
-      text: "修正变量",
-      error: true,
-    };
-    window.setTimeout(() => (feedback.value = null), 1600);
-    return;
-  }
-  if (template.variables.length) {
+  if (!template.error && template.variables.length) {
     await windowApi.showQuick(prompt.id);
     return;
   }
@@ -55,7 +46,7 @@ async function activate(prompt: Prompt): Promise<void> {
 
 function promptActionLabel(prompt: Prompt): string {
   const template = inspectTemplateVariables(prompt.body);
-  if (template.error) return "修正变量";
+  if (template.error) return "复制";
   return template.variables.length ? "{}" : "复制";
 }
 

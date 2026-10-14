@@ -50,7 +50,7 @@ const hasVariables = computed(
           data-test="template-error"
           role="alert"
         >
-          {{ template.error.message }}。请编辑正文中的变量占位符后再复制。
+          {{ template.error.message }}。复制时将保留原始占位符。
         </p>
         <div class="tags">
           <span v-for="tag in prompt.tags" :key="tag">#{{ tag }}</span>
@@ -67,14 +67,10 @@ const hasVariables = computed(
           <button class="ghost-button" @click="emit('edit', prompt)">
             编辑
           </button>
-          <button
-            class="primary-button"
-            :disabled="Boolean(template.error)"
-            @click="emit('copy', prompt)"
-          >
+          <button class="primary-button" @click="emit('copy', prompt)">
             {{
               template.error
-                ? "修正变量格式后复制"
+                ? "复制原始正文"
                 : hasVariables
                   ? "填写变量"
                   : "复制完整正文"

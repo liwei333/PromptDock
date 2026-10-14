@@ -86,11 +86,7 @@ async function activate(
   if (!prompt) return;
   error.value = "";
   const template = inspectTemplateVariables(prompt.body);
-  if (template.error) {
-    error.value = `${template.error.message}，请在主窗口编辑后重试`;
-    return;
-  }
-  if (template.variables.length) {
+  if (!template.error && template.variables.length) {
     templatePrompt.value = prompt;
     return;
   }
@@ -106,7 +102,7 @@ async function activate(
 
 function actionLabel(prompt: Prompt): string {
   const template = inspectTemplateVariables(prompt.body);
-  if (template.error) return "修正变量";
+  if (template.error) return "复制原文 ↵";
   return template.variables.length ? "填变量 ↵" : "复制 ↵";
 }
 

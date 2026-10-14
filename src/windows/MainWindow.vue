@@ -77,13 +77,7 @@ function updateSearch(value: string): void {
 
 async function copy(prompt: Prompt): Promise<void> {
   const template = inspectTemplateVariables(prompt.body);
-  if (template.error) {
-    selected.value = prompt;
-    variableMode.value = false;
-    notify(`${template.error.message}，请先编辑提示词正文`, "error");
-    return;
-  }
-  if (template.variables.length) {
+  if (!template.error && template.variables.length) {
     selected.value = prompt;
     variableMode.value = true;
     return;
@@ -110,7 +104,7 @@ async function copy(prompt: Prompt): Promise<void> {
 
 function promptActionLabel(prompt: Prompt): string {
   const template = inspectTemplateVariables(prompt.body);
-  if (template.error) return "修正变量";
+  if (template.error) return "复制原文";
   return template.variables.length ? "填写变量" : "复制全文";
 }
 

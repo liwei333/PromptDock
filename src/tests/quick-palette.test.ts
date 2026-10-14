@@ -1,5 +1,15 @@
 import { mount } from "@vue/test-utils";
-import { describe, expect, it } from "vitest";
+import { flushPromises } from "@vue/test-utils";
+import { describe, expect, it, vi } from "vitest";
+
+const { copyPromptText } = vi.hoisted(() => ({
+  copyPromptText: vi.fn().mockResolvedValue({
+    status: "copied",
+    stats: { copyCount: 1, lastCopiedAt: 2 },
+  }),
+}));
+
+vi.mock("@/services/clipboard", () => ({ copyPromptText }));
 
 import QuickPalette from "@/components/QuickPalette.vue";
 import type { Prompt } from "@/types/prompt";
@@ -52,5 +62,24 @@ describe("QuickPalette", () => {
     const results = wrapper.findAll("[data-test='quick-result']");
     expect(results).toHaveLength(1);
     expect(results[0].text()).toContain("季度经营复盘");
+  });
+
+  it("copies an unrecognized variable placeholder as original text", async () => {
+    const prompt = {
+      ...item(1),
+      body: "分析基准日：{{分析日期，默认最新可获取交易日}}",
+    };
+    const wrapper = mount(QuickPalette, {
+      props: { initialPrompts: [prompt], embedded: true },
+    });
+
+    await wrapper.get("[data-test='quick-result']").trigger("click");
+    await flushPromises();
+
+    expect(copyPromptText).toHaveBeenCalledWith({
+      id: prompt.id,
+      text: prompt.body,
+    });
+    expect(wrapper.emitted("copied")).toEqual([[prompt]]);
   });
 });
