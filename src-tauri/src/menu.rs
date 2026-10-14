@@ -1,9 +1,8 @@
 use tauri::{
     AppHandle, Runtime,
-    menu::{Menu, MenuItem, PredefinedMenuItem, Submenu},
+    menu::{IsMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu},
 };
 
-#[cfg(test)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum EditMenuEntry {
     Undo,
@@ -15,7 +14,6 @@ pub(crate) enum EditMenuEntry {
     SelectAll,
 }
 
-#[cfg(test)]
 pub(crate) const EDIT_MENU_ENTRIES: [EditMenuEntry; 8] = [
     EditMenuEntry::Undo,
     EditMenuEntry::Redo,
@@ -40,29 +38,24 @@ pub(crate) fn build_menu<R: Runtime>(handle: &AppHandle<R>) -> tauri::Result<Men
         &[&open_main, &toggle_sticky, &app_separator, &quit],
     )?;
 
-    let undo = PredefinedMenuItem::undo(handle, None)?;
-    let redo = PredefinedMenuItem::redo(handle, None)?;
-    let edit_separator_one = PredefinedMenuItem::separator(handle)?;
-    let cut = PredefinedMenuItem::cut(handle, None)?;
-    let copy = PredefinedMenuItem::copy(handle, None)?;
-    let paste = PredefinedMenuItem::paste(handle, None)?;
-    let edit_separator_two = PredefinedMenuItem::separator(handle)?;
-    let select_all = PredefinedMenuItem::select_all(handle, None)?;
-    let edit_menu = Submenu::with_items(
-        handle,
-        "编辑",
-        true,
-        &[
-            &undo,
-            &redo,
-            &edit_separator_one,
-            &cut,
-            &copy,
-            &paste,
-            &edit_separator_two,
-            &select_all,
-        ],
-    )?;
+    let mut edit_items = Vec::with_capacity(EDIT_MENU_ENTRIES.len());
+    for entry in EDIT_MENU_ENTRIES {
+        let item = match entry {
+            EditMenuEntry::Undo => PredefinedMenuItem::undo(handle, None)?,
+            EditMenuEntry::Redo => PredefinedMenuItem::redo(handle, None)?,
+            EditMenuEntry::Separator => PredefinedMenuItem::separator(handle)?,
+            EditMenuEntry::Cut => PredefinedMenuItem::cut(handle, None)?,
+            EditMenuEntry::Copy => PredefinedMenuItem::copy(handle, None)?,
+            EditMenuEntry::Paste => PredefinedMenuItem::paste(handle, None)?,
+            EditMenuEntry::SelectAll => PredefinedMenuItem::select_all(handle, None)?,
+        };
+        edit_items.push(item);
+    }
+    let edit_item_refs: Vec<&dyn IsMenuItem<R>> = edit_items
+        .iter()
+        .map(|item| item as &dyn IsMenuItem<R>)
+        .collect();
+    let edit_menu = Submenu::with_items(handle, "编辑", true, &edit_item_refs)?;
 
     Menu::with_items(handle, &[&app_menu, &edit_menu])
 }
