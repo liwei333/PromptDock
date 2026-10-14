@@ -63,18 +63,15 @@ The 23 tests cover:
 
 ## Native release smoke test
 
-The packaged release app, not the static HTML prototype, was launched from:
+The accepted packaged release app, not the static HTML prototype, was launched from this repository-relative path:
 
 ```text
-/Users/qianduoduo/Desktop/AI_app/PromptDock/src-tauri/target/release/bundle/macos/PromptDock.app
+src-tauri/target/release/bundle/macos/PromptDock.app
 ```
 
-Observed in the native Tauri process:
+### Current accepted-candidate observations — 2026-10-14
 
-- main window loads the real SQLite-backed empty library and six categories;
-- runtime information returns version 1.1.0, `Option+Space · 已注册` and the real DB path;
-- the custom category dialog replaces unsupported browser `prompt()` behavior;
-- quick search opens and Escape closes it;
+- main window opened the real SQLite-backed library with six categories and one existing prompt named `测试`;
 - the native Edit menu contains Undo, Redo, Cut, Copy, Paste and Select All;
 - title, tags, description and body accept multiline Unicode system-pasteboard text, including Chinese, `✓`, HTML-like characters, template braces and emoji;
 - `Cmd+A`, `Cmd+C`, `Cmd+V`, `Cmd+X`, `Cmd+Z` and `Shift+Cmd+Z` visibly select, copy, paste, cut, undo and redo;
@@ -84,16 +81,28 @@ Observed in the native Tauri process:
 - explicitly closing sticky persists `visible:false`; a later macOS application activation recovers Main;
 - six rapid alternating transitions ended in the requested exclusive mode every time;
 - relaunch with persisted Main restores only Main, and relaunch with persisted Sticky restores only Sticky;
-- sticky measures 680×540 Retina pixels at scale factor 2.0 (340×270 points), shows exactly five slots, and its always-on-top control toggles on and off;
-- opening the `.app` a second time keeps one process only.
+- sticky measures 680×540 Retina pixels at scale factor 2.0 (340×270 points), shows one populated slot plus four empty slots, and its always-on-top control toggles on and off;
+- opening the `.app` a second time while Sticky was visible activated only Main through the single-instance path.
+
+The populated new-prompt form used for clipboard/shortcut checks was discarded without saving; the existing `测试` prompt remained the only stored prompt.
+
+### Prior native baseline retained — 2026-10-13
+
+These observations remain valid evidence for their own scopes but were not rerun as part of the 2026-10-14 accepted-candidate interaction pass:
+
+- a fresh-data run rendered an empty library with exactly six default categories;
+- runtime information returned version 1.1.0, `Option+Space · 已注册` and the real DB path;
+- the custom category dialog replaced unsupported browser `prompt()` behavior;
+- quick search opened and Escape closed it;
+- a second launch left exactly one PromptDock process (`process_count=1`).
 
 Native drag-position preservation is `NOT_TESTED`: Computer Use drag attempts did not move the window, so only deterministic Rust position/startup tests cover it. VoiceOver spoken output is also `NOT_TESTED`; component tests cover the DOM/live-region lifecycle, but no spoken audio was observed.
 
-Actual DB inspection after native launch:
+Fresh read-only DB inspection after the 2026-10-14 native acceptance run:
 
 ```text
 categories|6
-prompts|0
+prompts|1
 app_settings|2
 migrations|2
 ```
@@ -115,9 +124,11 @@ Database path:
 ## Release artifacts
 
 ```text
-App: /Users/qianduoduo/Desktop/AI_app/PromptDock/src-tauri/target/release/bundle/macos/PromptDock.app
-DMG: /Users/qianduoduo/Desktop/AI_app/PromptDock/src-tauri/target/release/bundle/dmg/PromptDock_1.1.0_aarch64.dmg
+App: src-tauri/target/release/bundle/macos/PromptDock.app
+DMG: src-tauri/target/release/bundle/dmg/PromptDock_1.1.0_aarch64.dmg
 ```
+
+These repository-relative paths identify the exact accepted candidate that was signed, exercised, and used to create the verified DMG/App ZIP.
 
 - App size: 7.14 MiB
 - DMG size: 3,462,474 bytes
