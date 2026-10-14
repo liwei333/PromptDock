@@ -23,10 +23,11 @@ describe("windowApi", () => {
     expect(invoke).toHaveBeenLastCalledWith("enter_main_mode");
   });
 
-  it("sends only the always-on-top preference", async () => {
+  it("sends only the requested sticky preference", async () => {
     invoke.mockResolvedValueOnce({
       visible: true,
       alwaysOnTop: false,
+      density: "comfortable",
       x: 120,
       y: 80,
       monitorName: "Built-in Retina Display",
@@ -37,6 +38,20 @@ describe("windowApi", () => {
 
     expect(invoke).toHaveBeenLastCalledWith("set_sticky_settings", {
       settings: { alwaysOnTop: false },
+    });
+
+    invoke.mockResolvedValueOnce({
+      visible: true,
+      alwaysOnTop: false,
+      density: "compact",
+      x: 120,
+      y: 80,
+      monitorName: "Built-in Retina Display",
+      scaleFactor: 2,
+    });
+    await windowApi.setStickySettings({ density: "compact" });
+    expect(invoke).toHaveBeenLastCalledWith("set_sticky_settings", {
+      settings: { density: "compact" },
     });
   });
 

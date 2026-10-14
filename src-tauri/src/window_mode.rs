@@ -1,12 +1,14 @@
 use std::future::Future;
 
 use serde::Serialize;
-use tauri::{AppHandle, Manager, PhysicalPosition, WebviewWindow};
+use tauri::{AppHandle, LogicalSize, Manager, PhysicalPosition, WebviewWindow};
 use tokio::sync::Mutex;
 
 use crate::{
-    commands::windows::StickySettings, domain::errors::AppError,
-    repositories::settings_repo::SettingsRepository, state::AppState,
+    commands::windows::{StickyDensity, StickySettings},
+    domain::errors::AppError,
+    repositories::settings_repo::SettingsRepository,
+    state::AppState,
 };
 
 const STICKY_SETTINGS_KEY: &str = "sticky_window";
@@ -51,6 +53,7 @@ pub(crate) trait WindowModeRuntime: Send + Sync {
     fn configure_sticky(&self, settings: &StickySettings) -> Result<(), AppError>;
     fn capture_sticky_position(&self, settings: &mut StickySettings) -> Result<(), AppError>;
     fn set_sticky_always_on_top(&self, value: bool) -> Result<(), AppError>;
+    fn set_sticky_density(&self, value: StickyDensity) -> Result<(), AppError>;
 }
 
 pub(crate) struct TauriWindowModeRuntime {
@@ -122,6 +125,7 @@ impl WindowModeRuntime for TauriWindowModeRuntime {
     }
 
     fn configure_sticky(&self, settings: &StickySettings) -> Result<(), AppError> {
+        self.set_sticky_density(settings.density)?;
         self.set_sticky_always_on_top(settings.always_on_top)?;
         let (Some(x), Some(y)) = (settings.x, settings.y) else {
             return Ok(());
@@ -187,6 +191,13 @@ impl WindowModeRuntime for TauriWindowModeRuntime {
             .set_always_on_top(value)
             .map_err(|_| AppError::Native("无法设置便签窗口置顶".to_string()))
     }
+
+    fn set_sticky_density(&self, value: StickyDensity) -> Result<(), AppError> {
+        let (width, height) = value.logical_size();
+        self.window(ProductWindow::Sticky)?
+            .set_size(LogicalSize::new(width, height))
+            .map_err(|_| AppError::Native("无法调整便签窗口尺寸".to_string()))
+    }
 }
 
 pub(crate) async fn transition_to(
@@ -210,6 +221,7 @@ pub(crate) async fn persist_sticky_position(
     // A moved event owns only the position fields, even if capture returned stale preferences.
     settings.visible = original.visible;
     settings.always_on_top = original.always_on_top;
+    settings.density = original.density;
     if let Err(error) = runtime.write_settings(&settings).await {
         let rollback = restore_settings_if_attempted(runtime, &original, true).await;
         return Err(transition_error(error, rollback));
@@ -222,13 +234,40 @@ pub(crate) async fn set_sticky_always_on_top(
     mutex: &Mutex<()>,
     value: bool,
 ) -> Result<StickySettings, AppError> {
+    set_sticky_preferences(runtime, mutex, Some(value), None).await
+}
+
+pub(crate) async fn set_sticky_density(
+    runtime: &impl WindowModeRuntime,
+    mutex: &Mutex<()>,
+    value: StickyDensity,
+) -> Result<StickySettings, AppError> {
+    set_sticky_preferences(runtime, mutex, None, Some(value)).await
+}
+
+pub(crate) async fn set_sticky_preferences(
+    runtime: &impl WindowModeRuntime,
+    mutex: &Mutex<()>,
+    always_on_top: Option<bool>,
+    density: Option<StickyDensity>,
+) -> Result<StickySettings, AppError> {
     let _guard = mutex.lock().await;
     let original = runtime.read_settings().await?;
     let mut settings = original.clone();
-    settings.always_on_top = value;
+    if let Some(value) = always_on_top {
+        settings.always_on_top = value;
+    }
+    if let Some(value) = density {
+        settings.density = value;
+    }
     let mut persistence_attempted = false;
     let result = async {
-        runtime.set_sticky_always_on_top(value)?;
+        if let Some(value) = always_on_top {
+            runtime.set_sticky_always_on_top(value)?;
+        }
+        if let Some(value) = density {
+            runtime.set_sticky_density(value)?;
+        }
         persistence_attempted = true;
         runtime.write_settings(&settings).await
     }
@@ -236,11 +275,20 @@ pub(crate) async fn set_sticky_always_on_top(
     if let Err(error) = result {
         let mut rollback =
             restore_settings_if_attempted(runtime, &original, persistence_attempted).await;
-        record_rollback_error(
-            &mut rollback,
-            "restore_always_on_top",
-            runtime.set_sticky_always_on_top(original.always_on_top),
-        );
+        if density.is_some() {
+            record_rollback_error(
+                &mut rollback,
+                "restore_density",
+                runtime.set_sticky_density(original.density),
+            );
+        }
+        if always_on_top.is_some() {
+            record_rollback_error(
+                &mut rollback,
+                "restore_always_on_top",
+                runtime.set_sticky_always_on_top(original.always_on_top),
+            );
+        }
         return Err(transition_error(error, rollback));
     }
     Ok(settings)

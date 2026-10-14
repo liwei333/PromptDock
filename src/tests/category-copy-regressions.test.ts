@@ -142,6 +142,7 @@ describe("category and raw-copy regressions", () => {
     windowApi.getStickySettings.mockResolvedValue({
       visible: true,
       alwaysOnTop: true,
+      density: "comfortable",
       x: null,
       y: null,
       monitorName: null,
@@ -150,6 +151,7 @@ describe("category and raw-copy regressions", () => {
     windowApi.setStickySettings.mockResolvedValue({
       visible: true,
       alwaysOnTop: true,
+      density: "comfortable",
       x: null,
       y: null,
       monitorName: null,

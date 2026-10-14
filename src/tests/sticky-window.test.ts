@@ -2,6 +2,24 @@ import { flushPromises, mount } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import auxiliaryCapability from "../../src-tauri/capabilities/auxiliary.json";
+import type { Prompt } from "@/types/prompt";
+
+const pinnedPrompt: Prompt = {
+  id: "pinned-1",
+  title: "Codex 执行反馈模板",
+  description: "用于让 Codex 按步骤执行任务并返回结构化执行结果。",
+  body: "完整正文",
+  categoryId: "category-1",
+  categoryName: "开发工具",
+  tags: ["Codex"],
+  isFavorite: true,
+  isPinned: true,
+  pinOrder: 1,
+  copyCount: 12,
+  lastCopiedAt: null,
+  createdAt: 1,
+  updatedAt: 1,
+};
 
 const { promptApi, windowApi } = vi.hoisted(() => ({
   promptApi: { listSticky: vi.fn() },
@@ -35,6 +53,7 @@ describe("StickyWindow", () => {
       y: 80,
       monitorName: "Built-in Retina Display",
       scaleFactor: 2,
+      density: "comfortable",
     });
     windowApi.setStickySettings.mockResolvedValue({
       visible: true,
@@ -43,6 +62,7 @@ describe("StickyWindow", () => {
       y: 80,
       monitorName: "Built-in Retina Display",
       scaleFactor: 2,
+      density: "comfortable",
     });
   });
 
@@ -67,7 +87,66 @@ describe("StickyWindow", () => {
     await flushPromises();
     expect(wrapper.findAll("[data-test='sticky-slot']")).toHaveLength(5);
     expect(wrapper.text()).toContain("空位 1");
-    expect(wrapper.text()).toContain("0/5");
+    expect(wrapper.text()).toContain("置顶 0 条");
+    wrapper.unmount();
+  });
+
+  it("renders descriptions in comfortable density and keeps five slots", async () => {
+    promptApi.listSticky.mockResolvedValue([pinnedPrompt]);
+    const wrapper = mount(StickyWindow);
+    await flushPromises();
+
+    expect(wrapper.get(".sticky-window").classes()).toContain("comfortable");
+    expect(wrapper.get(".sticky-description").text()).toContain(
+      pinnedPrompt.description,
+    );
+    expect(wrapper.findAll("[data-test='sticky-slot']")).toHaveLength(5);
+    wrapper.unmount();
+  });
+
+  it("persists compact density and removes descriptions from compact rows", async () => {
+    promptApi.listSticky.mockResolvedValue([pinnedPrompt]);
+    windowApi.setStickySettings.mockResolvedValueOnce({
+      visible: true,
+      alwaysOnTop: true,
+      x: 120,
+      y: 80,
+      monitorName: "Built-in Retina Display",
+      scaleFactor: 2,
+      density: "compact",
+    });
+    const wrapper = mount(StickyWindow);
+    await flushPromises();
+
+    await wrapper.get("[data-test='sticky-menu']").trigger("click");
+    await wrapper.get("[data-test='sticky-density-toggle']").trigger("click");
+    await flushPromises();
+
+    expect(windowApi.setStickySettings).toHaveBeenCalledWith({
+      density: "compact",
+    });
+    expect(wrapper.get(".sticky-window").classes()).toContain("compact");
+    expect(wrapper.find(".sticky-description").exists()).toBe(false);
+    expect(wrapper.findAll("[data-test='sticky-slot']")).toHaveLength(5);
+    wrapper.unmount();
+  });
+
+  it("keeps the displayed density and reports an accessible error when resize fails", async () => {
+    promptApi.listSticky.mockResolvedValue([pinnedPrompt]);
+    windowApi.setStickySettings.mockRejectedValueOnce(
+      new Error("native failure"),
+    );
+    const wrapper = mount(StickyWindow);
+    await flushPromises();
+
+    await wrapper.get("[data-test='sticky-menu']").trigger("click");
+    await wrapper.get("[data-test='sticky-density-toggle']").trigger("click");
+    await flushPromises();
+
+    expect(wrapper.get(".sticky-window").classes()).toContain("comfortable");
+    expect(wrapper.get("[aria-live='polite']").text()).toContain(
+      "无法调整便签尺寸",
+    );
     wrapper.unmount();
   });
 

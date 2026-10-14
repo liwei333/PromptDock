@@ -538,10 +538,7 @@ async fn category_delete_rejects_the_final_category() {
         .expect("leave one category");
 
     let error = categories
-        .delete_and_move(
-            GENERAL_CATEGORY_ID,
-            "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-        )
+        .delete_and_move(GENERAL_CATEGORY_ID, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
         .await
         .expect_err("final category is protected");
 

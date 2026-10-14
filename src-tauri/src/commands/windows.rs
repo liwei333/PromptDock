@@ -6,17 +6,36 @@ use crate::{
     state::{AppState, ShortcutStatus},
     window_mode::{
         TauriWindowModeRuntime, WindowMode, WindowModeRuntime, hide_sticky_explicitly,
-        set_sticky_always_on_top, transition_to,
+        set_sticky_preferences, transition_to,
     },
 };
 
 type CommandResult<T> = Result<T, ErrorPayload>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum StickyDensity {
+    #[default]
+    Comfortable,
+    Compact,
+}
+
+impl StickyDensity {
+    pub(crate) fn logical_size(self) -> (f64, f64) {
+        match self {
+            Self::Comfortable => (420.0, 695.0),
+            Self::Compact => (340.0, 270.0),
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StickySettings {
     pub visible: bool,
     pub always_on_top: bool,
+    #[serde(default)]
+    pub density: StickyDensity,
     pub x: Option<i32>,
     pub y: Option<i32>,
     pub monitor_name: Option<String>,
@@ -28,6 +47,7 @@ impl Default for StickySettings {
         Self {
             visible: false,
             always_on_top: true,
+            density: StickyDensity::Comfortable,
             x: None,
             y: None,
             monitor_name: None,
@@ -40,6 +60,7 @@ impl Default for StickySettings {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct StickySettingsPatch {
     pub always_on_top: Option<bool>,
+    pub density: Option<StickyDensity>,
 }
 
 #[derive(Debug, Serialize)]
@@ -155,13 +176,27 @@ pub async fn set_sticky_settings(
     settings: StickySettingsPatch,
 ) -> CommandResult<StickySettings> {
     let runtime = TauriWindowModeRuntime::new(app, state.inner().clone());
-    match settings.always_on_top {
-        Some(value) => set_sticky_always_on_top(&runtime, &state.mode_transition, value)
-            .await
-            .map_err(Into::into),
-        None => {
+    match (settings.always_on_top, settings.density) {
+        (None, None) => {
             let _guard = state.mode_transition.lock().await;
             runtime.read_settings().await.map_err(Into::into)
+        }
+        (Some(always_on_top), None) => crate::window_mode::set_sticky_always_on_top(
+            &runtime,
+            &state.mode_transition,
+            always_on_top,
+        )
+        .await
+        .map_err(Into::into),
+        (None, Some(density)) => {
+            crate::window_mode::set_sticky_density(&runtime, &state.mode_transition, density)
+                .await
+                .map_err(Into::into)
+        }
+        (always_on_top, density) => {
+            set_sticky_preferences(&runtime, &state.mode_transition, always_on_top, density)
+                .await
+                .map_err(Into::into)
         }
     }
 }
@@ -211,5 +246,30 @@ mod tests {
         assert_eq!(patch.always_on_top, Some(false));
         let empty: StickySettingsPatch = serde_json::from_value(serde_json::json!({})).unwrap();
         assert_eq!(empty.always_on_top, None);
+        assert_eq!(empty.density, None);
+    }
+
+    #[test]
+    fn sticky_settings_are_backward_compatible_and_density_patch_is_typed() {
+        let settings: super::StickySettings = serde_json::from_value(serde_json::json!({
+            "visible": true,
+            "alwaysOnTop": true,
+            "x": null,
+            "y": null,
+            "monitorName": null,
+            "scaleFactor": null
+        }))
+        .unwrap();
+        assert_eq!(settings.density, super::StickyDensity::Comfortable);
+
+        let patch: StickySettingsPatch =
+            serde_json::from_value(serde_json::json!({ "density": "compact" })).unwrap();
+        assert_eq!(patch.density, Some(super::StickyDensity::Compact));
+        assert!(
+            serde_json::from_value::<StickySettingsPatch>(
+                serde_json::json!({ "density": "oversized" })
+            )
+            .is_err()
+        );
     }
 }

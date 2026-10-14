@@ -8,12 +8,12 @@ use std::{
 use tokio::sync::{Mutex as AsyncMutex, Notify};
 
 use crate::{
-    commands::windows::StickySettings,
+    commands::windows::{StickyDensity, StickySettings},
     domain::errors::{AppError, ErrorPayload},
     window_mode::{
         ProductWindow, WindowMode, WindowModeRuntime, hide_sticky_explicitly,
         persist_sticky_position, reconcile_startup_mode, set_sticky_always_on_top,
-        toggle_product_mode, transition_to,
+        set_sticky_density, toggle_product_mode, transition_to,
     },
 };
 
@@ -26,6 +26,7 @@ struct ModeledState {
     defer_sticky_placement: bool,
     pending_sticky_placement: Option<StickyPlacement>,
     native_always_on_top: bool,
+    native_density: StickyDensity,
     operations: Vec<&'static str>,
     failures: VecDeque<InjectedFailure>,
     write_gate: Option<Arc<WriteGate>>,
@@ -111,6 +112,7 @@ impl FakeRuntime {
             defer_sticky_placement: false,
             pending_sticky_placement: None,
             native_always_on_top: true,
+            native_density: StickyDensity::Comfortable,
             operations: Vec::new(),
             failures: VecDeque::new(),
             write_gate: None,
@@ -320,6 +322,7 @@ impl WindowModeRuntime for FakeRuntime {
             }
         }
         state.native_always_on_top = settings.always_on_top;
+        state.native_density = settings.density;
         state.finish("configure_sticky")
     }
 
@@ -333,6 +336,10 @@ impl WindowModeRuntime for FakeRuntime {
         if state.corrupt_captured_preferences {
             settings.visible = !settings.visible;
             settings.always_on_top = !settings.always_on_top;
+            settings.density = match settings.density {
+                StickyDensity::Comfortable => StickyDensity::Compact,
+                StickyDensity::Compact => StickyDensity::Comfortable,
+            };
         }
         state.finish("capture_sticky_position")
     }
@@ -342,6 +349,55 @@ impl WindowModeRuntime for FakeRuntime {
         state.begin("set_sticky_always_on_top")?;
         state.native_always_on_top = value;
         state.finish("set_sticky_always_on_top")
+    }
+
+    fn set_sticky_density(&self, value: StickyDensity) -> Result<(), AppError> {
+        let mut state = self.0.lock().unwrap();
+        state.begin("set_sticky_density")?;
+        state.native_density = value;
+        state.finish("set_sticky_density")
+    }
+}
+
+#[tokio::test]
+async fn density_preference_applies_native_size_and_persists() {
+    let runtime = FakeRuntime::new(false, true, true);
+
+    let settings = set_sticky_density(&runtime, &AsyncMutex::new(()), StickyDensity::Compact)
+        .await
+        .unwrap();
+
+    assert_eq!(settings.density, StickyDensity::Compact);
+    let state = runtime.0.lock().unwrap();
+    assert_eq!(state.settings.density, StickyDensity::Compact);
+    assert_eq!(state.native_density, StickyDensity::Compact);
+    assert_eq!(
+        state.operations,
+        [
+            "snapshot_settings",
+            "set_sticky_density",
+            "persist_visible_true"
+        ]
+    );
+}
+
+#[tokio::test]
+async fn density_apply_or_persist_failure_restores_settings_and_native_size() {
+    for operation in ["set_sticky_density", "persist_visible_true"] {
+        for timing in [FailureTiming::Before, FailureTiming::After] {
+            let runtime = FakeRuntime::new(false, true, true);
+            let snapshot = runtime.snapshot();
+            runtime.fail(operation, timing, primary_failure(operation));
+
+            set_sticky_density(&runtime, &AsyncMutex::new(()), StickyDensity::Compact)
+                .await
+                .unwrap_err();
+
+            assert_eq!(runtime.snapshot(), snapshot);
+            let state = runtime.0.lock().unwrap();
+            assert_eq!(state.native_density, StickyDensity::Comfortable);
+            assert!(state.failures.is_empty());
+        }
     }
 }
 
@@ -953,7 +1009,7 @@ async fn position_persistence_reads_latest_settings_under_lock_and_only_changes_
     let settings = moved.await.unwrap();
 
     let expected = serde_json::json!({
-        "visible": true, "alwaysOnTop": false, "x": 120, "y": 240,
+        "visible": true, "alwaysOnTop": false, "density": "comfortable", "x": 120, "y": 240,
         "monitorName": "Modeled monitor", "scaleFactor": 2.0,
     });
     assert_eq!(serde_json::to_value(&settings).unwrap(), expected);
