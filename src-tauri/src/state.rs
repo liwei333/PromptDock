@@ -10,6 +10,32 @@ use serde::Serialize;
 use crate::db::Database;
 use crate::services::backup_service::BackupDocument;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DesktopPlatform {
+    MacOs,
+    Windows,
+    Other,
+}
+
+pub(crate) const fn shortcut_configuration(
+    platform: DesktopPlatform,
+) -> (&'static str, &'static str) {
+    match platform {
+        DesktopPlatform::MacOs => ("Alt+Space", "Option+Space"),
+        DesktopPlatform::Windows | DesktopPlatform::Other => ("Ctrl+Alt+Space", "Ctrl+Alt+Space"),
+    }
+}
+
+pub(crate) const fn current_shortcut_configuration() -> (&'static str, &'static str) {
+    if cfg!(target_os = "macos") {
+        shortcut_configuration(DesktopPlatform::MacOs)
+    } else if cfg!(target_os = "windows") {
+        shortcut_configuration(DesktopPlatform::Windows)
+    } else {
+        shortcut_configuration(DesktopPlatform::Other)
+    }
+}
+
 #[derive(Clone)]
 pub struct PendingImport {
     pub document: BackupDocument,
@@ -27,7 +53,7 @@ pub struct ShortcutStatus {
 impl Default for ShortcutStatus {
     fn default() -> Self {
         Self {
-            accelerator: "Option+Space".to_string(),
+            accelerator: current_shortcut_configuration().1.to_string(),
             registered: false,
             error: None,
         }

@@ -224,10 +224,15 @@ function keydown(event: KeyboardEvent): void {
   const editingText = target?.matches(
     "input, textarea, select, [contenteditable='true']",
   );
-  if (event.metaKey && event.key.toLowerCase() === "k") {
+  const commandModifier = event.metaKey || event.ctrlKey;
+  if (commandModifier && event.key.toLowerCase() === "k") {
     event.preventDefault();
     quickOpen.value = true;
-  } else if (event.metaKey && event.key.toLowerCase() === "f" && !editingText) {
+  } else if (
+    commandModifier &&
+    event.key.toLowerCase() === "f" &&
+    !editingText
+  ) {
     event.preventDefault();
     document.querySelector<HTMLInputElement>("#main-search")?.focus();
   }
@@ -303,7 +308,7 @@ onBeforeUnmount(() => {
       </nav>
       <div class="sidebar-bottom">
         <button @click="quickOpen = true">
-          <span>⌘ 快捷取用</span><kbd>⌘K</kbd>
+          <span>⌘/Ctrl 快捷取用</span><kbd>⌘/Ctrl K</kbd>
         </button>
         <button
           data-test="sidebar-sticky-mode"

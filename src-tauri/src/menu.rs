@@ -25,12 +25,20 @@ pub(crate) const EDIT_MENU_ENTRIES: [EditMenuEntry; 8] = [
     EditMenuEntry::SelectAll,
 ];
 
+pub(crate) const QUIT_ACCELERATOR: &str = "CmdOrCtrl+Q";
+
 pub(crate) fn build_menu<R: Runtime>(handle: &AppHandle<R>) -> tauri::Result<Menu<R>> {
     let open_main = MenuItem::with_id(handle, "open-main", "打开主窗口", true, None::<&str>)?;
     let toggle_sticky =
         MenuItem::with_id(handle, "toggle-sticky", "切换便签模式", true, None::<&str>)?;
     let app_separator = PredefinedMenuItem::separator(handle)?;
-    let quit = MenuItem::with_id(handle, "quit", "退出 PromptDock", true, Some("Cmd+Q"))?;
+    let quit = MenuItem::with_id(
+        handle,
+        "quit",
+        "退出 PromptDock",
+        true,
+        Some(QUIT_ACCELERATOR),
+    )?;
     let app_menu = Submenu::with_items(
         handle,
         "PromptDock",

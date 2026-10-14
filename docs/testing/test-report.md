@@ -110,7 +110,7 @@ migrations|2
 Database path:
 
 ```text
-/Users/qianduoduo/Library/Application Support/com.promptdock.local/promptdock.sqlite3
+~/Library/Application Support/com.promptdock.local/promptdock.sqlite3
 ```
 
 ## Offline and security inspection

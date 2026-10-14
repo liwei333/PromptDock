@@ -55,8 +55,8 @@ onMounted(async () => {
       <p v-else-if="error" class="form-error">{{ error }}</p>
       <p v-else class="muted">正在读取本机状态…</p>
       <p class="privacy-note">
-        提示词以明文 SQLite 保存在这台
-        Mac。应用不创建账号、不请求网络，也不会自动粘贴到其他软件。
+        提示词以明文 SQLite
+        保存在这台设备。应用不创建账号、不请求网络，也不会自动粘贴到其他软件。
       </p>
       <footer>
         <span class="spacer" /><button

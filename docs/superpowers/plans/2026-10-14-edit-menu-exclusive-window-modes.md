@@ -31,7 +31,7 @@
 - Modify `docs/testing/test-report.md`, `docs/testing/acceptance-report.md`, and `docs/testing/known-issues.md`: record only actually observed results.
 - Modify `README.md`: document native Edit shortcuts and mutually exclusive full/sticky switching in the published usage notes.
 - Create `.gitattributes`: mark the tracked `.vscode` editor metadata as `export-ignore` so `git archive` meets the documented source-package boundary.
-- Replace the user-facing files in `/Users/qianduoduo/Documents/Codex/2026-10-13/users-qianduoduo-downloads-promptdock-macos-dev/outputs` only after all release verification succeeds.
+- Replace the user-facing files in `/path/to/release-workspace/outputs` only after all release verification succeeds.
 
 ## Post-approval prerequisite (performed by the plan author before handoff)
 
@@ -57,7 +57,7 @@ git branch --show-current
 git log -1 --oneline
 ```
 
-Expected: working directory is `/Users/qianduoduo/Desktop/AI_app/PromptDock`, branch is `feat/promptdock-macos-v1.1`, the latest commit includes the approved design/plan documentation, and there are no unexplained user modifications. If any unrelated modification exists, preserve it and stop only the overlapping task rather than stashing, resetting, or overwriting it.
+Expected: working directory is `/path/to/PromptDock`, branch is `feat/promptdock-macos-v1.1`, the latest commit includes the approved design/plan documentation, and there are no unexplained user modifications. If any unrelated modification exists, preserve it and stop only the overlapping task rather than stashing, resetting, or overwriting it.
 
 - [ ] **Step 2: Confirm scope and toolchain without changing dependencies**
 
@@ -795,10 +795,10 @@ Never upgrade an unobserved scenario to PASS merely because unit tests pass; lab
 
 **Files:**
 - Replace: `src-tauri/target/release/bundle/dmg/PromptDock_1.1.0_aarch64.dmg`
-- Replace: `/Users/qianduoduo/Documents/Codex/2026-10-13/users-qianduoduo-downloads-promptdock-macos-dev/outputs/PromptDock_1.1.0_aarch64.dmg`
-- Replace: `/Users/qianduoduo/Documents/Codex/2026-10-13/users-qianduoduo-downloads-promptdock-macos-dev/outputs/PromptDock_1.1.0_aarch64_app.zip`
-- Replace: `/Users/qianduoduo/Documents/Codex/2026-10-13/users-qianduoduo-downloads-promptdock-macos-dev/outputs/PromptDock-V1.1-source.zip`
-- Replace: `/Users/qianduoduo/Documents/Codex/2026-10-13/users-qianduoduo-downloads-promptdock-macos-dev/outputs/SHA256SUMS.txt`
+- Replace: `/path/to/release-workspace/outputs/PromptDock_1.1.0_aarch64.dmg`
+- Replace: `/path/to/release-workspace/outputs/PromptDock_1.1.0_aarch64_app.zip`
+- Replace: `/path/to/release-workspace/outputs/PromptDock-V1.1-source.zip`
+- Replace: `/path/to/release-workspace/outputs/SHA256SUMS.txt`
 - Replace: copied reports/README in the same `outputs` directory
 - Modify: `docs/testing/test-report.md`
 - Modify: `docs/testing/acceptance-report.md`
@@ -815,11 +815,11 @@ set -euo pipefail
 RELEASE_TMP="/private/tmp/promptdock-window-mode-release-2026-10-14"
 DMG_ROOT="$RELEASE_TMP/dmg-root"
 RW_DMG="$RELEASE_TMP/PromptDock.rw.dmg"
-FINAL_DMG="/Users/qianduoduo/Desktop/AI_app/PromptDock/src-tauri/target/release/bundle/dmg/PromptDock_1.1.0_aarch64.dmg"
+FINAL_DMG="/path/to/PromptDock/src-tauri/target/release/bundle/dmg/PromptDock_1.1.0_aarch64.dmg"
 test ! -e "$RELEASE_TMP"
 mkdir -p "$RELEASE_TMP" "$DMG_ROOT"
 mkdir -p "$(dirname "$FINAL_DMG")"
-ditto "/Users/qianduoduo/Desktop/AI_app/PromptDock/src-tauri/target/release/bundle/macos/PromptDock.app" "$DMG_ROOT/PromptDock.app"
+ditto "/path/to/PromptDock/src-tauri/target/release/bundle/macos/PromptDock.app" "$DMG_ROOT/PromptDock.app"
 ln -s /Applications "$DMG_ROOT/Applications"
 hdiutil create -ov -fs HFS+ -volname "PromptDock" -srcfolder "$DMG_ROOT" -format UDRW "$RW_DMG"
 hdiutil convert "$RW_DMG" -ov -format UDZO -imagekey zlib-level=9 -o "$FINAL_DMG"
@@ -832,7 +832,7 @@ If the deterministic temporary path already exists, inspect and preserve it as e
 ```bash
 set -euo pipefail
 RELEASE_TMP="/private/tmp/promptdock-window-mode-release-2026-10-14"
-FINAL_DMG="/Users/qianduoduo/Desktop/AI_app/PromptDock/src-tauri/target/release/bundle/dmg/PromptDock_1.1.0_aarch64.dmg"
+FINAL_DMG="/path/to/PromptDock/src-tauri/target/release/bundle/dmg/PromptDock_1.1.0_aarch64.dmg"
 MOUNT_DIR="$RELEASE_TMP/mount"
 test -d "$RELEASE_TMP"
 mkdir -p "$MOUNT_DIR"
@@ -853,7 +853,7 @@ RELEASE_TMP="/private/tmp/promptdock-window-mode-release-2026-10-14"
 APP_ZIP="$RELEASE_TMP/PromptDock_1.1.0_aarch64_app.zip"
 APP_EXTRACT="$RELEASE_TMP/app-extract"
 test -d "$RELEASE_TMP"
-ditto -c -k --sequesterRsrc --keepParent "/Users/qianduoduo/Desktop/AI_app/PromptDock/src-tauri/target/release/bundle/macos/PromptDock.app" "$APP_ZIP"
+ditto -c -k --sequesterRsrc --keepParent "/path/to/PromptDock/src-tauri/target/release/bundle/macos/PromptDock.app" "$APP_ZIP"
 unzip -t "$APP_ZIP"
 mkdir -p "$APP_EXTRACT"
 ditto -x -k "$APP_ZIP" "$APP_EXTRACT"
@@ -881,7 +881,7 @@ set -euo pipefail
 RELEASE_TMP="/private/tmp/promptdock-window-mode-release-2026-10-14"
 SOURCE_ZIP="$RELEASE_TMP/PromptDock-V1.1-source.zip"
 test -d "$RELEASE_TMP"
-git -C /Users/qianduoduo/Desktop/AI_app/PromptDock archive --format=zip --prefix=PromptDock-V1.1/ --output="$SOURCE_ZIP" HEAD
+git -C /path/to/PromptDock archive --format=zip --prefix=PromptDock-V1.1/ --output="$SOURCE_ZIP" HEAD
 unzip -t "$SOURCE_ZIP"
 unzip -Z1 "$SOURCE_ZIP"
 ```
@@ -895,8 +895,8 @@ Create a complete sibling replacement directory, copy the verified DMG, app ZIP,
 ```bash
 set -euo pipefail
 RELEASE_TMP="/private/tmp/promptdock-window-mode-release-2026-10-14"
-FINAL_DMG="/Users/qianduoduo/Desktop/AI_app/PromptDock/src-tauri/target/release/bundle/dmg/PromptDock_1.1.0_aarch64.dmg"
-OUTPUT_PARENT="/Users/qianduoduo/Documents/Codex/2026-10-13/users-qianduoduo-downloads-promptdock-macos-dev"
+FINAL_DMG="/path/to/PromptDock/src-tauri/target/release/bundle/dmg/PromptDock_1.1.0_aarch64.dmg"
+OUTPUT_PARENT="/path/to/release-workspace"
 NEXT_OUTPUTS="$OUTPUT_PARENT/outputs.next-window-modes"
 test -d "$RELEASE_TMP"
 test ! -e "$NEXT_OUTPUTS"
@@ -904,10 +904,10 @@ mkdir -p "$NEXT_OUTPUTS"
 ditto "$FINAL_DMG" "$NEXT_OUTPUTS/PromptDock_1.1.0_aarch64.dmg"
 ditto "$RELEASE_TMP/PromptDock_1.1.0_aarch64_app.zip" "$NEXT_OUTPUTS/PromptDock_1.1.0_aarch64_app.zip"
 ditto "$RELEASE_TMP/PromptDock-V1.1-source.zip" "$NEXT_OUTPUTS/PromptDock-V1.1-source.zip"
-ditto "/Users/qianduoduo/Desktop/AI_app/PromptDock/docs/testing/acceptance-report.md" "$NEXT_OUTPUTS/PromptDock-V1.1-acceptance-report.md"
-ditto "/Users/qianduoduo/Desktop/AI_app/PromptDock/docs/testing/known-issues.md" "$NEXT_OUTPUTS/PromptDock-V1.1-known-issues.md"
-ditto "/Users/qianduoduo/Desktop/AI_app/PromptDock/docs/testing/test-report.md" "$NEXT_OUTPUTS/PromptDock-V1.1-test-report.md"
-ditto "/Users/qianduoduo/Desktop/AI_app/PromptDock/README.md" "$NEXT_OUTPUTS/README-PromptDock.md"
+ditto "/path/to/PromptDock/docs/testing/acceptance-report.md" "$NEXT_OUTPUTS/PromptDock-V1.1-acceptance-report.md"
+ditto "/path/to/PromptDock/docs/testing/known-issues.md" "$NEXT_OUTPUTS/PromptDock-V1.1-known-issues.md"
+ditto "/path/to/PromptDock/docs/testing/test-report.md" "$NEXT_OUTPUTS/PromptDock-V1.1-test-report.md"
+ditto "/path/to/PromptDock/README.md" "$NEXT_OUTPUTS/README-PromptDock.md"
 cd "$NEXT_OUTPUTS"
 shasum -a 256 PromptDock_1.1.0_aarch64.dmg PromptDock_1.1.0_aarch64_app.zip PromptDock-V1.1-source.zip PromptDock-V1.1-acceptance-report.md PromptDock-V1.1-known-issues.md PromptDock-V1.1-test-report.md README-PromptDock.md > SHA256SUMS.txt
 shasum -a 256 -c SHA256SUMS.txt
@@ -919,7 +919,7 @@ Expected: all seven staged files validate. Do not modify the current published `
 
 ```bash
 set -euo pipefail
-OUTPUT_PARENT="/Users/qianduoduo/Documents/Codex/2026-10-13/users-qianduoduo-downloads-promptdock-macos-dev"
+OUTPUT_PARENT="/path/to/release-workspace"
 CURRENT_OUTPUTS="$OUTPUT_PARENT/outputs"
 NEXT_OUTPUTS="$OUTPUT_PARENT/outputs.next-window-modes"
 PREVIOUS_OUTPUTS="$OUTPUT_PARENT/outputs.previous-window-modes"
@@ -942,9 +942,9 @@ Run:
 ```bash
 set -euo pipefail
 RELEASE_TMP="/private/tmp/promptdock-window-mode-release-2026-10-14"
-OUTPUTS="/Users/qianduoduo/Documents/Codex/2026-10-13/users-qianduoduo-downloads-promptdock-macos-dev/outputs"
-PREVIOUS_OUTPUTS="/Users/qianduoduo/Documents/Codex/2026-10-13/users-qianduoduo-downloads-promptdock-macos-dev/outputs.previous-window-modes"
-FAILED_OUTPUTS="/Users/qianduoduo/Documents/Codex/2026-10-13/users-qianduoduo-downloads-promptdock-macos-dev/outputs.failed-window-modes"
+OUTPUTS="/path/to/release-workspace/outputs"
+PREVIOUS_OUTPUTS="/path/to/release-workspace/outputs.previous-window-modes"
+FAILED_OUTPUTS="/path/to/release-workspace/outputs.failed-window-modes"
 rollback_published_outputs() {
   if [[ -d "$PREVIOUS_OUTPUTS" && -d "$OUTPUTS" && ! -e "$FAILED_OUTPUTS" ]]; then
     mv "$OUTPUTS" "$FAILED_OUTPUTS"
@@ -952,8 +952,8 @@ rollback_published_outputs() {
   fi
 }
 trap rollback_published_outputs ERR
-git -C /Users/qianduoduo/Desktop/AI_app/PromptDock status --short --branch
-git -C /Users/qianduoduo/Desktop/AI_app/PromptDock log --oneline -8
+git -C /path/to/PromptDock status --short --branch
+git -C /path/to/PromptDock log --oneline -8
 cd "$OUTPUTS"
 shasum -a 256 -c SHA256SUMS.txt
 unzip -t PromptDock_1.1.0_aarch64_app.zip

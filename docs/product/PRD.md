@@ -1,4 +1,9 @@
-# PromptDock — macOS 本地提示词管理器 PRD V1.1
+# PromptDock — 本地提示词管理器 PRD V1.1
+
+> **V1.1.1 范围修订（2026-10-14）**：根据产品负责人明确要求，正式支持范围扩展为
+> macOS 13+（Apple Silicon / Intel）与 Windows 10/11 x64。本文中“仅 macOS”或
+> “Windows 本轮不做”的旧表述视为 V1.1 历史基线；通用功能在 Windows 使用对应的
+> 系统剪贴板、应用数据目录和 `Ctrl` 快捷键。Linux、移动端、账号、联网与云同步仍不在范围内。
 
 > 状态：**开发基线 / 可实施**　｜　日期：2026-10-13 　｜　产品负责人：个人用户　｜　目标平台：**macOS（Apple Silicon 优先）**
 >

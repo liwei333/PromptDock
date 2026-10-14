@@ -2,7 +2,7 @@
 
 ## Distribution signing
 
-The local release is ad-hoc/linker signed only. It is not signed with an Apple Developer ID and is not notarized by Apple. Gatekeeper may therefore require Finder → right-click → Open on first launch. This does not affect local functionality, but it is not suitable for public distribution without a signing identity and notarization workflow.
+The macOS release is ad-hoc signed only. It is not signed with an Apple Developer ID and is not notarized by Apple. Gatekeeper may therefore require Finder → right-click → Open on first launch. Windows installers are not signed with an EV/OV certificate and may trigger Microsoft Defender SmartScreen. Downloaders must verify that packages came from the official GitHub repository before bypassing an unsigned-publisher warning.
 
 ## DMG cosmetic packaging
 
@@ -27,7 +27,7 @@ These are recorded as `NOT_TESTED`, not silently treated as passed.
 
 ## Product boundaries
 
-- macOS 13.0+ only; the supplied binary targets Apple Silicon (`aarch64`).
-- Business data is intentionally plain SQLite at `~/Library/Application Support/com.promptdock.local/promptdock.sqlite3`; anyone with access to the macOS account can read it.
+- Release targets are macOS 13+ (`aarch64` and `x86_64`) and Windows 10/11 x64. Windows CI compilation and automated tests are required before publishing a release; interactive Windows acceptance remains a separate manual gate.
+- Business data is intentionally plain SQLite in the platform application-data directory; anyone with access to the operating-system account can read it.
 - Category rename/delete-with-move exists in the Rust service layer but is a P1 product item and is not exposed as a V1.1 primary UI flow; create/view/filter are the P0 category UI.
 - There is no account, cloud sync, mobile client, updater, telemetry, automatic paste, model API or accessibility automation.

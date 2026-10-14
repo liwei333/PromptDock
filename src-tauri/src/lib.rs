@@ -10,7 +10,7 @@ pub mod window_mode;
 use commands::{backup, categories, prompts, windows};
 use db::Database;
 use domain::errors::AppError;
-use state::AppState;
+use state::{AppState, current_shortcut_configuration};
 use tauri::{AppHandle, Manager, WindowEvent};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use window_mode::{
@@ -118,13 +118,14 @@ pub fn run() {
                 _ => {}
             });
 
-            let shortcut_result =
-                app.global_shortcut()
-                    .on_shortcut("Alt+Space", |app, _shortcut, event| {
-                        if event.state == ShortcutState::Pressed {
-                            let _ = windows::reveal_quick_window(app, None);
-                        }
-                    });
+            let shortcut_result = app.global_shortcut().on_shortcut(
+                current_shortcut_configuration().0,
+                |app, _shortcut, event| {
+                    if event.state == ShortcutState::Pressed {
+                        let _ = windows::reveal_quick_window(app, None);
+                    }
+                },
+            );
             if let Ok(mut status) = app.state::<AppState>().shortcut.write() {
                 match shortcut_result {
                     Ok(()) => status.registered = true,

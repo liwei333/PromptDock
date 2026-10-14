@@ -12,7 +12,7 @@ dist
 dist-ssr
 *.local
 
-# PromptDock V1.1 ships macOS only; tauri icon also emits unused mobile assets.
+# PromptDock ships desktop builds; Tauri icon generation also emits unused mobile assets.
 src-tauri/icons/android/
 src-tauri/icons/ios/
 src-tauri/icons/64x64.png

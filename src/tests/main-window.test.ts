@@ -156,4 +156,16 @@ describe("MainWindow exclusive sticky-mode controls", () => {
     expect(updatedLiveRegion.text()).toContain("无法切换到便签模式");
     wrapper.unmount();
   });
+
+  it("opens the quick palette with the Windows Ctrl+K shortcut", async () => {
+    const wrapper = await mountMainWindow();
+
+    document.body.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true }),
+    );
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.find(".palette-overlay").exists()).toBe(true);
+    wrapper.unmount();
+  });
 });
