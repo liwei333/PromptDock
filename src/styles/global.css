@@ -2,22 +2,11 @@
   font-family:
     -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
     "Microsoft YaHei", sans-serif;
-  color: #20283c;
-  background: #f7f8fb;
+  color: var(--pd-text);
+  background: var(--pd-bg);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-  --page: #f7f8fb;
-  --paper: #fff;
-  --ink: #20283c;
-  --muted: #7c879a;
-  --line: #e8ecf3;
-  --blue: #5266e8;
-  --blue-deep: #4054d5;
-  --blue-soft: #eef0ff;
-  --side: #172033;
-  --danger: #dc5360;
-  --success: #2fa77d;
 }
 
 * {
@@ -51,7 +40,7 @@ select {
   outline: none;
 }
 :focus-visible {
-  box-shadow: 0 0 0 3px rgba(82, 102, 232, 0.24) !important;
+  box-shadow: 0 0 0 3px var(--pd-focus-ring) !important;
 }
 .muted {
   color: var(--muted);

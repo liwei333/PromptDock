@@ -1,0 +1,49 @@
+:root {
+  --pd-bg: #f4f5f7;
+  --pd-surface: rgba(255, 255, 255, 0.88);
+  --pd-surface-elevated: #ffffff;
+  --pd-surface-hover: #f0f2f6;
+  --pd-surface-selected: #e9edff;
+  --pd-text: #1f2430;
+  --pd-text-secondary: #687184;
+  --pd-text-tertiary: #8d96a7;
+  --pd-border: rgba(28, 36, 51, 0.1);
+  --pd-border-strong: rgba(28, 36, 51, 0.16);
+  --pd-accent: #5868d9;
+  --pd-accent-hover: #4c5dcc;
+  --pd-accent-soft: #e9edff;
+  --pd-success: #228a66;
+  --pd-warning: #b87318;
+  --pd-danger: #c64a58;
+  --pd-paper: #fff7c7;
+  --pd-paper-border: #e6d986;
+  --pd-sidebar: #172033;
+  --pd-focus-ring: rgba(88, 104, 217, 0.24);
+  --pd-radius-sm: 8px;
+  --pd-radius-md: 10px;
+  --pd-radius-lg: 12px;
+  --pd-radius-xl: 14px;
+  --pd-control-sm: 30px;
+  --pd-control-md: 34px;
+  --pd-shadow-popover: 0 12px 36px rgba(32, 40, 60, 0.16);
+  --pd-motion-fast: 140ms;
+
+  /* Compatibility aliases for existing feature styles. */
+  --page: var(--pd-bg);
+  --paper: var(--pd-surface-elevated);
+  --ink: var(--pd-text);
+  --muted: var(--pd-text-secondary);
+  --line: var(--pd-border);
+  --blue: var(--pd-accent);
+  --blue-deep: var(--pd-accent-hover);
+  --blue-soft: var(--pd-accent-soft);
+  --side: var(--pd-sidebar);
+  --danger: var(--pd-danger);
+  --success: var(--pd-success);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --pd-motion-fast: 0ms;
+  }
+}
