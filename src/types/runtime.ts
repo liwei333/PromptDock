@@ -19,6 +19,4 @@ export type StickySettings = {
   scaleFactor: number | null;
 };
 
-export type WindowModeResult = { mode: "main" | "sticky" };
-
 export type StickySettingsPatch = { alwaysOnTop?: boolean };

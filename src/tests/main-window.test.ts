@@ -119,9 +119,11 @@ describe("MainWindow exclusive sticky-mode controls", () => {
     );
     const wrapper = await mountMainWindow();
     const toolbar = wrapper.get(STICKY_ENTRY_SELECTORS[1]);
+    const sidebar = wrapper.get(STICKY_ENTRY_SELECTORS[0]);
 
-    await toolbar.trigger("click");
-    await toolbar.trigger("click");
+    const firstClick = toolbar.trigger("click");
+    const secondClick = sidebar.trigger("click");
+    await Promise.all([firstClick, secondClick]);
 
     expect(windowApi.enterStickyMode).toHaveBeenCalledOnce();
     for (const selector of STICKY_ENTRY_SELECTORS) {
@@ -141,13 +143,17 @@ describe("MainWindow exclusive sticky-mode controls", () => {
       new Error("native failure"),
     );
     const wrapper = await mountMainWindow();
+    const liveRegion = wrapper.get("[data-test='main-live-region']");
+    const liveRegionElement = liveRegion.element;
+
+    expect(liveRegion.text()).toBe("");
 
     await wrapper.get(STICKY_ENTRY_SELECTORS[1]).trigger("click");
     await flushPromises();
 
-    expect(wrapper.get("[aria-live='polite']").text()).toContain(
-      "无法切换到便签模式",
-    );
+    const updatedLiveRegion = wrapper.get("[data-test='main-live-region']");
+    expect(updatedLiveRegion.element).toBe(liveRegionElement);
+    expect(updatedLiveRegion.text()).toContain("无法切换到便签模式");
     wrapper.unmount();
   });
 });

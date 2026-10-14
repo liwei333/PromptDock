@@ -74,15 +74,15 @@ describe("StickyWindow", () => {
     );
     const wrapper = mount(StickyWindow);
     const titleControl = wrapper.get("[aria-label='切换到完整模式']");
+    const footerControl = wrapper.get("[data-test='manage-in-main']");
 
-    await titleControl.trigger("click");
-    await wrapper.get("[data-test='manage-in-main']").trigger("click");
+    const titleClick = titleControl.trigger("click");
+    const footerClick = footerControl.trigger("click");
+    await Promise.all([titleClick, footerClick]);
 
     expect(windowApi.enterMainMode).toHaveBeenCalledOnce();
     expect(titleControl.attributes("disabled")).toBeDefined();
-    expect(
-      wrapper.get("[data-test='manage-in-main']").attributes("disabled"),
-    ).toBeDefined();
+    expect(footerControl.attributes("disabled")).toBeDefined();
 
     resolveTransition({ mode: "main" });
     await flushPromises();

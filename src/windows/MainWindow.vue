@@ -554,7 +554,16 @@ onBeforeUnmount(() => {
       @close="categoryDialogOpen = false"
       @create="createCategory"
     />
-    <div v-if="toast" class="toast" :class="toast.kind" aria-live="polite">
+    <div
+      data-test="main-live-region"
+      class="sr-only"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+    >
+      {{ toast?.text ?? "" }}
+    </div>
+    <div v-if="toast" class="toast" :class="toast.kind">
       {{ toast.kind === "success" ? "✓" : "!" }} {{ toast.text }}
     </div>
   </div>
