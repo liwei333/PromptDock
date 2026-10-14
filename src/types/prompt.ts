@@ -35,6 +35,11 @@ export type PromptQuery = {
   view?: PromptView;
   tab?: PromptTab;
   categoryId?: string;
+  tag?: string;
+  favoriteOnly?: boolean;
+  pinnedOnly?: boolean;
+  recentOnly?: boolean;
+  templateOnly?: boolean;
   sort?: PromptSort;
   limit?: number;
   offset?: number;
@@ -55,7 +60,8 @@ export type Category = {
 
 export type DashboardStats = {
   total: number;
-  recent: number;
+  todayCopies: number;
+  recent?: number;
   favorites: number;
   pinned: number;
   templates: number;

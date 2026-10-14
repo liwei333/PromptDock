@@ -40,6 +40,7 @@ export const promptApi = {
   reorderSticky: (orderedIds: string[]) =>
     invoke<Prompt[]>("reorder_sticky_prompts", { orderedIds }),
   stats: () => invoke<DashboardStats>("get_dashboard_stats"),
+  listTags: () => invoke<string[]>("list_prompt_tags"),
 };
 
 export const categoryApi = {

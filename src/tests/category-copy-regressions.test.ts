@@ -19,6 +19,7 @@ const { categoryApi, confirmDialog, copyPromptText, promptApi, windowApi } =
     copyPromptText: vi.fn(),
     promptApi: {
       list: vi.fn(),
+      listTags: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
       delete: vi.fn(),
@@ -119,9 +120,10 @@ describe("category and raw-copy regressions", () => {
     vi.clearAllMocks();
     promptApi.list.mockResolvedValue({ items: [], total: 0 });
     promptApi.listSticky.mockResolvedValue([]);
+    promptApi.listTags.mockResolvedValue([]);
     promptApi.stats.mockResolvedValue({
       total: 4,
-      recent: 0,
+      todayCopies: 0,
       favorites: 3,
       pinned: 3,
       templates: 0,

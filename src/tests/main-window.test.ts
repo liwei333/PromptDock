@@ -27,6 +27,7 @@ const { categoryApi, pinnedPrompt, promptApi, windowApi } = vi.hoisted(() => {
     },
     promptApi: {
       list: vi.fn(),
+      listTags: vi.fn(),
       stats: vi.fn(),
       listSticky: vi.fn(),
       setFavorite: vi.fn(),
@@ -88,12 +89,13 @@ describe("MainWindow exclusive sticky-mode controls", () => {
     promptApi.list.mockResolvedValue({ items: [], total: 0 });
     promptApi.stats.mockResolvedValue({
       total: 0,
-      recent: 0,
+      todayCopies: 0,
       favorites: 0,
       pinned: 1,
       templates: 0,
     });
     promptApi.listSticky.mockResolvedValue([pinnedPrompt]);
+    promptApi.listTags.mockResolvedValue([]);
     categoryApi.list.mockResolvedValue([]);
     windowApi.enterStickyMode.mockResolvedValue({ mode: "sticky" });
   });
