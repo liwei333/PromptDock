@@ -21,11 +21,17 @@ use window_mode::{
 #[cfg(test)]
 mod tests;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum NativeWindowTask {
     EnterMain,
+    RestorePersistedMode,
     ToggleMode,
     HideSticky,
     PersistStickyPosition,
+}
+
+fn native_window_task_for_dock_reopen() -> NativeWindowTask {
+    NativeWindowTask::RestorePersistedMode
 }
 
 fn spawn_native_window_task(app: &AppHandle, operation: &'static str, task: NativeWindowTask) {
@@ -46,6 +52,9 @@ fn spawn_native_window_task(app: &AppHandle, operation: &'static str, task: Nati
             let result = match task {
                 NativeWindowTask::EnterMain => {
                     transition_to(&runtime, &state.mode_transition, WindowMode::Main).await
+                }
+                NativeWindowTask::RestorePersistedMode => {
+                    reconcile_startup_mode(&runtime, &state.mode_transition).await
                 }
                 NativeWindowTask::ToggleMode => {
                     toggle_product_mode(&runtime, &state.mode_transition)
@@ -124,6 +133,12 @@ pub fn run() {
             }
 
             if let Some(sticky) = app.get_webview_window("sticky") {
+                #[cfg(target_os = "macos")]
+                {
+                    let native_window = sticky.ns_window()?;
+                    let native_window: &objc2_app_kit::NSWindow = unsafe { &*native_window.cast() };
+                    native_window.setMovableByWindowBackground(true);
+                }
                 let app_for_events = app.handle().clone();
                 sticky.on_window_event(move |event| {
                     if let WindowEvent::CloseRequested { api, .. } = event {
@@ -188,7 +203,7 @@ pub fn run() {
     app.run(|_app, _event| {
         #[cfg(target_os = "macos")]
         if matches!(_event, tauri::RunEvent::Reopen { .. }) {
-            spawn_native_window_task(_app, "dock_reopen", NativeWindowTask::EnterMain);
+            spawn_native_window_task(_app, "dock_reopen", native_window_task_for_dock_reopen());
         }
     });
 }
