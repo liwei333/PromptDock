@@ -250,6 +250,118 @@ async fn records_copy_count_and_applies_views_and_sorting() {
 }
 
 #[tokio::test]
+async fn workbench_filters_compose() {
+    let directory = tempdir().expect("temporary directory");
+    let database = Database::connect_path(directory.path().join("promptdock.sqlite3"))
+        .await
+        .expect("database");
+    let categories = CategoryRepository::new(database.pool().clone());
+    let prompts = PromptRepository::new(database.pool().clone());
+    let category = categories.create("组合筛选").await.expect("category");
+
+    let mut matching = prompt_input("组合命中", "请处理 {{项目名}}");
+    matching.category_id = category.id.clone();
+    matching.tags = vec!["Alpha".to_string(), "共享".to_string()];
+    matching.is_favorite = true;
+    matching.is_pinned = true;
+    let matching = prompts.create(matching).await.expect("matching prompt");
+    prompts
+        .record_successful_copy(&matching.id)
+        .await
+        .expect("matching prompt is recent");
+
+    let mut wrong_tag = prompt_input("标签不匹配", "请处理 {{项目名}}");
+    wrong_tag.category_id = category.id.clone();
+    wrong_tag.tags = vec!["Beta".to_string()];
+    wrong_tag.is_favorite = true;
+    wrong_tag.is_pinned = true;
+    let wrong_tag = prompts.create(wrong_tag).await.expect("wrong tag prompt");
+    prompts
+        .record_successful_copy(&wrong_tag.id)
+        .await
+        .expect("wrong tag prompt is recent");
+
+    let mut not_favorite = prompt_input("未收藏", "请处理 {{项目名}}");
+    not_favorite.category_id = category.id.clone();
+    not_favorite.tags = vec!["Alpha".to_string()];
+    not_favorite.is_pinned = true;
+    let not_favorite = prompts
+        .create(not_favorite)
+        .await
+        .expect("not favorite prompt");
+    prompts
+        .record_successful_copy(&not_favorite.id)
+        .await
+        .expect("not favorite prompt is recent");
+
+    let filtered = prompts
+        .list(PromptQuery {
+            search: Some("处理".to_string()),
+            category_id: Some(category.id),
+            tag: Some("Alpha".to_string()),
+            favorite_only: true,
+            pinned_only: true,
+            recent_only: true,
+            template_only: true,
+            ..PromptQuery::default()
+        })
+        .await
+        .expect("combined workbench filters");
+
+    assert_eq!(filtered.total, 1);
+    assert_eq!(filtered.items[0].id, matching.id);
+}
+
+#[tokio::test]
+async fn successful_copies_update_daily_dashboard_total() {
+    let directory = tempdir().expect("temporary directory");
+    let database = Database::connect_path(directory.path().join("promptdock.sqlite3"))
+        .await
+        .expect("database");
+    let prompts = PromptRepository::new(database.pool().clone());
+    let mut input = prompt_input("今日复制", "真实统计");
+    input.is_favorite = true;
+    input.is_pinned = true;
+    let prompt = prompts.create(input).await.expect("prompt");
+
+    prompts
+        .record_successful_copy(&prompt.id)
+        .await
+        .expect("first copy");
+    prompts
+        .record_successful_copy(&prompt.id)
+        .await
+        .expect("second copy");
+
+    let persisted = prompts.get(&prompt.id).await.expect("persisted prompt");
+    let stats = prompts.dashboard_stats().await.expect("dashboard stats");
+    assert_eq!(persisted.copy_count, 2);
+    assert_eq!(stats.total, 1);
+    assert_eq!(stats.today_copies, 2);
+    assert_eq!(stats.favorites, 1);
+    assert_eq!(stats.pinned, 1);
+}
+
+#[tokio::test]
+async fn lists_distinct_prompt_tags() {
+    let directory = tempdir().expect("temporary directory");
+    let database = Database::connect_path(directory.path().join("promptdock.sqlite3"))
+        .await
+        .expect("database");
+    let prompts = PromptRepository::new(database.pool().clone());
+
+    let mut first = prompt_input("标签一", "正文");
+    first.tags = vec!["共享".to_string(), "Alpha".to_string()];
+    prompts.create(first).await.expect("first prompt");
+    let mut second = prompt_input("标签二", "正文");
+    second.tags = vec!["共享".to_string(), "Beta".to_string()];
+    prompts.create(second).await.expect("second prompt");
+
+    let tags = prompts.list_tags().await.expect("distinct tags");
+    assert_eq!(tags, vec!["Alpha", "Beta", "共享"]);
+}
+
+#[tokio::test]
 async fn categories_are_case_insensitively_unique() {
     let directory = tempdir().expect("temporary directory");
     let database = Database::connect_path(directory.path().join("promptdock.sqlite3"))
@@ -481,7 +593,7 @@ async fn empty_dashboard_stats_are_zero_and_settings_round_trip_as_json() {
 
     let stats = prompts.dashboard_stats().await.expect("empty stats");
     assert_eq!(stats.total, 0);
-    assert_eq!(stats.recent, 0);
+    assert_eq!(stats.today_copies, 0);
     assert_eq!(stats.favorites, 0);
     assert_eq!(stats.pinned, 0);
     assert_eq!(stats.templates, 0);

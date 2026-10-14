@@ -132,3 +132,8 @@ pub async fn get_dashboard_stats(state: State<'_, AppState>) -> CommandResult<Da
         .await
         .map_err(Into::into)
 }
+
+#[tauri::command]
+pub async fn list_prompt_tags(state: State<'_, AppState>) -> CommandResult<Vec<String>> {
+    repository(&state).list_tags().await.map_err(Into::into)
+}

@@ -181,6 +181,7 @@ pub fn run() {
             prompts::list_sticky_prompts,
             prompts::reorder_sticky_prompts,
             prompts::get_dashboard_stats,
+            prompts::list_prompt_tags,
             categories::list_categories,
             categories::create_category,
             categories::rename_category,

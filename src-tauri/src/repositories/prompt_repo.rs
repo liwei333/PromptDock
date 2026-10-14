@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use chrono::Utc;
+use chrono::{Local, Utc};
 use sqlx::{FromRow, QueryBuilder, Sqlite, SqlitePool, Transaction};
 use uuid::Uuid;
 
@@ -260,20 +260,29 @@ impl PromptRepository {
     pub async fn record_successful_copy(&self, id: &str) -> Result<CopyStats, AppError> {
         validate_uuid(id, "提示词 ID")?;
         let now = Utc::now().timestamp_millis();
+        let copy_date = Local::now().format("%Y-%m-%d").to_string();
+        let mut transaction = self.pool.begin().await?;
         let result = sqlx::query(
             "UPDATE prompts SET copy_count = copy_count + 1, last_copied_at = ? WHERE id = ?",
         )
         .bind(now)
         .bind(id)
-        .execute(&self.pool)
+        .execute(&mut *transaction)
         .await?;
         if result.rows_affected() == 0 {
             return Err(AppError::NotFound("提示词"));
         }
+        sqlx::query(
+            "INSERT INTO daily_copy_stats (copy_date, copy_count) VALUES (?, 1) ON CONFLICT(copy_date) DO UPDATE SET copy_count = copy_count + 1",
+        )
+        .bind(copy_date)
+        .execute(&mut *transaction)
+        .await?;
         let copy_count: i64 = sqlx::query_scalar("SELECT copy_count FROM prompts WHERE id = ?")
             .bind(id)
-            .fetch_one(&self.pool)
+            .fetch_one(&mut *transaction)
             .await?;
+        transaction.commit().await?;
         Ok(CopyStats {
             copy_count,
             last_copied_at: now,
@@ -315,19 +324,35 @@ impl PromptRepository {
     }
 
     pub async fn dashboard_stats(&self) -> Result<DashboardStats, AppError> {
-        let (total, recent, favorites, pinned, templates): (i64, i64, i64, i64, i64) =
+        let (total, favorites, pinned, templates): (i64, i64, i64, i64) =
             sqlx::query_as(
-                "SELECT COUNT(*), COALESCE(SUM(CASE WHEN last_copied_at IS NOT NULL THEN 1 ELSE 0 END), 0), COALESCE(SUM(is_favorite), 0), COALESCE(SUM(CASE WHEN pin_order IS NOT NULL THEN 1 ELSE 0 END), 0), COALESCE(SUM(CASE WHEN body LIKE '%{{%}}%' THEN 1 ELSE 0 END), 0) FROM prompts",
+                "SELECT COUNT(*), COALESCE(SUM(is_favorite), 0), COALESCE(SUM(CASE WHEN pin_order IS NOT NULL THEN 1 ELSE 0 END), 0), COALESCE(SUM(CASE WHEN body LIKE '%{{%}}%' THEN 1 ELSE 0 END), 0) FROM prompts",
             )
             .fetch_one(&self.pool)
             .await?;
+        let copy_date = Local::now().format("%Y-%m-%d").to_string();
+        let today_copies: i64 = sqlx::query_scalar(
+            "SELECT COALESCE((SELECT copy_count FROM daily_copy_stats WHERE copy_date = ?), 0)",
+        )
+        .bind(copy_date)
+        .fetch_one(&self.pool)
+        .await?;
         Ok(DashboardStats {
             total,
-            recent,
+            today_copies,
             favorites,
             pinned,
             templates,
         })
+    }
+
+    pub async fn list_tags(&self) -> Result<Vec<String>, AppError> {
+        sqlx::query_scalar(
+            "SELECT DISTINCT CAST(tag.value AS TEXT) FROM prompts p, json_each(p.tags_json) AS tag WHERE typeof(tag.value) = 'text' AND trim(CAST(tag.value AS TEXT)) != '' ORDER BY CAST(tag.value AS TEXT) COLLATE NOCASE ASC",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(Into::into)
     }
 }
 
@@ -385,6 +410,29 @@ fn filtered_query(select: &'static str, query: &PromptQuery) -> QueryBuilder<'st
         builder
             .push(" AND p.category_id = ")
             .push_bind(category_id.clone());
+    }
+    if let Some(tag) = query
+        .tag
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        builder
+            .push(" AND EXISTS (SELECT 1 FROM json_each(p.tags_json) AS selected_tag WHERE CAST(selected_tag.value AS TEXT) = ")
+            .push_bind(tag.to_string())
+            .push(" COLLATE NOCASE)");
+    }
+    if query.favorite_only {
+        builder.push(" AND p.is_favorite = 1");
+    }
+    if query.pinned_only {
+        builder.push(" AND p.is_pinned = 1");
+    }
+    if query.recent_only {
+        builder.push(" AND p.last_copied_at IS NOT NULL");
+    }
+    if query.template_only {
+        builder.push(" AND p.body LIKE '%{{%}}%'");
     }
     builder
 }
