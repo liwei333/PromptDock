@@ -1,17 +1,19 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vitest";
 
-const { copyPromptText, listSticky } = vi.hoisted(() => ({
+const { copyPromptText, enterMainMode, listSticky } = vi.hoisted(() => ({
   copyPromptText: vi.fn().mockResolvedValue({
     status: "copied",
     stats: { copyCount: 1, lastCopiedAt: 2 },
   }),
+  enterMainMode: vi.fn().mockResolvedValue({ mode: "main" }),
   listSticky: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock("@/api/commands", () => ({
   promptApi: { listSticky },
   windowApi: {
+    enterMainMode,
     hideSticky: vi.fn().mockResolvedValue({ hidden: true }),
     showQuick: vi.fn().mockResolvedValue({ shown: true }),
     getStickySettings: vi.fn().mockResolvedValue({ alwaysOnTop: true }),
@@ -24,6 +26,16 @@ vi.mock("@/services/clipboard", () => ({ copyPromptText }));
 import StickyWindow from "@/windows/StickyWindow.vue";
 
 describe("StickyWindow", () => {
+  it("switches from sticky mode to the full main window", async () => {
+    const wrapper = mount(StickyWindow);
+    await flushPromises();
+
+    await wrapper.get('[aria-label="切换到完整模式"]').trigger("click");
+    await flushPromises();
+
+    expect(enterMainMode).toHaveBeenCalledOnce();
+  });
+
   it("always renders five fixed slots when the library has no pins", async () => {
     const wrapper = mount(StickyWindow);
     await Promise.resolve();
