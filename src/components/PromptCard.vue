@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 
-import { extractTemplateVariables } from "@/composables/useTemplateVariables";
+import { inspectTemplateVariables } from "@/composables/useTemplateVariables";
 import type { Prompt } from "@/types/prompt";
 
 const props = defineProps<{ prompt: Prompt; copying?: boolean }>();
@@ -12,8 +12,9 @@ defineEmits<{
   pin: [prompt: Prompt];
 }>();
 
+const template = computed(() => inspectTemplateVariables(props.prompt.body));
 const hasVariables = computed(
-  () => extractTemplateVariables(props.prompt.body).length > 0,
+  () => !template.value.error && template.value.variables.length > 0,
 );
 </script>
 
@@ -26,7 +27,13 @@ const hasVariables = computed(
   >
     <header class="card-header">
       <span class="category-pill">{{ prompt.categoryName }}</span>
-      <span v-if="hasVariables" class="template-mark">{{ "{}" }}</span>
+      <span
+        v-if="hasVariables || template.error"
+        class="template-mark"
+        :class="{ invalid: template.error }"
+        :title="template.error?.message"
+        >{{ template.error ? "!{}" : "{}" }}</span
+      >
       <button
         class="icon-button"
         :aria-label="prompt.isFavorite ? '取消收藏' : '收藏'"

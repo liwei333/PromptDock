@@ -12,7 +12,7 @@ import PromptEditorDialog from "@/components/PromptEditorDialog.vue";
 import QuickPalette from "@/components/QuickPalette.vue";
 import RuntimeInfoDialog from "@/components/RuntimeInfoDialog.vue";
 import StickyManagerDialog from "@/components/StickyManagerDialog.vue";
-import { extractTemplateVariables } from "@/composables/useTemplateVariables";
+import { inspectTemplateVariables } from "@/composables/useTemplateVariables";
 import { copyPromptText } from "@/services/clipboard";
 import { usePromptStore } from "@/stores/promptStore";
 import type {
@@ -76,7 +76,14 @@ function updateSearch(value: string): void {
 }
 
 async function copy(prompt: Prompt): Promise<void> {
-  if (extractTemplateVariables(prompt.body).length) {
+  const template = inspectTemplateVariables(prompt.body);
+  if (template.error) {
+    selected.value = prompt;
+    variableMode.value = false;
+    notify(`${template.error.message}，请先编辑提示词正文`, "error");
+    return;
+  }
+  if (template.variables.length) {
     selected.value = prompt;
     variableMode.value = true;
     return;
@@ -99,6 +106,12 @@ async function copy(prompt: Prompt): Promise<void> {
   } finally {
     copyingId.value = null;
   }
+}
+
+function promptActionLabel(prompt: Prompt): string {
+  const template = inspectTemplateVariables(prompt.body);
+  if (template.error) return "修正变量";
+  return template.variables.length ? "填写变量" : "复制全文";
 }
 
 async function toggleFavorite(prompt: Prompt): Promise<void> {
@@ -467,11 +480,7 @@ onBeforeUnmount(() => {
             >
               <span>{{ prompt.pinOrder?.toString().padStart(2, "0") }}</span
               ><strong>{{ prompt.title }}</strong
-              ><small>{{
-                extractTemplateVariables(prompt.body).length
-                  ? "填写变量"
-                  : "复制全文"
-              }}</small>
+              ><small>{{ promptActionLabel(prompt) }}</small>
             </button>
           </div>
         </section>

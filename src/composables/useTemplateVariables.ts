@@ -19,6 +19,11 @@ export class TemplateVariableError extends Error {
   }
 }
 
+export type TemplateInspection = {
+  variables: string[];
+  error: TemplateVariableError | null;
+};
+
 export function extractTemplateVariables(body: string): string[] {
   const variables: string[] = [];
   const seen = new Set<string>();
@@ -36,6 +41,17 @@ export function extractTemplateVariables(body: string): string[] {
     }
   }
   return variables;
+}
+
+export function inspectTemplateVariables(body: string): TemplateInspection {
+  try {
+    return { variables: extractTemplateVariables(body), error: null };
+  } catch (reason) {
+    if (reason instanceof TemplateVariableError) {
+      return { variables: [], error: reason };
+    }
+    throw reason;
+  }
 }
 
 export function renderTemplatePreview(

@@ -557,6 +557,9 @@ select {
     700 10px ui-monospace,
     monospace;
 }
+.template-mark.invalid {
+  color: var(--danger);
+}
 .card-header .icon-button {
   margin-left: auto;
   font-size: 16px;
@@ -745,10 +748,18 @@ select {
   font-size: 11px;
 }
 .form-error,
-.quick-error {
+.quick-error,
+.template-error {
   margin: 11px 0 0;
   color: var(--danger);
   font-size: 11px;
+}
+.template-error {
+  padding: 10px 12px;
+  border: 1px solid #f2cbd0;
+  border-radius: 9px;
+  background: #fff6f7;
+  line-height: 1.55;
 }
 .editor-dialog > footer,
 .detail-drawer > footer,

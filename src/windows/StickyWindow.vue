@@ -4,7 +4,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 
 import { promptApi, windowApi } from "@/api/commands";
-import { extractTemplateVariables } from "@/composables/useTemplateVariables";
+import { inspectTemplateVariables } from "@/composables/useTemplateVariables";
 import { copyPromptText } from "@/services/clipboard";
 import type { Prompt } from "@/types/prompt";
 
@@ -26,7 +26,17 @@ async function load(): Promise<void> {
 }
 
 async function activate(prompt: Prompt): Promise<void> {
-  if (extractTemplateVariables(prompt.body).length) {
+  const template = inspectTemplateVariables(prompt.body);
+  if (template.error) {
+    feedback.value = {
+      id: prompt.id,
+      text: "修正变量",
+      error: true,
+    };
+    window.setTimeout(() => (feedback.value = null), 1600);
+    return;
+  }
+  if (template.variables.length) {
     await windowApi.showQuick(prompt.id);
     return;
   }
@@ -41,6 +51,12 @@ async function activate(prompt: Prompt): Promise<void> {
     };
   }
   window.setTimeout(() => (feedback.value = null), 1600);
+}
+
+function promptActionLabel(prompt: Prompt): string {
+  const template = inspectTemplateVariables(prompt.body);
+  if (template.error) return "修正变量";
+  return template.variables.length ? "{}" : "复制";
 }
 
 async function toggleAlwaysOnTop(): Promise<void> {
@@ -111,13 +127,17 @@ onBeforeUnmount(() => stopListening?.());
           }}</span>
           <strong>{{ prompt.title }}</strong>
           <span
-            v-if="extractTemplateVariables(prompt.body).length"
-            class="row-template"
-            >{{ "{}" }}</span
+            :class="
+              inspectTemplateVariables(prompt.body).variables.length
+                ? 'row-template'
+                : 'row-copy'
+            "
+            >{{
+              feedback?.id === prompt.id
+                ? feedback.text
+                : promptActionLabel(prompt)
+            }}</span
           >
-          <span v-else class="row-copy">{{
-            feedback?.id === prompt.id ? feedback.text : "复制"
-          }}</span>
         </button>
         <div v-else data-test="sticky-slot" class="sticky-row empty">
           <span class="slot-number">{{

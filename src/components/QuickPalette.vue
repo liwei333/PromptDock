@@ -10,7 +10,7 @@ import {
 } from "vue";
 
 import { promptApi, windowApi } from "@/api/commands";
-import { extractTemplateVariables } from "@/composables/useTemplateVariables";
+import { inspectTemplateVariables } from "@/composables/useTemplateVariables";
 import { copyPromptText } from "@/services/clipboard";
 import type { Prompt } from "@/types/prompt";
 import TemplateVariablesPanel from "@/components/TemplateVariablesPanel.vue";
@@ -85,7 +85,12 @@ async function activate(
 ): Promise<void> {
   if (!prompt) return;
   error.value = "";
-  if (extractTemplateVariables(prompt.body).length) {
+  const template = inspectTemplateVariables(prompt.body);
+  if (template.error) {
+    error.value = `${template.error.message}，请在主窗口编辑后重试`;
+    return;
+  }
+  if (template.variables.length) {
     templatePrompt.value = prompt;
     return;
   }
@@ -97,6 +102,12 @@ async function activate(
   } catch (reason) {
     error.value = reason instanceof Error ? reason.message : "复制失败";
   }
+}
+
+function actionLabel(prompt: Prompt): string {
+  const template = inspectTemplateVariables(prompt.body);
+  if (template.error) return "修正变量";
+  return template.variables.length ? "填变量 ↵" : "复制 ↵";
 }
 
 async function templateCopied(): Promise<void> {
@@ -181,13 +192,7 @@ onBeforeUnmount(() => stopSelectListener?.());
               {{ prompt.description || prompt.body }}</small
             >
           </span>
-          <span class="quick-action">
-            {{
-              extractTemplateVariables(prompt.body).length
-                ? "填变量 ↵"
-                : "复制 ↵"
-            }}
-          </span>
+          <span class="quick-action">{{ actionLabel(prompt) }}</span>
         </button>
         <div v-if="loading" class="quick-empty">正在检索本机 SQLite…</div>
         <div v-else-if="!results.length" class="quick-empty">

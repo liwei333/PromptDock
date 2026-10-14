@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 
-import { extractTemplateVariables } from "@/composables/useTemplateVariables";
+import { inspectTemplateVariables } from "@/composables/useTemplateVariables";
 import type { Prompt } from "@/types/prompt";
 import TemplateVariablesPanel from "@/components/TemplateVariablesPanel.vue";
 
@@ -12,8 +12,9 @@ const emit = defineEmits<{
   copy: [prompt: Prompt];
   copied: [];
 }>();
+const template = computed(() => inspectTemplateVariables(props.prompt.body));
 const hasVariables = computed(
-  () => extractTemplateVariables(props.prompt.body).length > 0,
+  () => !template.value.error && template.value.variables.length > 0,
 );
 </script>
 
@@ -43,6 +44,14 @@ const hasVariables = computed(
         <p class="drawer-description">
           {{ prompt.description || "没有补充说明" }}
         </p>
+        <p
+          v-if="template.error"
+          class="template-error"
+          data-test="template-error"
+          role="alert"
+        >
+          {{ template.error.message }}。请编辑正文中的变量占位符后再复制。
+        </p>
         <div class="tags">
           <span v-for="tag in prompt.tags" :key="tag">#{{ tag }}</span>
         </div>
@@ -58,8 +67,18 @@ const hasVariables = computed(
           <button class="ghost-button" @click="emit('edit', prompt)">
             编辑
           </button>
-          <button class="primary-button" @click="emit('copy', prompt)">
-            {{ hasVariables ? "填写变量" : "复制完整正文" }}
+          <button
+            class="primary-button"
+            :disabled="Boolean(template.error)"
+            @click="emit('copy', prompt)"
+          >
+            {{
+              template.error
+                ? "修正变量格式后复制"
+                : hasVariables
+                  ? "填写变量"
+                  : "复制完整正文"
+            }}
           </button>
         </footer>
       </template>

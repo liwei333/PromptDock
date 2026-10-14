@@ -2,7 +2,7 @@
 import { computed, reactive, ref } from "vue";
 
 import {
-  extractTemplateVariables,
+  inspectTemplateVariables,
   renderTemplatePreview,
   renderTemplate,
 } from "@/composables/useTemplateVariables";
@@ -11,18 +11,22 @@ import type { Prompt } from "@/types/prompt";
 
 const props = defineProps<{ prompt: Prompt }>();
 const emit = defineEmits<{ copied: []; cancel: [] }>();
-const names = computed(() => extractTemplateVariables(props.prompt.body));
+const template = computed(() => inspectTemplateVariables(props.prompt.body));
+const names = computed(() => template.value.variables);
 const values = reactive<Record<string, string>>({});
 const error = ref("");
 const copying = ref(false);
 const preview = computed(() =>
-  renderTemplatePreview(props.prompt.body, values),
+  template.value.error
+    ? props.prompt.body
+    : renderTemplatePreview(props.prompt.body, values),
 );
 
 async function copy(): Promise<void> {
   error.value = "";
   try {
     copying.value = true;
+    if (template.value.error) throw template.value.error;
     const text = renderTemplate(props.prompt.body, values);
     await copyPromptText({ id: props.prompt.id, text });
     emit("copied");
@@ -56,6 +60,14 @@ async function copy(): Promise<void> {
         <input v-model="values[name]" :placeholder="`填写${name}`" />
       </label>
     </div>
+    <p
+      v-if="template.error"
+      class="form-error"
+      data-test="template-error"
+      role="alert"
+    >
+      {{ template.error.message }}。请返回编辑正文中的变量占位符。
+    </p>
     <div class="preview-block">
       <span>结果预览</span>
       <pre>{{ preview }}</pre>
@@ -63,7 +75,11 @@ async function copy(): Promise<void> {
     <p v-if="error" class="form-error" role="alert">{{ error }}</p>
     <footer>
       <button class="ghost-button" @click="emit('cancel')">返回</button>
-      <button class="primary-button" :disabled="copying" @click="copy">
+      <button
+        class="primary-button"
+        :disabled="copying || Boolean(template.error)"
+        @click="copy"
+      >
         {{ copying ? "正在复制…" : "复制替换后的全文" }}
       </button>
     </footer>

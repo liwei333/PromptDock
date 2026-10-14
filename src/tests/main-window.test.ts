@@ -2,7 +2,7 @@ import { createPinia } from "pinia";
 import { flushPromises, mount } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Category } from "@/types/prompt";
+import type { Category, Prompt } from "@/types/prompt";
 
 const GENERAL_CATEGORY_ID = "10000000-0000-4000-8000-000000000006";
 const CUSTOM_CATEGORY_ID = "dff11ee5-155c-4942-a598-6ffa9b50bc9c";
@@ -93,6 +93,23 @@ const categories: Category[] = [
   },
 ];
 
+const invalidTemplatePrompt: Prompt = {
+  id: "d6c3638d-4b01-4624-b13c-12917426b6a7",
+  title: "A股量价行为深度分析",
+  description: "",
+  body: "分析基准日：{{分析日期，默认最新可获取交易日}}",
+  categoryId: "10000000-0000-4000-8000-000000000002",
+  categoryName: "投资研究",
+  tags: [],
+  isFavorite: false,
+  isPinned: false,
+  pinOrder: null,
+  copyCount: 0,
+  lastCopiedAt: null,
+  createdAt: 1,
+  updatedAt: 1,
+};
+
 describe("MainWindow category navigation", () => {
   beforeEach(() => {
     promptList.mockResolvedValue({ items: [], total: 0 });
@@ -138,6 +155,23 @@ describe("MainWindow category navigation", () => {
     expect(categoryDelete).toHaveBeenCalledWith(
       CUSTOM_CATEGORY_ID,
       GENERAL_CATEGORY_ID,
+    );
+  });
+
+  it("keeps a prompt visible when its body contains an invalid variable name", async () => {
+    promptList.mockResolvedValue({ items: [invalidTemplatePrompt], total: 1 });
+    const wrapper = mount(MainWindow, { global: { plugins: [createPinia()] } });
+    await flushPromises();
+
+    expect(wrapper.get(".prompt-card").text()).toContain(
+      invalidTemplatePrompt.title,
+    );
+    await wrapper.get(".prompt-card").trigger("click");
+    expect(wrapper.get(".body-panel").text()).toContain(
+      invalidTemplatePrompt.body,
+    );
+    expect(wrapper.get("[data-test='template-error']").text()).toContain(
+      "变量名",
     );
   });
 });
