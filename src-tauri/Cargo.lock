@@ -3095,9 +3095,10 @@ dependencies = [
 
 [[package]]
 name = "promptdock"
-version = "1.1.0"
+version = "1.1.1"
 dependencies = [
  "chrono",
+ "objc2-app-kit",
  "serde",
  "serde_json",
  "sqlx",

@@ -18,3 +18,5 @@ export type StickySettings = {
   monitorName: string | null;
   scaleFactor: number | null;
 };
+
+export type StickySettingsPatch = { alwaysOnTop?: boolean };

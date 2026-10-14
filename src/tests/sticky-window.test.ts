@@ -1,78 +1,148 @@
 import { flushPromises, mount } from "@vue/test-utils";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { copyPromptText, enterMainMode, listSticky } = vi.hoisted(() => ({
-  copyPromptText: vi.fn().mockResolvedValue({
-    status: "copied",
-    stats: { copyCount: 1, lastCopiedAt: 2 },
-  }),
-  enterMainMode: vi.fn().mockResolvedValue({ mode: "main" }),
-  listSticky: vi.fn().mockResolvedValue([]),
-}));
+import auxiliaryCapability from "../../src-tauri/capabilities/auxiliary.json";
 
-vi.mock("@/api/commands", () => ({
-  promptApi: { listSticky },
+const { promptApi, windowApi } = vi.hoisted(() => ({
+  promptApi: { listSticky: vi.fn() },
   windowApi: {
-    enterMainMode,
-    hideSticky: vi.fn().mockResolvedValue({ hidden: true }),
-    showQuick: vi.fn().mockResolvedValue({ shown: true }),
-    getStickySettings: vi.fn().mockResolvedValue({ alwaysOnTop: true }),
-    setStickySettings: vi.fn().mockResolvedValue({ alwaysOnTop: true }),
+    enterMainMode: vi.fn(),
+    hideSticky: vi.fn(),
+    showQuick: vi.fn(),
+    getStickySettings: vi.fn(),
+    setStickySettings: vi.fn(),
   },
 }));
 
-vi.mock("@/services/clipboard", () => ({ copyPromptText }));
+vi.mock("@/api/commands", () => ({
+  promptApi,
+  windowApi,
+}));
 
 import StickyWindow from "@/windows/StickyWindow.vue";
 
 describe("StickyWindow", () => {
-  it("switches from sticky mode to the full main window", async () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    promptApi.listSticky.mockResolvedValue([]);
+    windowApi.enterMainMode.mockResolvedValue({ mode: "main" });
+    windowApi.hideSticky.mockResolvedValue({ hidden: true });
+    windowApi.showQuick.mockResolvedValue({ shown: true });
+    windowApi.getStickySettings.mockResolvedValue({
+      visible: true,
+      alwaysOnTop: true,
+      x: 120,
+      y: 80,
+      monitorName: "Built-in Retina Display",
+      scaleFactor: 2,
+    });
+    windowApi.setStickySettings.mockResolvedValue({
+      visible: true,
+      alwaysOnTop: true,
+      x: 120,
+      y: 80,
+      monitorName: "Built-in Retina Display",
+      scaleFactor: 2,
+    });
+  });
+
+  it("grants the sticky window permission to start native dragging", () => {
+    expect(auxiliaryCapability.windows).toContain("sticky");
+    expect(auxiliaryCapability.permissions).toContain(
+      "core:window:allow-start-dragging",
+    );
+  });
+
+  it("marks the complete titlebar as a native deep drag region", () => {
     const wrapper = mount(StickyWindow);
-    await flushPromises();
 
-    await wrapper.get('[aria-label="切换到完整模式"]').trigger("click");
-    await flushPromises();
-
-    expect(enterMainMode).toHaveBeenCalledOnce();
+    expect(
+      wrapper.get(".sticky-titlebar").attributes("data-tauri-drag-region"),
+    ).toBe("deep");
+    wrapper.unmount();
   });
 
   it("always renders five fixed slots when the library has no pins", async () => {
     const wrapper = mount(StickyWindow);
-    await Promise.resolve();
-    await Promise.resolve();
+    await flushPromises();
     expect(wrapper.findAll("[data-test='sticky-slot']")).toHaveLength(5);
     expect(wrapper.text()).toContain("空位 1");
     expect(wrapper.text()).toContain("0/5");
+    wrapper.unmount();
   });
 
-  it("copies an unrecognized variable placeholder as original text", async () => {
-    const prompt = {
-      id: "investment-prompt",
-      title: "A股量价行为深度分析",
-      description: "",
-      body: "分析基准日：{{分析日期，默认最新可获取交易日}}",
-      categoryId: "investment",
-      categoryName: "投资研究",
-      tags: [],
-      isFavorite: false,
-      isPinned: true,
-      pinOrder: 1,
-      copyCount: 0,
-      lastCopiedAt: null,
-      createdAt: 1,
-      updatedAt: 1,
-    };
-    listSticky.mockResolvedValueOnce([prompt]);
+  it("switches to full mode from the title icon and footer", async () => {
     const wrapper = mount(StickyWindow);
+
+    await wrapper.get("[aria-label='切换到完整模式']").trigger("click");
+    await flushPromises();
+    await wrapper.get("[data-test='manage-in-main']").trigger("click");
     await flushPromises();
 
-    await wrapper.get("[data-test='sticky-slot']").trigger("click");
+    expect(windowApi.enterMainMode).toHaveBeenCalledTimes(2);
+    wrapper.unmount();
+  });
+
+  it("suppresses repeated full-mode transitions while one is pending", async () => {
+    let resolveTransition!: (value: { mode: "main" }) => void;
+    windowApi.enterMainMode.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveTransition = resolve;
+      }),
+    );
+    const wrapper = mount(StickyWindow);
+    const titleControl = wrapper.get("[aria-label='切换到完整模式']");
+    const footerControl = wrapper.get("[data-test='manage-in-main']");
+
+    const titleClick = titleControl.trigger("click");
+    const footerClick = footerControl.trigger("click");
+    await Promise.all([titleClick, footerClick]);
+
+    expect(windowApi.enterMainMode).toHaveBeenCalledOnce();
+    expect(titleControl.attributes("disabled")).toBeDefined();
+    expect(footerControl.attributes("disabled")).toBeDefined();
+
+    resolveTransition({ mode: "main" });
+    await flushPromises();
+    expect(titleControl.attributes("disabled")).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it("renders accessible feedback when switching to full mode fails", async () => {
+    windowApi.enterMainMode.mockRejectedValueOnce(new Error("native failure"));
+    const wrapper = mount(StickyWindow);
+
+    await wrapper.get("[aria-label='切换到完整模式']").trigger("click");
     await flushPromises();
 
-    expect(copyPromptText).toHaveBeenCalledWith({
-      id: prompt.id,
-      text: prompt.body,
-    });
-    expect(wrapper.get("[data-test='sticky-slot']").text()).toContain("已复制");
+    expect(wrapper.get("[aria-live='polite']").text()).toContain(
+      "无法切换到完整模式",
+    );
+    wrapper.unmount();
+  });
+
+  it("keeps close as the explicit zero-window action", async () => {
+    const wrapper = mount(StickyWindow);
+
+    await wrapper.get("[aria-label='收起便签']").trigger("click");
+    await flushPromises();
+
+    expect(windowApi.hideSticky).toHaveBeenCalledOnce();
+    expect(windowApi.enterMainMode).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it("handles a rejected close without opening full mode", async () => {
+    windowApi.hideSticky.mockRejectedValueOnce(new Error("native failure"));
+    const wrapper = mount(StickyWindow);
+
+    await wrapper.get("[aria-label='收起便签']").trigger("click");
+    await flushPromises();
+
+    expect(wrapper.get("[aria-live='polite']").text()).toContain(
+      "无法收起便签",
+    );
+    expect(windowApi.enterMainMode).not.toHaveBeenCalled();
+    wrapper.unmount();
   });
 });

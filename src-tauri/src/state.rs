@@ -10,6 +10,32 @@ use serde::Serialize;
 use crate::db::Database;
 use crate::services::backup_service::BackupDocument;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DesktopPlatform {
+    MacOs,
+    Windows,
+    Other,
+}
+
+pub(crate) const fn shortcut_configuration(
+    platform: DesktopPlatform,
+) -> (&'static str, &'static str) {
+    match platform {
+        DesktopPlatform::MacOs => ("Alt+Space", "Option+Space"),
+        DesktopPlatform::Windows | DesktopPlatform::Other => ("Ctrl+Alt+Space", "Ctrl+Alt+Space"),
+    }
+}
+
+pub(crate) const fn current_shortcut_configuration() -> (&'static str, &'static str) {
+    if cfg!(target_os = "macos") {
+        shortcut_configuration(DesktopPlatform::MacOs)
+    } else if cfg!(target_os = "windows") {
+        shortcut_configuration(DesktopPlatform::Windows)
+    } else {
+        shortcut_configuration(DesktopPlatform::Other)
+    }
+}
+
 #[derive(Clone)]
 pub struct PendingImport {
     pub document: BackupDocument,
@@ -27,7 +53,7 @@ pub struct ShortcutStatus {
 impl Default for ShortcutStatus {
     fn default() -> Self {
         Self {
-            accelerator: "Option+Space".to_string(),
+            accelerator: current_shortcut_configuration().1.to_string(),
             registered: false,
             error: None,
         }
@@ -40,6 +66,7 @@ pub struct AppState {
     pub database_path: PathBuf,
     pub shortcut: Arc<RwLock<ShortcutStatus>>,
     pub pending_imports: Arc<Mutex<HashMap<String, PendingImport>>>,
+    pub mode_transition: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl AppState {
@@ -49,6 +76,7 @@ impl AppState {
             database_path,
             shortcut: Arc::new(RwLock::new(ShortcutStatus::default())),
             pending_imports: Arc::new(Mutex::new(HashMap::new())),
+            mode_transition: Arc::new(tokio::sync::Mutex::new(())),
         }
     }
 }

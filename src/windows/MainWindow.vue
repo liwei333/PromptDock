@@ -47,6 +47,7 @@ const importing = ref(false);
 const importError = ref("");
 const saving = ref(false);
 const saveError = ref("");
+const switchingMode = ref(false);
 const copyingId = ref<string | null>(null);
 const toast = ref<{ text: string; kind: "success" | "error" } | null>(null);
 let stopListening: (() => void) | null = null;
@@ -212,6 +213,18 @@ async function exportBackup(): Promise<void> {
   }
 }
 
+async function enterStickyMode(): Promise<void> {
+  if (switchingMode.value) return;
+  switchingMode.value = true;
+  try {
+    await windowApi.enterStickyMode();
+  } catch {
+    notify("无法切换到便签模式", "error");
+  } finally {
+    switchingMode.value = false;
+  }
+}
+
 async function previewImport(): Promise<void> {
   try {
     importPreview.value = await backupApi.previewWithDialog();
@@ -263,10 +276,15 @@ function keydown(event: KeyboardEvent): void {
   const editingText = target?.matches(
     "input, textarea, select, [contenteditable='true']",
   );
-  if (event.metaKey && event.key.toLowerCase() === "k") {
+  const commandModifier = event.metaKey || event.ctrlKey;
+  if (commandModifier && event.key.toLowerCase() === "k") {
     event.preventDefault();
     quickOpen.value = true;
-  } else if (event.metaKey && event.key.toLowerCase() === "f" && !editingText) {
+  } else if (
+    commandModifier &&
+    event.key.toLowerCase() === "f" &&
+    !editingText
+  ) {
     event.preventDefault();
     document.querySelector<HTMLInputElement>("#main-search")?.focus();
   }
@@ -361,14 +379,12 @@ onBeforeUnmount(() => {
       </nav>
       <div class="sidebar-bottom">
         <button @click="quickOpen = true">
-          <span>⌘ 快捷取用</span><kbd>⌘K</kbd>
+          <span>⌘/Ctrl 快捷取用</span><kbd>⌘/Ctrl K</kbd>
         </button>
         <button
-          @click="
-            windowApi
-              .showSticky()
-              .catch(() => notify('无法打开便签窗口', 'error'))
-          "
+          data-test="sidebar-sticky-mode"
+          :disabled="switchingMode"
+          @click="enterStickyMode"
         >
           <span>▤ 便签模式</span><small>5 槽位</small>
         </button>
@@ -391,7 +407,12 @@ onBeforeUnmount(() => {
         <div class="toolbar-actions">
           <button class="ghost-button" @click="previewImport">导入</button>
           <button class="ghost-button" @click="exportBackup">导出</button>
-          <button class="ghost-button" @click="windowApi.showSticky()">
+          <button
+            data-test="toolbar-sticky-mode"
+            class="ghost-button"
+            :disabled="switchingMode"
+            @click="enterStickyMode"
+          >
             ▤ 便签模式
           </button>
           <button class="primary-button" @click="editing = null">
@@ -463,7 +484,13 @@ onBeforeUnmount(() => {
             </div>
             <div>
               <button @click="stickyManagerOpen = true">管理顺序</button>
-              <button @click="windowApi.showSticky()">打开便签窗 →</button>
+              <button
+                data-test="pinned-sticky-mode"
+                :disabled="switchingMode"
+                @click="enterStickyMode"
+              >
+                打开便签窗 →
+              </button>
             </div>
           </header>
           <div class="pinned-grid">
@@ -599,7 +626,16 @@ onBeforeUnmount(() => {
       @close="categoryDialogOpen = false"
       @create="createCategory"
     />
-    <div v-if="toast" class="toast" :class="toast.kind" aria-live="polite">
+    <div
+      data-test="main-live-region"
+      class="sr-only"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+    >
+      {{ toast?.text ?? "" }}
+    </div>
+    <div v-if="toast" class="toast" :class="toast.kind">
       {{ toast.kind === "success" ? "✓" : "!" }} {{ toast.text }}
     </div>
   </div>

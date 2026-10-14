@@ -10,7 +10,11 @@ import type {
   PromptPage,
   PromptQuery,
 } from "@/types/prompt";
-import type { RuntimeInfo, StickySettings } from "@/types/runtime";
+import type {
+  RuntimeInfo,
+  StickySettings,
+  StickySettingsPatch,
+} from "@/types/runtime";
 import type {
   ExportResult,
   ImportMode,
@@ -51,10 +55,11 @@ export const windowApi = {
   showQuick: (promptId?: string) =>
     invoke<{ shown: true }>("show_quick_window", { promptId }),
   hideQuick: () => invoke<{ hidden: true }>("hide_quick_window"),
-  showSticky: () => invoke<{ shown: true }>("show_sticky_window"),
+  enterStickyMode: () => invoke<{ mode: "sticky" }>("enter_sticky_mode"),
+  enterMainMode: () => invoke<{ mode: "main" }>("enter_main_mode"),
   hideSticky: () => invoke<{ hidden: true }>("hide_sticky_window"),
   getStickySettings: () => invoke<StickySettings>("get_sticky_settings"),
-  setStickySettings: (settings: Partial<StickySettings>) =>
+  setStickySettings: (settings: StickySettingsPatch) =>
     invoke<StickySettings>("set_sticky_settings", { settings }),
   runtimeInfo: () => invoke<RuntimeInfo>("get_runtime_info"),
 };

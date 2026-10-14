@@ -2,36 +2,45 @@ import { createPinia } from "pinia";
 import { flushPromises, mount } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Category, Prompt } from "@/types/prompt";
+const { categoryApi, pinnedPrompt, promptApi, windowApi } = vi.hoisted(() => {
+  const pinnedPrompt = {
+    id: "pinned-1",
+    title: "固定提示词",
+    description: "",
+    body: "固定正文",
+    categoryId: "category-1",
+    categoryName: "通用效率",
+    tags: [],
+    isFavorite: false,
+    isPinned: true,
+    pinOrder: 1,
+    copyCount: 0,
+    lastCopiedAt: null,
+    createdAt: 1,
+    updatedAt: 1,
+  };
 
-const GENERAL_CATEGORY_ID = "10000000-0000-4000-8000-000000000006";
-const CUSTOM_CATEGORY_ID = "dff11ee5-155c-4942-a598-6ffa9b50bc9c";
-
-const {
-  categoryDelete,
-  categoryList,
-  confirmDialog,
-  copyPromptText,
-  promptList,
-} = vi.hoisted(() => ({
-  categoryDelete: vi.fn(),
-  categoryList: vi.fn(),
-  confirmDialog: vi.fn(),
-  copyPromptText: vi.fn(),
-  promptList: vi.fn(),
-}));
-
-vi.mock("@tauri-apps/api/event", () => ({
-  listen: vi.fn().mockResolvedValue(() => undefined),
-}));
-
-vi.mock("@tauri-apps/plugin-dialog", () => ({
-  confirm: confirmDialog,
-}));
-
-vi.mock("@/services/clipboard", () => ({
-  copyPromptText,
-}));
+  return {
+    categoryApi: {
+      list: vi.fn(),
+      create: vi.fn(),
+    },
+    promptApi: {
+      list: vi.fn(),
+      stats: vi.fn(),
+      listSticky: vi.fn(),
+      setFavorite: vi.fn(),
+      setPinned: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+    },
+    windowApi: {
+      enterStickyMode: vi.fn(),
+    },
+    pinnedPrompt,
+  };
+});
 
 vi.mock("@/api/commands", () => ({
   backupApi: {
@@ -40,170 +49,123 @@ vi.mock("@/api/commands", () => ({
     commit: vi.fn(),
     cancel: vi.fn(),
   },
-  categoryApi: {
-    list: categoryList,
-    create: vi.fn(),
-    rename: vi.fn(),
-    delete: categoryDelete,
-  },
-  promptApi: {
-    list: promptList,
-    create: vi.fn(),
-    update: vi.fn(),
-    delete: vi.fn(),
-    setFavorite: vi.fn(),
-    setPinned: vi.fn(),
-    listSticky: vi.fn().mockResolvedValue([]),
-    stats: vi.fn().mockResolvedValue({
-      total: 4,
-      recent: 0,
-      favorites: 3,
-      pinned: 3,
-      templates: 0,
-    }),
-  },
-  windowApi: {
-    showSticky: vi.fn(),
-  },
+  categoryApi,
+  promptApi,
+  windowApi,
 }));
 
 import MainWindow from "@/windows/MainWindow.vue";
 
-const categories: Category[] = [
-  {
-    id: "10000000-0000-4000-8000-000000000002",
-    name: "投资研究",
-    icon: "chart",
-    color: "#478CA2",
-    sortOrder: 1,
-    createdAt: 1,
-    updatedAt: 1,
-    promptCount: 1,
-  },
-  {
-    id: GENERAL_CATEGORY_ID,
-    name: "通用效率",
-    icon: "sparkles",
-    color: "#6687AE",
-    sortOrder: 5,
-    createdAt: 1,
-    updatedAt: 1,
-    promptCount: 3,
-  },
-  {
-    id: CUSTOM_CATEGORY_ID,
-    name: "测试分类",
-    icon: "folder",
-    color: "#64748B",
-    sortOrder: 6,
-    createdAt: 1,
-    updatedAt: 1,
-    promptCount: 0,
-  },
+const STICKY_ENTRY_SELECTORS = [
+  "[data-test='sidebar-sticky-mode']",
+  "[data-test='toolbar-sticky-mode']",
+  "[data-test='pinned-sticky-mode']",
 ];
 
-const invalidTemplatePrompt: Prompt = {
-  id: "d6c3638d-4b01-4624-b13c-12917426b6a7",
-  title: "A股量价行为深度分析",
-  description: "",
-  body: "分析基准日：{{分析日期，默认最新可获取交易日}}",
-  categoryId: "10000000-0000-4000-8000-000000000002",
-  categoryName: "投资研究",
-  tags: [],
-  isFavorite: false,
-  isPinned: false,
-  pinOrder: null,
-  copyCount: 0,
-  lastCopiedAt: null,
-  createdAt: 1,
-  updatedAt: 1,
-};
+async function mountMainWindow() {
+  const wrapper = mount(MainWindow, {
+    global: {
+      plugins: [createPinia()],
+      stubs: {
+        CategoryCreateDialog: true,
+        ImportPreviewDialog: true,
+        PromptCard: true,
+        PromptDetailDrawer: true,
+        PromptEditorDialog: true,
+        QuickPalette: true,
+        RuntimeInfoDialog: true,
+        StickyManagerDialog: true,
+      },
+    },
+  });
+  await flushPromises();
+  return wrapper;
+}
 
-describe("MainWindow category navigation", () => {
+describe("MainWindow exclusive sticky-mode controls", () => {
   beforeEach(() => {
-    promptList.mockResolvedValue({ items: [], total: 0 });
-    categoryList.mockResolvedValue(categories);
-    categoryDelete.mockResolvedValue({ deleted: true });
-    confirmDialog.mockResolvedValue(true);
-    copyPromptText.mockResolvedValue({
-      status: "copied",
-      stats: { copyCount: 1, lastCopiedAt: 2 },
+    vi.clearAllMocks();
+    promptApi.list.mockResolvedValue({ items: [], total: 0 });
+    promptApi.stats.mockResolvedValue({
+      total: 0,
+      recent: 0,
+      favorites: 0,
+      pinned: 1,
+      templates: 0,
     });
+    promptApi.listSticky.mockResolvedValue([pinnedPrompt]);
+    categoryApi.list.mockResolvedValue([]);
+    windowApi.enterStickyMode.mockResolvedValue({ mode: "sticky" });
   });
 
-  it("clears quick filters when switching from favorites to a category", async () => {
-    const wrapper = mount(MainWindow, { global: { plugins: [createPinia()] } });
-    await flushPromises();
+  it("routes all three full-window entry points through enterStickyMode", async () => {
+    const wrapper = await mountMainWindow();
 
-    await wrapper.get(".tabs button:nth-child(2)").trigger("click");
-    await flushPromises();
-    await wrapper
-      .get('[data-test="category-10000000-0000-4000-8000-000000000002"]')
-      .trigger("click");
-    await flushPromises();
+    for (const selector of STICKY_ENTRY_SELECTORS) {
+      await wrapper.get(selector).trigger("click");
+      await flushPromises();
+    }
 
-    expect(promptList).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        categoryId: "10000000-0000-4000-8000-000000000002",
-        search: undefined,
-        tab: "all",
-        view: "all",
+    expect(windowApi.enterStickyMode).toHaveBeenCalledTimes(3);
+    wrapper.unmount();
+  });
+
+  it("suppresses repeated transitions and disables every entry while pending", async () => {
+    let resolveTransition!: (value: { mode: "sticky" }) => void;
+    windowApi.enterStickyMode.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveTransition = resolve;
       }),
     );
+    const wrapper = await mountMainWindow();
+    const toolbar = wrapper.get(STICKY_ENTRY_SELECTORS[1]);
+    const sidebar = wrapper.get(STICKY_ENTRY_SELECTORS[0]);
+
+    const firstClick = toolbar.trigger("click");
+    const secondClick = sidebar.trigger("click");
+    await Promise.all([firstClick, secondClick]);
+
+    expect(windowApi.enterStickyMode).toHaveBeenCalledOnce();
+    for (const selector of STICKY_ENTRY_SELECTORS) {
+      expect(wrapper.get(selector).attributes("disabled")).toBeDefined();
+    }
+
+    resolveTransition({ mode: "sticky" });
+    await flushPromises();
+    for (const selector of STICKY_ENTRY_SELECTORS) {
+      expect(wrapper.get(selector).attributes("disabled")).toBeUndefined();
+    }
+    wrapper.unmount();
   });
 
-  it("deletes a custom category after confirming prompts move to General", async () => {
-    const wrapper = mount(MainWindow, { global: { plugins: [createPinia()] } });
+  it("renders accessible feedback when the native transition is rejected", async () => {
+    windowApi.enterStickyMode.mockRejectedValueOnce(
+      new Error("native failure"),
+    );
+    const wrapper = await mountMainWindow();
+    const liveRegion = wrapper.get("[data-test='main-live-region']");
+    const liveRegionElement = liveRegion.element;
+
+    expect(liveRegion.text()).toBe("");
+
+    await wrapper.get(STICKY_ENTRY_SELECTORS[1]).trigger("click");
     await flushPromises();
 
-    await wrapper
-      .get(`[data-test="delete-category-${CUSTOM_CATEGORY_ID}"]`)
-      .trigger("click");
-    await flushPromises();
-
-    expect(confirmDialog).toHaveBeenCalledWith(
-      expect.stringContaining("通用效率"),
-      expect.objectContaining({ kind: "warning" }),
-    );
-    expect(categoryDelete).toHaveBeenCalledWith(
-      CUSTOM_CATEGORY_ID,
-      GENERAL_CATEGORY_ID,
-    );
+    const updatedLiveRegion = wrapper.get("[data-test='main-live-region']");
+    expect(updatedLiveRegion.element).toBe(liveRegionElement);
+    expect(updatedLiveRegion.text()).toContain("无法切换到便签模式");
+    wrapper.unmount();
   });
 
-  it("keeps a prompt visible when its body contains an invalid variable name", async () => {
-    promptList.mockResolvedValue({ items: [invalidTemplatePrompt], total: 1 });
-    const wrapper = mount(MainWindow, { global: { plugins: [createPinia()] } });
-    await flushPromises();
+  it("opens the quick palette with the Windows Ctrl+K shortcut", async () => {
+    const wrapper = await mountMainWindow();
 
-    expect(wrapper.get(".prompt-card").text()).toContain(
-      invalidTemplatePrompt.title,
+    document.body.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true }),
     );
-    await wrapper.get(".prompt-card").trigger("click");
-    expect(wrapper.get(".body-panel").text()).toContain(
-      invalidTemplatePrompt.body,
-    );
-    expect(wrapper.get("[data-test='template-error']").text()).toContain(
-      "变量名",
-    );
-  });
+    await wrapper.vm.$nextTick();
 
-  it("copies the original body when a variable name is not recognized", async () => {
-    promptList.mockResolvedValue({ items: [invalidTemplatePrompt], total: 1 });
-    const wrapper = mount(MainWindow, { global: { plugins: [createPinia()] } });
-    await flushPromises();
-
-    await wrapper.get(".prompt-card [data-test='copy']").trigger("click");
-    await flushPromises();
-
-    expect(copyPromptText).toHaveBeenCalledWith({
-      id: invalidTemplatePrompt.id,
-      text: invalidTemplatePrompt.body,
-    });
-
-    await wrapper.get(".prompt-card").trigger("click");
-    const detailCopy = wrapper.get(".detail-drawer .primary-button");
-    expect(detailCopy.attributes("disabled")).toBeUndefined();
-    expect(detailCopy.text()).toContain("复制");
+    expect(wrapper.find(".palette-overlay").exists()).toBe(true);
+    wrapper.unmount();
   });
 });

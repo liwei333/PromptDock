@@ -1,14 +1,16 @@
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::{
     domain::errors::{AppError, ErrorPayload},
-    repositories::settings_repo::SettingsRepository,
     state::{AppState, ShortcutStatus},
+    window_mode::{
+        TauriWindowModeRuntime, WindowMode, WindowModeRuntime, hide_sticky_explicitly,
+        set_sticky_always_on_top, transition_to,
+    },
 };
 
 type CommandResult<T> = Result<T, ErrorPayload>;
-const STICKY_SETTINGS_KEY: &str = "sticky_window";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -35,14 +37,14 @@ impl Default for StickySettings {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct StickySettingsPatch {
-    pub visible: Option<bool>,
     pub always_on_top: Option<bool>,
-    pub x: Option<i32>,
-    pub y: Option<i32>,
-    pub monitor_name: Option<String>,
-    pub scale_factor: Option<f64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ModeResult {
+    pub mode: WindowMode,
 }
 
 #[derive(Debug, Serialize)]
@@ -65,100 +67,6 @@ pub struct RuntimeInfo {
 
 fn native_error(error: impl ToString) -> ErrorPayload {
     AppError::Native(error.to_string()).into()
-}
-
-pub(crate) async fn read_sticky_settings(state: &AppState) -> Result<StickySettings, AppError> {
-    let repository = SettingsRepository::new(state.database.pool().clone());
-    repository
-        .get(STICKY_SETTINGS_KEY)
-        .await?
-        .map(serde_json::from_value)
-        .transpose()
-        .map_err(Into::into)
-        .map(|value| value.unwrap_or_default())
-}
-
-pub(crate) async fn write_sticky_settings(
-    state: &AppState,
-    settings: &StickySettings,
-) -> Result<(), AppError> {
-    SettingsRepository::new(state.database.pool().clone())
-        .set(STICKY_SETTINGS_KEY, &serde_json::to_value(settings)?)
-        .await
-}
-
-pub(crate) async fn capture_sticky_window_state(
-    app: &AppHandle,
-    state: &AppState,
-    visible: bool,
-) -> Result<StickySettings, AppError> {
-    let window = app
-        .get_webview_window("sticky")
-        .ok_or_else(|| AppError::Native("找不到便签窗口".to_string()))?;
-    let mut settings = read_sticky_settings(state).await?;
-    settings.visible = visible;
-    if let Ok(position) = window.outer_position() {
-        settings.x = Some(position.x);
-        settings.y = Some(position.y);
-    }
-    settings.scale_factor = window.scale_factor().ok();
-    settings.monitor_name = window
-        .current_monitor()
-        .ok()
-        .flatten()
-        .and_then(|monitor| monitor.name().map(ToOwned::to_owned));
-    write_sticky_settings(state, &settings).await?;
-    Ok(settings)
-}
-
-pub(crate) async fn restore_sticky_window(
-    app: &AppHandle,
-    state: &AppState,
-) -> Result<(), AppError> {
-    let settings = read_sticky_settings(state).await?;
-    let window = app
-        .get_webview_window("sticky")
-        .ok_or_else(|| AppError::Native("找不到便签窗口".to_string()))?;
-    window
-        .set_always_on_top(settings.always_on_top)
-        .map_err(|error| AppError::Native(error.to_string()))?;
-    if let (Some(x), Some(y)) = (settings.x, settings.y) {
-        let size = window
-            .outer_size()
-            .map_err(|error| AppError::Native(error.to_string()))?;
-        let monitor = window
-            .available_monitors()
-            .map_err(|error| AppError::Native(error.to_string()))?
-            .into_iter()
-            .find(|monitor| monitor.name().map(String::as_str) == settings.monitor_name.as_deref())
-            .or_else(|| window.current_monitor().ok().flatten());
-        if let Some(monitor) = monitor {
-            let origin = monitor.position();
-            let area = monitor.size();
-            let max_x = origin.x + area.width.saturating_sub(size.width) as i32;
-            let max_y = origin.y + area.height.saturating_sub(size.height) as i32;
-            window
-                .set_position(PhysicalPosition::new(
-                    x.clamp(origin.x, max_x),
-                    y.clamp(origin.y, max_y),
-                ))
-                .map_err(|error| AppError::Native(error.to_string()))?;
-        }
-    }
-    if settings.visible {
-        window
-            .show()
-            .map_err(|error| AppError::Native(error.to_string()))?;
-    }
-    Ok(())
-}
-
-pub fn focus_main_window(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.show();
-        let _ = window.unminimize();
-        let _ = window.set_focus();
-    }
 }
 
 pub fn reveal_quick_window(app: &AppHandle, prompt_id: Option<String>) -> Result<(), AppError> {
@@ -196,26 +104,27 @@ pub fn hide_quick_window(app: AppHandle) -> CommandResult<HiddenResult> {
 }
 
 #[tauri::command]
-pub async fn show_sticky_window(
+pub async fn enter_sticky_mode(
     app: AppHandle,
     state: State<'_, AppState>,
-) -> CommandResult<ShownResult> {
-    let window = app
-        .get_webview_window("sticky")
-        .ok_or_else(|| native_error("找不到便签窗口"))?;
-    let mut settings = read_sticky_settings(&state).await?;
-    window
-        .set_always_on_top(settings.always_on_top)
-        .map_err(native_error)?;
-    if let (Some(x), Some(y)) = (settings.x, settings.y) {
-        window
-            .set_position(PhysicalPosition::new(x, y))
-            .map_err(native_error)?;
-    }
-    window.show().map_err(native_error)?;
-    settings.visible = true;
-    write_sticky_settings(&state, &settings).await?;
-    Ok(ShownResult { shown: true })
+) -> CommandResult<ModeResult> {
+    let runtime = TauriWindowModeRuntime::new(app, state.inner().clone());
+    transition_to(&runtime, &state.mode_transition, WindowMode::Sticky).await?;
+    Ok(ModeResult {
+        mode: WindowMode::Sticky,
+    })
+}
+
+#[tauri::command]
+pub async fn enter_main_mode(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> CommandResult<ModeResult> {
+    let runtime = TauriWindowModeRuntime::new(app, state.inner().clone());
+    transition_to(&runtime, &state.mode_transition, WindowMode::Main).await?;
+    Ok(ModeResult {
+        mode: WindowMode::Main,
+    })
 }
 
 #[tauri::command]
@@ -223,17 +132,20 @@ pub async fn hide_sticky_window(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> CommandResult<HiddenResult> {
-    let window = app
-        .get_webview_window("sticky")
-        .ok_or_else(|| native_error("找不到便签窗口"))?;
-    capture_sticky_window_state(&app, &state, false).await?;
-    window.hide().map_err(native_error)?;
+    let runtime = TauriWindowModeRuntime::new(app, state.inner().clone());
+    hide_sticky_explicitly(&runtime, &state.mode_transition).await?;
     Ok(HiddenResult { hidden: true })
 }
 
 #[tauri::command]
-pub async fn get_sticky_settings(state: State<'_, AppState>) -> CommandResult<StickySettings> {
-    read_sticky_settings(&state).await.map_err(Into::into)
+pub async fn get_sticky_settings(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> CommandResult<StickySettings> {
+    TauriWindowModeRuntime::new(app, state.inner().clone())
+        .read_settings()
+        .await
+        .map_err(Into::into)
 }
 
 #[tauri::command]
@@ -242,42 +154,16 @@ pub async fn set_sticky_settings(
     state: State<'_, AppState>,
     settings: StickySettingsPatch,
 ) -> CommandResult<StickySettings> {
-    let mut current = read_sticky_settings(&state).await?;
-    if let Some(value) = settings.visible {
-        current.visible = value;
-    }
-    if let Some(value) = settings.always_on_top {
-        current.always_on_top = value;
-    }
-    if let Some(value) = settings.x {
-        current.x = Some(value);
-    }
-    if let Some(value) = settings.y {
-        current.y = Some(value);
-    }
-    if let Some(value) = settings.monitor_name {
-        current.monitor_name = Some(value);
-    }
-    if let Some(value) = settings.scale_factor {
-        current.scale_factor = Some(value);
-    }
-
-    if let Some(window) = app.get_webview_window("sticky") {
-        window
-            .set_always_on_top(current.always_on_top)
-            .map_err(native_error)?;
-        match current.visible {
-            true => window.show().map_err(native_error)?,
-            false => window.hide().map_err(native_error)?,
-        }
-        if let (Some(x), Some(y)) = (current.x, current.y) {
-            window
-                .set_position(PhysicalPosition::new(x, y))
-                .map_err(native_error)?;
+    let runtime = TauriWindowModeRuntime::new(app, state.inner().clone());
+    match settings.always_on_top {
+        Some(value) => set_sticky_always_on_top(&runtime, &state.mode_transition, value)
+            .await
+            .map_err(Into::into),
+        None => {
+            let _guard = state.mode_transition.lock().await;
+            runtime.read_settings().await.map_err(Into::into)
         }
     }
-    write_sticky_settings(&state, &current).await?;
-    Ok(current)
 }
 
 #[tauri::command]
@@ -294,5 +180,36 @@ pub fn get_runtime_info(state: State<'_, AppState>) -> RuntimeInfo {
         db_path: state.database_path.to_string_lossy().into_owned(),
         version: env!("CARGO_PKG_VERSION"),
         shortcut,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::StickySettingsPatch;
+
+    #[test]
+    fn sticky_settings_patch_rejects_visibility_position_and_unknown_fields() {
+        for value in [
+            serde_json::json!({ "visible": true }),
+            serde_json::json!({ "x": 10 }),
+            serde_json::json!({ "y": 20 }),
+            serde_json::json!({ "monitorName": "Display" }),
+            serde_json::json!({ "scaleFactor": 2.0 }),
+            serde_json::json!({ "unexpected": true }),
+        ] {
+            assert!(
+                serde_json::from_value::<StickySettingsPatch>(value.clone()).is_err(),
+                "frontend settings must reject {value}"
+            );
+        }
+    }
+
+    #[test]
+    fn sticky_settings_patch_accepts_only_optional_top_preference() {
+        let patch: StickySettingsPatch =
+            serde_json::from_value(serde_json::json!({ "alwaysOnTop": false })).unwrap();
+        assert_eq!(patch.always_on_top, Some(false));
+        let empty: StickySettingsPatch = serde_json::from_value(serde_json::json!({})).unwrap();
+        assert_eq!(empty.always_on_top, None);
     }
 }

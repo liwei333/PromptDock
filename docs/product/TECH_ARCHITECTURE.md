@@ -1,4 +1,8 @@
-# PromptDock — macOS 单机版技术架构与实施方案 V1.1
+# PromptDock — 单机版技术架构与实施方案 V1.1
+
+> **V1.1.1 跨平台修订（2026-10-14）**：桌面发行目标扩展为 macOS 13+
+> （Apple Silicon / Intel）与 Windows 10/11 x64。共享 Vue、Rust、SQLite 与 Tauri
+> command 实现；平台专用原生代码必须使用条件编译隔离，并由各自原生 runner 构建验证。
 
 > 日期：2026-10-13 ｜ 适用范围：**仅 macOS 本地版** ｜ 对应 `PRD.md`、`UI_DESIGN_SPEC.md`、`UI_PROTOTYPE.html`
 >

@@ -25,6 +25,11 @@ pub enum AppError {
     Serialization(#[from] serde_json::Error),
     #[error("原生功能不可用：{0}")]
     Native(String),
+    #[error("{original}；回滚失败：{rollback}")]
+    WindowTransition {
+        original: Box<AppError>,
+        rollback: String,
+    },
 }
 
 #[derive(Debug, Serialize)]
@@ -36,19 +41,7 @@ pub struct ErrorPayload {
 
 impl From<AppError> for ErrorPayload {
     fn from(error: AppError) -> Self {
-        let code = match error {
-            AppError::Database(_) => "DATABASE_ERROR",
-            AppError::Migration(_) => "MIGRATION_ERROR",
-            AppError::Io(_) => "IO_ERROR",
-            AppError::Validation(_) => "VALIDATION_ERROR",
-            AppError::NotFound(_) => "NOT_FOUND",
-            AppError::CategoryNotFound => "CATEGORY_NOT_FOUND",
-            AppError::CategoryExists => "CATEGORY_EXISTS",
-            AppError::PinLimitReached => "PIN_LIMIT_REACHED",
-            AppError::Conflict(_) => "CONFLICT",
-            AppError::Serialization(_) => "SERIALIZATION_ERROR",
-            AppError::Native(_) => "NATIVE_ERROR",
-        };
+        let code = error.code();
         Self {
             code,
             message: error.to_string(),
@@ -70,6 +63,7 @@ impl AppError {
             Self::Conflict(_) => "CONFLICT",
             Self::Serialization(_) => "SERIALIZATION_ERROR",
             Self::Native(_) => "NATIVE_ERROR",
+            Self::WindowTransition { original, .. } => original.code(),
         }
     }
 }

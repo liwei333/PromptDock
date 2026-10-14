@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 
 import { promptApi, windowApi } from "@/api/commands";
@@ -12,6 +11,8 @@ const prompts = ref<Prompt[]>([]);
 const alwaysOnTop = ref(true);
 const feedback = ref<{ id: string; text: string; error: boolean } | null>(null);
 const loading = ref(true);
+const switchingMode = ref(false);
+const windowError = ref("");
 let stopListening: (() => void) | null = null;
 const slots = computed(() =>
   Array.from({ length: 5 }, (_, index) => prompts.value[index] ?? null),
@@ -59,9 +60,26 @@ async function toggleAlwaysOnTop(): Promise<void> {
   }
 }
 
-function startDragging(event: MouseEvent): void {
-  if ((event.target as HTMLElement).closest("button")) return;
-  if ("__TAURI_INTERNALS__" in window) void getCurrentWindow().startDragging();
+async function enterMainMode(): Promise<void> {
+  if (switchingMode.value) return;
+  switchingMode.value = true;
+  windowError.value = "";
+  try {
+    await windowApi.enterMainMode();
+  } catch {
+    windowError.value = "无法切换到完整模式";
+  } finally {
+    switchingMode.value = false;
+  }
+}
+
+async function hideSticky(): Promise<void> {
+  windowError.value = "";
+  try {
+    await windowApi.hideSticky();
+  } catch {
+    windowError.value = "无法收起便签";
+  }
 }
 
 onMounted(async () => {
@@ -77,7 +95,7 @@ onBeforeUnmount(() => stopListening?.());
 
 <template>
   <main class="sticky-window">
-    <header class="sticky-titlebar" @mousedown="startDragging">
+    <header class="sticky-titlebar" data-tauri-drag-region="deep">
       <div>
         <span class="sticky-pin">⌁</span><strong>快捷便签</strong
         ><small>{{ prompts.length }}/5</small>
@@ -91,12 +109,19 @@ onBeforeUnmount(() => stopListening?.());
         >
           ⌖
         </button>
-        <button title="打开主窗口管理" aria-label="打开主窗口管理">⋯</button>
         <button
-          title="收起便签"
-          aria-label="收起便签"
-          @click="windowApi.hideSticky()"
+          data-test="enter-main-mode"
+          title="切换到完整模式"
+          aria-label="切换到完整模式"
+          :disabled="switchingMode"
+          @click="enterMainMode"
         >
+          <svg class="mode-window-icon" viewBox="0 0 16 16" aria-hidden="true">
+            <rect x="2.5" y="3" width="11" height="9.5" rx="1.5" />
+            <path d="M3 5.5h10" />
+          </svg>
+        </button>
+        <button title="收起便签" aria-label="收起便签" @click="hideSticky">
           ×
         </button>
       </div>
@@ -139,7 +164,18 @@ onBeforeUnmount(() => stopListening?.());
       </template>
     </section>
     <footer class="sticky-footer">
-      <span>整行点击 · 复制全文</span><button>管理置顶 →</button>
+      <span
+        class="sticky-window-status"
+        :class="{ error: windowError }"
+        aria-live="polite"
+        >{{ windowError || "整行点击 · 复制全文" }}</span
+      ><button
+        data-test="manage-in-main"
+        :disabled="switchingMode"
+        @click="enterMainMode"
+      >
+        管理置顶 →
+      </button>
     </footer>
   </main>
 </template>
