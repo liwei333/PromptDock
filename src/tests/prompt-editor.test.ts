@@ -172,6 +172,77 @@ describe("PromptEditorDialog", () => {
     ]);
   });
 
+  it("keeps an eleventh visible tag in dirty state and blocks silent truncation", async () => {
+    const tenTags = Array.from(
+      { length: 10 },
+      (_, index) => `标签${index + 1}`,
+    );
+    confirmDialog.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    const wrapper = track(
+      mount(PromptEditorDialog, {
+        attachTo: document.body,
+        props: { prompt: { ...prompt, tags: tenTags }, categories },
+        global: { stubs: { Teleport: false } },
+      }),
+    );
+    await settle();
+
+    const tags = document.body.querySelector<HTMLInputElement>(
+      "[data-test='prompt-tags']",
+    )!;
+    const rawTags = `${tenTags.join("，")}，第11个标签`;
+    tags.value = rawTags;
+    tags.dispatchEvent(new Event("input", { bubbles: true }));
+    await settle();
+
+    expect(tags.value).toBe(rawTags);
+    expect(
+      document.body.querySelector('[role="alert"]')?.textContent,
+    ).toContain("标签不能超过 10 个");
+    document.body
+      .querySelector<HTMLButtonElement>("[data-test='save-prompt']")!
+      .click();
+    expect(wrapper.emitted("save")).toBeUndefined();
+
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    );
+    await settle();
+    expect(confirmDialog).toHaveBeenCalledTimes(1);
+    expect(wrapper.emitted("close")).toBeUndefined();
+    document.body
+      .querySelector<HTMLButtonElement>('button[aria-label="关闭编辑器"]')!
+      .click();
+    await settle();
+    expect(confirmDialog).toHaveBeenCalledTimes(2);
+    expect(wrapper.emitted("close")).toHaveLength(1);
+  });
+
+  it("saves all entered tags when the count stays within the limit", async () => {
+    const wrapper = track(
+      mount(PromptEditorDialog, {
+        attachTo: document.body,
+        props: { prompt, categories },
+        global: { stubs: { Teleport: false } },
+      }),
+    );
+    await settle();
+
+    const tags = document.body.querySelector<HTMLInputElement>(
+      "[data-test='prompt-tags']",
+    )!;
+    tags.value = "开发， 审查, 稳定性";
+    tags.dispatchEvent(new Event("input", { bubbles: true }));
+    document.body
+      .querySelector<HTMLButtonElement>("[data-test='save-prompt']")!
+      .click();
+    await settle();
+
+    expect(wrapper.emitted("save")?.[0]?.[0]).toEqual(
+      expect.objectContaining({ tags: ["开发", "审查", "稳定性"] }),
+    );
+  });
+
   it("keeps a dirty editor open after rejected Escape, then emits close without save after confirmation", async () => {
     confirmDialog.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
     const wrapper = await dirtyEditor();

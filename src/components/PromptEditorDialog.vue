@@ -47,6 +47,7 @@ const validation = computed(() => {
     return "标题不能超过 80 个字符";
   if (!form.body.trim()) return "请输入提示词正文";
   if (!form.categoryId) return "请选择分类";
+  if (form.tags.length > 10) return "标签不能超过 10 个";
   return "";
 });
 const dialogTitle = computed(() =>
@@ -78,8 +79,7 @@ function updateTags(event: Event): void {
   form.tags = tagsText.value
     .split(/[,，]/u)
     .map((tag) => tag.trim())
-    .filter(Boolean)
-    .slice(0, 10);
+    .filter(Boolean);
 }
 
 function updateCategory(categoryId: string): void {
@@ -166,6 +166,7 @@ function save(): void {
           <span>标签</span>
           <input
             :value="tagsText"
+            data-test="prompt-tags"
             placeholder="用逗号分隔，最多 10 个"
             :disabled="saving"
             @input="updateTags"
