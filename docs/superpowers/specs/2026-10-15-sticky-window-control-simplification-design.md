@@ -48,7 +48,7 @@
 - 删除“管理”，避免与标题栏“切换到完整模式”重复；
 - 不再显示任何设置弹窗入口。
 
-“排序”虽然也会进入完整窗口，但它表达的是明确任务，不视为重复的通用入口。实现上扩展现有 `enter_main_mode` 调用，增加可选的强类型 intent `manage-sticky`：普通标题栏入口不传 intent，“排序”入口传入该 intent；主窗口切换成功后，只向 `main` 窗口发送打开现有 `StickyManagerDialog` 的定向事件。弹窗自身的排序、移除和刷新流程保持不变。
+“排序”虽然也会进入完整窗口，但它表达的是明确任务，不视为重复的通用入口。实现上扩展现有 `enter_main_mode` 调用，增加可选的强类型 intent `manage-sticky`：普通标题栏入口不传 intent，“排序”入口传入该 intent。Rust 在切窗前将 intent 写入一次性待处理状态，主窗口在挂载或重新获得焦点时原子消费，再打开现有 `StickyManagerDialog`。弹窗自身的排序、移除和刷新流程保持不变。
 
 ## 3. 删除范围
 
@@ -91,10 +91,15 @@
 ### 4.3 进入完整窗口
 
 - 标题栏“切换到完整模式”调用 `enterMainMode()`，只切换到普通主窗口；
-- 底部“排序”调用 `enterMainMode("manage-sticky")`，切换成功后由 Rust 向 `main` 窗口发送定向事件，主窗口收到事件后打开现有 `StickyManagerDialog`；
+- 底部“排序”调用 `enterMainMode("manage-sticky")`；Rust 在切窗前保存一次性 `pendingMainIntent`，主窗口通过 `take_main_intent` 原子读取并清除后打开现有 `StickyManagerDialog`；
 - 转换进行中沿用现有防重复、失败提示和卸载安全机制；
 - 两个入口共享同一切窗忙碌锁，连续点击或交叉点击只允许一个请求；
-- 带 intent 的命令只有在切窗与定向事件均成功时才返回成功；若主窗口已打开但事件发送失败，“排序”入口显示“已打开完整窗口，但无法打开置顶排序”，不得伪装成排序界面已打开；
+- 带 intent 的命令在待处理 intent 已保存且主窗口切换成功后返回“导航已接受”；若切窗失败，清除本次尚未消费的 intent，并沿用便签中的可见切窗错误；
+- 主窗口必须在任何 `await store.load()` 之前同步注册浏览器 `focus` 监听，并立即调用一次 intent 消费；这样无论 focus 发生在组件挂载前还是后，持久于 Rust 进程内的 intent 都不会因一次事件丢失；
+- 主窗口的 intent 消费使用单飞忙碌锁；挂载与 focus 同时触发时不并发执行两个 `take_main_intent` 请求；
+- `take_main_intent` 失败时不清除 Rust 中的 intent，主窗口显示可访问错误“无法打开置顶排序，请重试”，并在下次获得焦点时重试；
+- 同一个 `manage-sticky` intent 只消费一次；如果管理弹窗已经打开，则幂等保持现有实例并将焦点留在该弹窗，不重复挂载；
+- 如果提示词编辑、导入预览、分类管理、运行信息或快捷面板已打开，则先保留当前操作，不叠加第二个模态焦点域。主窗口将已消费的 intent 记录为单个布尔排队状态，显示“关闭当前操作后将打开置顶排序”，并在当前阻断界面正常关闭后自动打开 `StickyManagerDialog`；重复 intent 合并为同一个排队请求；
 - 页面上不再出现底部“管理”或弹窗“打开完整窗口”。
 
 ### 4.4 始终置顶
@@ -113,9 +118,9 @@
 
 用户本次确认构成对现有产品规范的明确变更。实施时同步修改：
 
-- `docs/product/PRD.md`：FR-17 汇总行、FR-17.1 相关条目与 AT-17；
+- `docs/product/PRD.md`：FR-17 汇总行、FR-17.1、FR-17.2、AT-17 与 AT-20；
 - `docs/product/UI_DESIGN_SPEC.md`：窗口尺寸、标题栏、列表信息密度、底部操作栏与相关注意事项；
-- `docs/product/TECH_ARCHITECTURE.md`：第三窗口拓扑与 Tauri 配置说明。
+- `docs/product/TECH_ARCHITECTURE.md`：第三窗口拓扑、Tauri 配置说明，以及 17.3 Rust IPC 契约表中的主窗口 intent 和便签密度设置契约。
 
 规范应统一表述为：
 
@@ -126,6 +131,8 @@
 
 文档必须将 340×270 定义为精简模式尺寸，而不是唯一尺寸；双密度是两个受控尺寸，不等于开放任意窗口缩放。
 
+技术契约同时说明：`enter_main_mode` 接受可选枚举 intent；`take_main_intent` 原子消费一次性待处理 intent；`get_sticky_settings` / `set_sticky_settings` 包含 `density`、默认值与两个受控尺寸。该待处理 intent 只存在于 Rust 进程内，不写入 SQLite 或 `localStorage`，应用退出后无需恢复。
+
 ## 7. 实现边界
 
 预计改动文件：
@@ -133,17 +140,20 @@
 - `src/windows/StickyWindow.vue`
 - `src/windows/MainWindow.vue`
 - `src/api/commands.ts`
+- `src/types/runtime.ts`
 - `src/tests/sticky-window.test.ts`
 - `src/tests/main-window.test.ts`
 - `src/tests/window-api.test.ts`
 - `src/styles/global.css`
+- `src-tauri/src/state.rs`
 - `src-tauri/src/commands/windows.rs`
+- `src-tauri/src/lib.rs`
 - 对应的 Rust 窗口命令测试（沿用当前测试模块位置）
 - `docs/product/PRD.md`
 - `docs/product/UI_DESIGN_SPEC.md`
 - `docs/product/TECH_ARCHITECTURE.md`
 
-不新增第三方依赖，不修改数据库 schema，不新增 Rust command，不改变主窗口管理弹窗的业务能力。仅为现有 `enter_main_mode` 增加可选的强类型 intent，并复用 Tauri 现有定向事件能力。
+不新增第三方依赖，不修改数据库 schema，不改变主窗口管理弹窗的业务能力。现有 `enter_main_mode` 增加可选的强类型 intent；新增一个只读且原子消费的 `take_main_intent` 命令，用 Rust 进程内单槽状态保证切窗期间的 intent 不丢失。
 
 ## 8. 验收标准
 
@@ -156,7 +166,8 @@
 7. 初始化未完成时密度按钮禁用；初始化失败后密度按钮与始终置顶保持安全禁用，且不会写入未知设置。
 8. 舒适和精简模式下均无控件溢出，键盘焦点、动态可访问名称、tooltip 和错误提示可用。
 9. 标题栏完整模式只打开普通主窗口；底部“排序”直接打开主窗口的 `StickyManagerDialog`。
-10. 相关单元测试、Rust 测试、全量前端测试与生产构建通过；原生 macOS 行为需在 `.app` 中实测并如实记录。
+10. 主窗口已有其他操作界面时不叠加第二个模态，待原界面正常关闭后再打开排序；管理弹窗已打开时保持幂等。
+11. 相关单元测试、Rust 测试、全量前端测试与生产构建通过；原生 macOS 行为需在 `.app` 中实测并如实记录。
 
 ### 8.1 自动化测试矩阵
 
@@ -169,9 +180,11 @@
 7. 组件卸载：迟到的初始化、密度成功或失败响应不再更新状态或错误；
 8. DOM 中不存在旧设置齿轮、设置 dialog、遮罩、底部“管理”和弹窗“打开完整窗口”；相关专用 CSS 选择器也已删除；
 9. 标题栏完整模式调用无 intent 的普通切窗；“排序”调用 `manage-sticky` intent；二者共享防重复锁；
-10. Rust 命令在普通切窗时不发管理事件，在 `manage-sticky` 时只向 `main` 发事件，并正确报告切窗或事件发送错误；
-11. 主窗口只在收到目标事件时打开 `StickyManagerDialog`，卸载后不再响应；
-12. 原生 `.app` 手工验证：420×695 与 340×270 下三个标题栏按钮、底栏、焦点、tooltip 和错误提示均无裁切，并验证双向切换及重启持久化。不得用 jsdom 布局断言替代该项。
+10. Rust 普通切窗不创建 intent；`manage-sticky` 在切窗前保存一次性 intent，切窗失败清除本次 intent，`take_main_intent` 成功后只消费一次、失败时保留；
+11. `store.load()` 延迟或 focus 早于组件挂载时，主窗口仍能在挂载/获得焦点的双触发中消费 intent 并打开 `StickyManagerDialog`；两个触发重叠时由单飞锁合并；
+12. 主窗口 intent 读取失败时在可见主窗口显示错误并保留重试机会；组件卸载后不响应 focus，也不更新界面；
+13. 已有编辑、导入、分类管理、运行信息或快捷面板时只排队一个排序 intent，关闭当前界面后才打开管理弹窗；管理弹窗已经打开时不重复挂载；
+14. 原生 `.app` 手工验证：420×695 与 340×270 下三个标题栏按钮、底栏、焦点、tooltip 和错误提示均无裁切，并验证双向切换及重启持久化。不得用 jsdom 布局断言替代该项。
 
 ## 9. 备选方案与决策
 
