@@ -11,6 +11,7 @@ node_modules
 dist
 dist-ssr
 *.local
+.worktrees/
 
 # PromptDock ships desktop builds; Tauri icon generation also emits unused mobile assets.
 src-tauri/icons/android/
