@@ -88,6 +88,13 @@ function mountSticky() {
   });
 }
 
+function enableTauri(): void {
+  Object.defineProperty(window, "__TAURI_INTERNALS__", {
+    configurable: true,
+    value: {},
+  });
+}
+
 describe("StickyWindow", () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -146,6 +153,271 @@ describe("StickyWindow", () => {
       wrapper.get(".sticky-titlebar").attributes("data-tauri-drag-region"),
     ).toBe("deep");
     wrapper.unmount();
+  });
+
+  it("registers prompt updates before initial prompts and settings resolve", async () => {
+    enableTauri();
+    const prompts = deferred<Prompt[]>();
+    const settings = deferred<{
+      visible: boolean;
+      alwaysOnTop: boolean;
+      x: number;
+      y: number;
+      monitorName: string;
+      scaleFactor: number;
+      density: "comfortable";
+    }>();
+    promptApi.listSticky.mockReturnValueOnce(prompts.promise);
+    windowApi.getStickySettings.mockReturnValueOnce(settings.promise);
+
+    const wrapper = mount(StickyWindow);
+    await flushPromises();
+
+    expect(listen).toHaveBeenCalledWith(
+      "prompts-changed",
+      expect.any(Function),
+    );
+    expect(windowApi.getStickySettings).toHaveBeenCalledOnce();
+    wrapper.unmount();
+  });
+
+  it("immediately disposes a prompt listener that resolves after unmount", async () => {
+    enableTauri();
+    const lateListener = deferred<() => void>();
+    const unlisten = vi.fn();
+    listen.mockReturnValueOnce(lateListener.promise);
+    const wrapper = mount(StickyWindow);
+    await flushPromises();
+    expect(listen).toHaveBeenCalledOnce();
+
+    wrapper.unmount();
+    lateListener.resolve(unlisten);
+    await flushPromises();
+
+    expect(unlisten).toHaveBeenCalledOnce();
+  });
+
+  it("keeps only the latest prompts-changed load when requests resolve out of order", async () => {
+    enableTauri();
+    let promptsChanged!: () => void;
+    listen.mockImplementationOnce(async (_name, handler) => {
+      promptsChanged = handler as () => void;
+      return () => undefined;
+    });
+    const older = deferred<Prompt[]>();
+    const latest = deferred<Prompt[]>();
+    const oldPrompt = { ...pinnedPromptAt(1), title: "过期结果" };
+    const latestPrompt = { ...pinnedPromptAt(2), title: "最新结果" };
+    promptApi.listSticky
+      .mockResolvedValueOnce([pinnedPrompt])
+      .mockReturnValueOnce(older.promise)
+      .mockReturnValueOnce(latest.promise);
+    const wrapper = mount(StickyWindow);
+    await flushPromises();
+
+    promptsChanged();
+    promptsChanged();
+    latest.resolve([latestPrompt]);
+    await flushPromises();
+    expect(wrapper.get(".sticky-row-title").text()).toBe(latestPrompt.title);
+
+    older.resolve([oldPrompt]);
+    await flushPromises();
+    expect(wrapper.get(".sticky-row-title").text()).toBe(latestPrompt.title);
+    expect(wrapper.text()).not.toContain(oldPrompt.title);
+    wrapper.unmount();
+  });
+
+  it("reports an initial sticky prompt load failure instead of presenting an empty list", async () => {
+    promptApi.listSticky.mockRejectedValueOnce("database unavailable");
+    const wrapper = mount(StickyWindow);
+    await flushPromises();
+
+    expect(wrapper.get("[role='alert']").text()).toContain(
+      "无法加载便签提示词",
+    );
+    expect(wrapper.get(".sticky-list").attributes("aria-busy")).toBe("false");
+    wrapper.unmount();
+  });
+
+  it("reports prompt-listener initialization failures accessibly", async () => {
+    enableTauri();
+    listen.mockRejectedValueOnce("listen rejected");
+    const wrapper = mount(StickyWindow);
+    await flushPromises();
+
+    expect(wrapper.get("[role='alert']").text()).toContain("无法监听便签更新");
+    wrapper.unmount();
+  });
+
+  it("reports settings initialization failures accessibly", async () => {
+    enableTauri();
+    windowApi.getStickySettings.mockRejectedValueOnce(
+      new Error("settings rejected"),
+    );
+    const wrapper = mount(StickyWindow);
+    await flushPromises();
+
+    expect(wrapper.get("[role='alert']").text()).toContain("无法读取便签设置");
+    wrapper.unmount();
+  });
+
+  it("disables settings controls until native settings initialization settles", async () => {
+    enableTauri();
+    const settings = deferred<{
+      visible: boolean;
+      alwaysOnTop: boolean;
+      x: number;
+      y: number;
+      monitorName: string;
+      scaleFactor: number;
+      density: "comfortable";
+    }>();
+    windowApi.getStickySettings.mockReturnValueOnce(settings.promise);
+    const wrapper = mountSticky();
+    await flushPromises();
+
+    const toggle = wrapper.get("[role='switch'][aria-label='切换始终置顶']");
+    expect(toggle.attributes("disabled")).toBeDefined();
+    await toggle.trigger("click");
+    expect(windowApi.setStickySettings).not.toHaveBeenCalled();
+
+    await wrapper.get("[data-test='sticky-menu']").trigger("click");
+    const densityToggle = document.body.querySelector<HTMLButtonElement>(
+      "[data-test='sticky-density-toggle']",
+    )!;
+    expect(densityToggle.disabled).toBe(true);
+
+    settings.resolve({
+      visible: true,
+      alwaysOnTop: true,
+      x: 120,
+      y: 80,
+      monitorName: "Built-in Retina Display",
+      scaleFactor: 2,
+      density: "comfortable",
+    });
+    await flushPromises();
+    expect(toggle.attributes("disabled")).toBeUndefined();
+    expect(densityToggle.disabled).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("ignores a native settings response that arrives after unmount", async () => {
+    enableTauri();
+    const settings = deferred<{
+      visible: boolean;
+      alwaysOnTop: boolean;
+      x: number;
+      y: number;
+      monitorName: string;
+      scaleFactor: number;
+      density: "compact";
+    }>();
+    windowApi.getStickySettings.mockReturnValueOnce(settings.promise);
+    const wrapper = mount(StickyWindow);
+    await flushPromises();
+    const setupState = (
+      wrapper.vm.$ as unknown as {
+        setupState: {
+          alwaysOnTop: boolean;
+          density: "comfortable" | "compact";
+        };
+      }
+    ).setupState;
+    expect(setupState.alwaysOnTop).toBe(true);
+    expect(setupState.density).toBe("comfortable");
+
+    wrapper.unmount();
+    settings.resolve({
+      visible: true,
+      alwaysOnTop: false,
+      x: 120,
+      y: 80,
+      monitorName: "Built-in Retina Display",
+      scaleFactor: 2,
+      density: "compact",
+    });
+    await flushPromises();
+
+    expect(setupState.alwaysOnTop).toBe(true);
+    expect(setupState.density).toBe("comfortable");
+  });
+
+  it("does not apply an always-on-top mutation after unmount", async () => {
+    const mutation = deferred<{
+      visible: boolean;
+      alwaysOnTop: boolean;
+      x: number;
+      y: number;
+      monitorName: string;
+      scaleFactor: number;
+      density: "comfortable";
+    }>();
+    windowApi.setStickySettings.mockReturnValueOnce(mutation.promise);
+    const wrapper = mount(StickyWindow);
+    await flushPromises();
+    const setupState = (
+      wrapper.vm.$ as unknown as {
+        setupState: { alwaysOnTop: boolean };
+      }
+    ).setupState;
+
+    await wrapper
+      .get("[role='switch'][aria-label='切换始终置顶']")
+      .trigger("click");
+    wrapper.unmount();
+    mutation.resolve({
+      visible: true,
+      alwaysOnTop: false,
+      x: 120,
+      y: 80,
+      monitorName: "Built-in Retina Display",
+      scaleFactor: 2,
+      density: "comfortable",
+    });
+    await flushPromises();
+
+    expect(setupState.alwaysOnTop).toBe(true);
+  });
+
+  it("does not apply a density mutation after unmount", async () => {
+    const mutation = deferred<{
+      visible: boolean;
+      alwaysOnTop: boolean;
+      x: number;
+      y: number;
+      monitorName: string;
+      scaleFactor: number;
+      density: "compact";
+    }>();
+    windowApi.setStickySettings.mockReturnValueOnce(mutation.promise);
+    const wrapper = mountSticky();
+    await flushPromises();
+    const setupState = (
+      wrapper.vm.$ as unknown as {
+        setupState: { density: "comfortable" | "compact" };
+      }
+    ).setupState;
+    await wrapper.get("[data-test='sticky-menu']").trigger("click");
+    document.body
+      .querySelector<HTMLButtonElement>("[data-test='sticky-density-toggle']")!
+      .click();
+    await nextTick();
+
+    wrapper.unmount();
+    mutation.resolve({
+      visible: true,
+      alwaysOnTop: true,
+      x: 120,
+      y: 80,
+      monitorName: "Built-in Retina Display",
+      scaleFactor: 2,
+      density: "compact",
+    });
+    await flushPromises();
+
+    expect(setupState.density).toBe("comfortable");
   });
 
   it("gives every icon-only titlebar action a focused visible tooltip", async () => {
@@ -585,6 +857,81 @@ describe("StickyWindow", () => {
 
     expect(windowApi.showQuick).toHaveBeenCalledWith(template.id);
     expect(copyPromptText).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it("reports a failed template route and restores the row action", async () => {
+    const template = { ...pinnedPrompt, body: "处理 {{主题}}" };
+    promptApi.listSticky.mockResolvedValue([template]);
+    windowApi.showQuick.mockRejectedValueOnce("native route failed");
+    const wrapper = mount(StickyWindow);
+    await flushPromises();
+
+    await wrapper.get("button[data-test='sticky-slot']").trigger("click");
+    await flushPromises();
+
+    expect(wrapper.get("[role='alert']").text()).toContain(
+      "无法打开变量填写窗口",
+    );
+    expect(
+      wrapper.get("button[data-test='sticky-slot']").attributes("disabled"),
+    ).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it("suppresses repeated template routes while showQuick is pending", async () => {
+    const template = { ...pinnedPrompt, body: "处理 {{主题}}" };
+    const pending = deferred<{ shown: boolean }>();
+    promptApi.listSticky.mockResolvedValue([template]);
+    windowApi.showQuick.mockReturnValueOnce(pending.promise);
+    const wrapper = mount(StickyWindow);
+    await flushPromises();
+    const row = wrapper.get("button[data-test='sticky-slot']");
+
+    await row.trigger("click");
+    await row.trigger("click");
+
+    expect(windowApi.showQuick).toHaveBeenCalledOnce();
+    expect(row.attributes("disabled")).toBeDefined();
+    pending.resolve({ shown: true });
+    await flushPromises();
+    expect(row.attributes("disabled")).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it("ignores a stale template route rejection after prompt identity changes", async () => {
+    enableTauri();
+    const template = { ...pinnedPrompt, body: "处理 {{主题}}" };
+    const refreshed = {
+      ...template,
+      title: "刷新后的模板",
+      body: "处理 {{项目}}",
+      updatedAt: template.updatedAt + 1,
+    };
+    const route = deferred<{ shown: boolean }>();
+    let promptsChanged!: () => void;
+    listen.mockImplementationOnce(async (_name, handler) => {
+      promptsChanged = handler as () => void;
+      return () => undefined;
+    });
+    promptApi.listSticky
+      .mockResolvedValueOnce([template])
+      .mockResolvedValueOnce([refreshed]);
+    windowApi.showQuick.mockReturnValueOnce(route.promise);
+    const wrapper = mount(StickyWindow);
+    await flushPromises();
+
+    await wrapper.get("button[data-test='sticky-slot']").trigger("click");
+    promptsChanged();
+    await flushPromises();
+    expect(wrapper.get(".sticky-row-title").text()).toContain(refreshed.title);
+    expect(
+      wrapper.get("button[data-test='sticky-slot']").attributes("disabled"),
+    ).toBeUndefined();
+
+    route.reject(new Error("stale route failed"));
+    await flushPromises();
+    expect(wrapper.get(".sticky-window-status").text()).toBe("");
     wrapper.unmount();
   });
 

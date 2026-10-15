@@ -4,14 +4,16 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { flushPromises, mount } from "@vue/test-utils";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { copyPromptText, promptApi, windowApi } = vi.hoisted(() => ({
+const { copyPromptText, listen, promptApi, windowApi } = vi.hoisted(() => ({
   copyPromptText: vi.fn(),
+  listen: vi.fn(),
   promptApi: { get: vi.fn(), list: vi.fn() },
   windowApi: { hideQuick: vi.fn() },
 }));
 
+vi.mock("@tauri-apps/api/event", () => ({ listen }));
 vi.mock("@/services/clipboard", () => ({ copyPromptText }));
 vi.mock("@/api/commands", () => ({ promptApi, windowApi }));
 
@@ -44,20 +46,36 @@ function item(index: number): Prompt {
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((resolvePromise) => {
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
     resolve = resolvePromise;
+    reject = rejectPromise;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
+}
+
+function enableTauri(): void {
+  Object.defineProperty(window, "__TAURI_INTERNALS__", {
+    configurable: true,
+    value: {},
+  });
 }
 
 describe("QuickPalette", () => {
   beforeEach(() => {
+    vi.resetAllMocks();
+    listen.mockResolvedValue(() => undefined);
     copyPromptText.mockResolvedValue({
       status: "copied",
       stats: { copyCount: 1, lastCopiedAt: 2 },
     });
     promptApi.list.mockResolvedValue({ items: [], total: 0 });
     windowApi.hideQuick.mockResolvedValue({ hidden: true });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
   });
 
   it("uses labelled Lucide search, copy, and template actions with valid listbox semantics", async () => {
@@ -196,6 +214,245 @@ describe("QuickPalette", () => {
       "最新结果",
     );
     expect(wrapper.text()).not.toContain("过期结果");
+  });
+
+  it("registers native selection before the initial list resolves and handles the event", async () => {
+    enableTauri();
+    const initialLoad = deferred<{ items: Prompt[]; total: number }>();
+    const selected = { ...item(7), body: "为 {{项目}} 写计划" };
+    let selectPrompt!: (event: { payload: string }) => Promise<void>;
+    promptApi.list.mockReturnValueOnce(initialLoad.promise);
+    promptApi.get.mockResolvedValueOnce(selected);
+    listen.mockImplementationOnce(async (_name, handler) => {
+      selectPrompt = handler as (event: { payload: string }) => Promise<void>;
+      return () => undefined;
+    });
+
+    const wrapper = mount(QuickPalette);
+    await flushPromises();
+
+    expect(listen).toHaveBeenCalledWith(
+      "quick-select-prompt",
+      expect.any(Function),
+    );
+    await selectPrompt({ payload: selected.id });
+    await flushPromises();
+    expect(wrapper.get(".variable-panel").text()).toContain(selected.title);
+
+    initialLoad.resolve({ items: [], total: 0 });
+    await flushPromises();
+    wrapper.unmount();
+  });
+
+  it("immediately disposes a listener that resolves after unmount", async () => {
+    enableTauri();
+    const lateListener = deferred<() => void>();
+    const unlisten = vi.fn();
+    listen.mockReturnValueOnce(lateListener.promise);
+    const wrapper = mount(QuickPalette);
+    await flushPromises();
+    expect(listen).toHaveBeenCalledOnce();
+
+    wrapper.unmount();
+    lateListener.resolve(unlisten);
+    await flushPromises();
+
+    expect(unlisten).toHaveBeenCalledOnce();
+  });
+
+  it("keeps only the latest native prompt selection when gets resolve out of order", async () => {
+    enableTauri();
+    const first = deferred<Prompt>();
+    const latest = deferred<Prompt>();
+    const firstPrompt = { ...item(1), body: "旧 {{主题}}" };
+    const latestPrompt = { ...item(2), body: "新 {{主题}}" };
+    let selectPrompt!: (event: { payload: string }) => Promise<void>;
+    listen.mockImplementationOnce(async (_name, handler) => {
+      selectPrompt = handler as (event: { payload: string }) => Promise<void>;
+      return () => undefined;
+    });
+    promptApi.get
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(latest.promise);
+    const wrapper = mount(QuickPalette);
+    await flushPromises();
+
+    const firstSelection = selectPrompt({ payload: firstPrompt.id });
+    const latestSelection = selectPrompt({ payload: latestPrompt.id });
+    latest.resolve(latestPrompt);
+    await latestSelection;
+    await flushPromises();
+    expect(wrapper.get(".variable-panel").text()).toContain(latestPrompt.title);
+
+    first.resolve(firstPrompt);
+    await firstSelection;
+    await flushPromises();
+    expect(wrapper.get(".variable-panel").text()).toContain(latestPrompt.title);
+    expect(wrapper.text()).not.toContain(firstPrompt.title);
+    wrapper.unmount();
+  });
+
+  it("reports the current native selection failure", async () => {
+    enableTauri();
+    let selectPrompt!: (event: { payload: string }) => Promise<void>;
+    listen.mockImplementationOnce(async (_name, handler) => {
+      selectPrompt = handler as (event: { payload: string }) => Promise<void>;
+      return () => undefined;
+    });
+    promptApi.get.mockRejectedValueOnce("native get failed");
+    const wrapper = mount(QuickPalette);
+    await flushPromises();
+
+    await selectPrompt({ payload: "missing" });
+    await flushPromises();
+
+    expect(wrapper.get("[role='alert']").text()).toContain("native get failed");
+    wrapper.unmount();
+  });
+
+  it("invalidates a pending direct copy when native selection opens a template", async () => {
+    enableTauri();
+    const pendingCopy = deferred<{
+      status: "copied";
+      stats: { copyCount: number; lastCopiedAt: number };
+    }>();
+    const template = { ...item(2), body: "新建 {{主题}}" };
+    let selectPrompt!: (event: { payload: string }) => Promise<void>;
+    copyPromptText.mockReturnValueOnce(pendingCopy.promise);
+    promptApi.get.mockResolvedValueOnce(template);
+    listen.mockImplementationOnce(async (_name, handler) => {
+      selectPrompt = handler as (event: { payload: string }) => Promise<void>;
+      return () => undefined;
+    });
+    const wrapper = mount(QuickPalette, {
+      props: { initialPrompts: [item(1)] },
+    });
+    await flushPromises();
+
+    await wrapper.get("[data-test='quick-result']").trigger("click");
+    await selectPrompt({ payload: template.id });
+    await flushPromises();
+    expect(wrapper.get(".variable-panel").text()).toContain(template.title);
+
+    pendingCopy.resolve({
+      status: "copied",
+      stats: { copyCount: 2, lastCopiedAt: 3 },
+    });
+    await flushPromises();
+
+    expect(wrapper.get(".variable-panel").text()).toContain(template.title);
+    expect(windowApi.hideQuick).not.toHaveBeenCalled();
+    expect(wrapper.emitted("copied")).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it("clamps keyboard selection when externally supplied results shrink", async () => {
+    const prompts = Array.from({ length: 12 }, (_, index) => item(index));
+    const wrapper = mount(QuickPalette, {
+      props: { initialPrompts: prompts, embedded: true },
+    });
+    const input = wrapper.get("input");
+    await input.trigger("keydown", { key: "ArrowUp" });
+    expect(wrapper.get("[aria-selected='true']").text()).toContain("提示词 11");
+
+    await wrapper.setProps({ initialPrompts: [prompts[0]] });
+    await flushPromises();
+
+    const activeId = input.attributes("aria-activedescendant");
+    expect(activeId).toBeTruthy();
+    expect(wrapper.find(`#${activeId}`).exists()).toBe(true);
+    expect(wrapper.get("[aria-selected='true']").text()).toContain("提示词 0");
+    await input.trigger("keydown", { key: "Enter" });
+    await flushPromises();
+    expect(copyPromptText).toHaveBeenCalledWith({
+      id: prompts[0].id,
+      text: prompts[0].body,
+    });
+    wrapper.unmount();
+  });
+
+  it("clears copied state exactly at 1200ms even when the native window stays mounted", async () => {
+    vi.useFakeTimers();
+    const wrapper = mount(QuickPalette, {
+      props: { initialPrompts: [item(1)] },
+    });
+
+    await wrapper.get("[data-test='quick-result']").trigger("click");
+    await flushPromises();
+    expect(wrapper.find(".lucide-check").exists()).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(1199);
+    expect(wrapper.find(".lucide-check").exists()).toBe(true);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(wrapper.find(".lucide-check").exists()).toBe(false);
+    expect(wrapper.find(".lucide-copy").exists()).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+    wrapper.unmount();
+  });
+
+  it("keeps copied success when native hide rejects and reports a distinct warning", async () => {
+    windowApi.hideQuick.mockRejectedValueOnce("hide rejected");
+    const prompt = item(1);
+    const wrapper = mount(QuickPalette, {
+      props: { initialPrompts: [prompt] },
+    });
+
+    await wrapper.get("[data-test='quick-result']").trigger("click");
+    await flushPromises();
+
+    expect(copyPromptText).toHaveBeenCalledOnce();
+    expect(wrapper.emitted("copied")).toEqual([[prompt]]);
+    expect(wrapper.find(".lucide-check").exists()).toBe(true);
+    expect(wrapper.get("[role='alert']").text()).toContain(
+      "已复制，但无法收起快速窗口",
+    );
+    expect(wrapper.get("[role='alert']").text()).not.toContain("复制失败");
+    wrapper.unmount();
+  });
+
+  it("returns from a copied template and reports native hide failure without an unhandled rejection", async () => {
+    const prompt = { ...item(1), body: "为 {{产品}} 写说明" };
+    windowApi.hideQuick.mockRejectedValueOnce(new Error("native hide failed"));
+    const wrapper = mount(QuickPalette, {
+      props: { initialPrompts: [prompt] },
+    });
+
+    await wrapper.get("[data-test='quick-result']").trigger("click");
+    await wrapper.get("input[placeholder='填写产品']").setValue("PromptDock");
+    await wrapper.get("[data-test='copy-template']").trigger("click");
+    await flushPromises();
+
+    expect(wrapper.find(".variable-panel").exists()).toBe(false);
+    expect(wrapper.find("[data-test='quick-result']").exists()).toBe(true);
+    expect(wrapper.emitted("copied")).toEqual([[prompt]]);
+    expect(wrapper.get("[role='alert']").text()).toContain(
+      "已复制，但无法收起快速窗口",
+    );
+    wrapper.unmount();
+  });
+
+  it("keeps loading and empty statuses outside an option-only busy listbox", async () => {
+    const pending = deferred<{ items: Prompt[]; total: number }>();
+    promptApi.list.mockReturnValueOnce(pending.promise);
+    const wrapper = mount(QuickPalette);
+    await flushPromises();
+
+    const listbox = wrapper.get("[role='listbox']");
+    expect(listbox.attributes("aria-busy")).toBe("true");
+    expect(listbox.element.children).toHaveLength(0);
+    expect(wrapper.get(".quick-empty[role='status']").text()).toContain(
+      "正在检索",
+    );
+    expect(listbox.find("[role='status']").exists()).toBe(false);
+
+    pending.resolve({ items: [], total: 0 });
+    await flushPromises();
+    expect(listbox.attributes("aria-busy")).toBe("false");
+    expect(wrapper.get(".quick-empty[role='status']").text()).toContain(
+      "没有匹配",
+    );
+    expect(listbox.element.children).toHaveLength(0);
+    wrapper.unmount();
   });
 
   it("hides the native Quick window only after a successful copy", async () => {

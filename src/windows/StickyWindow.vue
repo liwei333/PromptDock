@@ -35,12 +35,24 @@ const loading = ref(true);
 const switchingMode = ref(false);
 const densityBusy = ref(false);
 const alwaysOnTopBusy = ref(false);
+const settingsLoading = ref(false);
 const settingsOpen = ref(false);
 const windowError = ref("");
 const copyingId = ref<string | null>(null);
+const routingId = ref<string | null>(null);
+const hideBusy = ref(false);
 let stopListening: (() => void) | null = null;
 let feedbackTimer: number | null = null;
 let copyRequest = 0;
+let loadRequest = 0;
+let settingsRequest = 0;
+let settingsRevision = 0;
+let routingRequest = 0;
+let routingIdentity: string | null = null;
+let alwaysOnTopRequest = 0;
+let densityRequest = 0;
+let mainModeRequest = 0;
+let hideRequest = 0;
 let disposed = false;
 const slots = computed(() =>
   Array.from({ length: 5 }, (_, index) => prompts.value[index] ?? null),
@@ -81,21 +93,59 @@ function showFeedback(
 }
 
 async function load(): Promise<void> {
+  const request = ++loadRequest;
+  loading.value = true;
+  windowError.value = "";
   try {
-    prompts.value = await promptApi.listSticky();
+    const nextPrompts = await promptApi.listSticky();
+    if (disposed || request !== loadRequest) return;
+    prompts.value = nextPrompts;
+    if (
+      routingId.value &&
+      !nextPrompts.some((prompt) => identity(prompt) === routingIdentity)
+    ) {
+      routingRequest += 1;
+      routingId.value = null;
+      routingIdentity = null;
+    }
+  } catch {
+    if (!disposed && request === loadRequest) {
+      windowError.value = "无法加载便签提示词";
+    }
   } finally {
-    loading.value = false;
+    if (!disposed && request === loadRequest) loading.value = false;
   }
 }
 
 async function activate(prompt: Prompt): Promise<void> {
-  if (copyingId.value) return;
+  if (copyingId.value || routingId.value) return;
   windowError.value = "";
   clearFeedbackTimer();
   feedback.value = null;
   const template = inspectTemplateVariables(prompt.body);
   if (!template.error && template.variables.length) {
-    await windowApi.showQuick(prompt.id);
+    const request = ++routingRequest;
+    const promptIdentity = identity(prompt);
+    routingId.value = prompt.id;
+    routingIdentity = promptIdentity;
+    try {
+      await windowApi.showQuick(prompt.id);
+    } catch {
+      if (
+        !disposed &&
+        request === routingRequest &&
+        prompts.value.some(
+          (candidate) => identity(candidate) === promptIdentity,
+        )
+      ) {
+        windowError.value = "无法打开变量填写窗口";
+      }
+    } finally {
+      if (!disposed && request === routingRequest) {
+        routingId.value = null;
+        routingIdentity = null;
+      }
+    }
     return;
   }
   const request = ++copyRequest;
@@ -126,6 +176,7 @@ async function activate(prompt: Prompt): Promise<void> {
 }
 
 function promptActionLabel(prompt: Prompt): string {
+  if (routingId.value === prompt.id) return "正在打开";
   if (copyingId.value === prompt.id) return "正在复制";
   if (feedback.value?.id === prompt.id) return feedback.value.text;
   const template = inspectTemplateVariables(prompt.body);
@@ -143,16 +194,24 @@ function promptAccessibleLabel(prompt: Prompt): string {
 }
 
 async function toggleAlwaysOnTop(next: boolean): Promise<void> {
-  if (alwaysOnTopBusy.value) return;
+  if (settingsLoading.value || alwaysOnTopBusy.value) return;
+  const request = ++alwaysOnTopRequest;
+  settingsRevision += 1;
   alwaysOnTopBusy.value = true;
   windowError.value = "";
   try {
     const settings = await windowApi.setStickySettings({ alwaysOnTop: next });
-    alwaysOnTop.value = settings.alwaysOnTop;
+    if (!disposed && request === alwaysOnTopRequest) {
+      alwaysOnTop.value = settings.alwaysOnTop;
+    }
   } catch {
-    windowError.value = "无法更新始终置顶设置";
+    if (!disposed && request === alwaysOnTopRequest) {
+      windowError.value = "无法更新始终置顶设置";
+    }
   } finally {
-    alwaysOnTopBusy.value = false;
+    if (!disposed && request === alwaysOnTopRequest) {
+      alwaysOnTopBusy.value = false;
+    }
   }
 }
 
@@ -173,56 +232,111 @@ function guardSettingsDismiss(event: Event): void {
 }
 
 async function toggleDensity(): Promise<void> {
-  if (densityBusy.value) return;
+  if (settingsLoading.value || densityBusy.value) return;
   const next: StickyDensity =
     density.value === "comfortable" ? "compact" : "comfortable";
+  const request = ++densityRequest;
+  settingsRevision += 1;
   densityBusy.value = true;
   windowError.value = "";
   try {
     const settings = await windowApi.setStickySettings({ density: next });
-    density.value = settings.density ?? next;
-    settingsOpen.value = false;
+    if (!disposed && request === densityRequest) {
+      density.value = settings.density ?? next;
+      settingsOpen.value = false;
+    }
   } catch {
-    windowError.value = "无法调整便签尺寸";
+    if (!disposed && request === densityRequest) {
+      windowError.value = "无法调整便签尺寸";
+    }
   } finally {
-    densityBusy.value = false;
+    if (!disposed && request === densityRequest) densityBusy.value = false;
   }
 }
 
 async function enterMainMode(): Promise<void> {
   if (switchingMode.value) return;
+  const request = ++mainModeRequest;
   switchingMode.value = true;
   windowError.value = "";
   try {
     await windowApi.enterMainMode();
   } catch {
-    windowError.value = "无法切换到完整模式";
+    if (!disposed && request === mainModeRequest) {
+      windowError.value = "无法切换到完整模式";
+    }
   } finally {
-    switchingMode.value = false;
+    if (!disposed && request === mainModeRequest) switchingMode.value = false;
   }
 }
 
 async function hideSticky(): Promise<void> {
+  if (hideBusy.value) return;
+  const request = ++hideRequest;
+  hideBusy.value = true;
   windowError.value = "";
   try {
     await windowApi.hideSticky();
   } catch {
-    windowError.value = "无法收起便签";
+    if (!disposed && request === hideRequest) {
+      windowError.value = "无法收起便签";
+    }
+  } finally {
+    if (!disposed && request === hideRequest) hideBusy.value = false;
   }
 }
 
-onMounted(async () => {
-  await load();
-  if ("__TAURI_INTERNALS__" in window) {
+async function initializeSettings(): Promise<void> {
+  const request = ++settingsRequest;
+  const revision = settingsRevision;
+  settingsLoading.value = true;
+  try {
     const settings = await windowApi.getStickySettings();
-    alwaysOnTop.value = settings.alwaysOnTop;
-    density.value = settings.density ?? "comfortable";
-    stopListening = await listen("prompts-changed", () => void load());
+    if (
+      !disposed &&
+      request === settingsRequest &&
+      revision === settingsRevision
+    ) {
+      alwaysOnTop.value = settings.alwaysOnTop;
+      density.value = settings.density ?? "comfortable";
+    }
+  } catch {
+    if (!disposed && request === settingsRequest) {
+      windowError.value = "无法读取便签设置";
+    }
+  } finally {
+    if (!disposed && request === settingsRequest) settingsLoading.value = false;
   }
+}
+
+async function startPromptsListener(): Promise<void> {
+  try {
+    const unlisten = await listen("prompts-changed", () => void load());
+    if (disposed) unlisten();
+    else stopListening = unlisten;
+  } catch {
+    if (!disposed) windowError.value = "无法监听便签更新";
+  }
+}
+
+onMounted(() => {
+  if ("__TAURI_INTERNALS__" in window) {
+    void startPromptsListener();
+    void initializeSettings();
+  }
+  void load();
 });
 onBeforeUnmount(() => {
   disposed = true;
   copyRequest += 1;
+  loadRequest += 1;
+  settingsRequest += 1;
+  settingsRevision += 1;
+  routingRequest += 1;
+  alwaysOnTopRequest += 1;
+  densityRequest += 1;
+  mainModeRequest += 1;
+  hideRequest += 1;
   clearFeedbackTimer();
   stopListening?.();
 });
@@ -246,7 +360,12 @@ onBeforeUnmount(() => {
           :disabled="switchingMode"
           @click="enterMainMode"
         />
-        <PdIconButton label="收起便签" :icon="Minus" @click="hideSticky" />
+        <PdIconButton
+          label="收起便签"
+          :icon="Minus"
+          :disabled="hideBusy"
+          @click="hideSticky"
+        />
       </div>
     </header>
 
@@ -274,7 +393,7 @@ onBeforeUnmount(() => {
             warning: feedback?.id === prompt.id && feedback.tone === 'warning',
           }"
           :aria-label="promptAccessibleLabel(prompt)"
-          :disabled="copyingId !== null"
+          :disabled="copyingId !== null || routingId !== null"
           @click="activate(prompt)"
         >
           <span class="sticky-glyph" aria-hidden="true">
@@ -308,7 +427,7 @@ onBeforeUnmount(() => {
           data-test="sticky-slot"
           class="sticky-row empty"
           :aria-label="`空位 ${index + 1}，打开完整窗口添加置顶`"
-          :disabled="switchingMode"
+          :disabled="switchingMode || copyingId !== null || routingId !== null"
           @click="enterMainMode"
         >
           <span class="sticky-glyph" aria-hidden="true"><Plus /></span>
@@ -341,7 +460,7 @@ onBeforeUnmount(() => {
       <div class="sticky-top-toggle">
         <PdSwitch
           :model-value="alwaysOnTop"
-          :disabled="alwaysOnTopBusy"
+          :disabled="settingsLoading || alwaysOnTopBusy"
           label="切换始终置顶"
           @update:model-value="toggleAlwaysOnTop"
         />
@@ -369,6 +488,7 @@ onBeforeUnmount(() => {
         <PdButton
           data-test="sticky-density-toggle"
           size="sm"
+          :disabled="settingsLoading"
           :loading="densityBusy"
           @click="toggleDensity"
         >
