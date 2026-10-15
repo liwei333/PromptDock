@@ -3,25 +3,31 @@ import { listen } from "@tauri-apps/api/event";
 import {
   Check,
   Copy,
+  Expand,
   GripVertical,
   Minus,
   PanelTopOpen,
   Plus,
-  Settings,
+  Shrink,
 } from "lucide-vue-next";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 
 import { promptApi, windowApi } from "@/api/commands";
 import PdButton from "@/components/ui/PdButton.vue";
-import PdDialog from "@/components/ui/PdDialog.vue";
 import PdIconButton from "@/components/ui/PdIconButton.vue";
 import PdSwitch from "@/components/ui/PdSwitch.vue";
 import { inspectTemplateVariables } from "@/composables/useTemplateVariables";
 import { copyPromptText } from "@/services/clipboard";
 import type { Prompt } from "@/types/prompt";
-import type { StickyDensity } from "@/types/runtime";
+import type { MainIntent, StickyDensity } from "@/types/runtime";
 
 type FeedbackTone = "success" | "warning" | "error";
+type StatusModel = {
+  text: string;
+  tone: FeedbackTone | null;
+  role: "alert" | "status";
+  live: "assertive" | "polite";
+};
 
 const prompts = ref<Prompt[]>([]);
 const alwaysOnTop = ref(true);
@@ -36,7 +42,8 @@ const switchingMode = ref(false);
 const densityBusy = ref(false);
 const alwaysOnTopBusy = ref(false);
 const settingsLoading = ref(false);
-const settingsOpen = ref(false);
+const settingsReady = ref(false);
+const settingsError = ref("");
 const windowError = ref("");
 const copyingId = ref<string | null>(null);
 const routingId = ref<string | null>(null);
@@ -57,8 +64,36 @@ let disposed = false;
 const slots = computed(() =>
   Array.from({ length: 5 }, (_, index) => prompts.value[index] ?? null),
 );
-const statusTone = computed<FeedbackTone | null>(() =>
-  windowError.value ? "error" : (feedback.value?.tone ?? null),
+const statusModel = computed<StatusModel>(() => {
+  if (windowError.value) {
+    return {
+      text: windowError.value,
+      tone: "error",
+      role: "alert",
+      live: "assertive",
+    };
+  }
+  if (feedback.value) {
+    const tone = feedback.value.tone;
+    return {
+      text: feedback.value.text,
+      tone,
+      role: tone === "error" ? "alert" : "status",
+      live: tone === "error" ? "assertive" : "polite",
+    };
+  }
+  if (settingsError.value) {
+    return {
+      text: settingsError.value,
+      tone: "error",
+      role: "alert",
+      live: "assertive",
+    };
+  }
+  return { text: "", tone: null, role: "status", live: "polite" };
+});
+const densityToggleLabel = computed(() =>
+  density.value === "comfortable" ? "切换到精简模式" : "切换到舒适模式",
 );
 
 function identity(prompt: Prompt): string {
@@ -194,7 +229,8 @@ function promptAccessibleLabel(prompt: Prompt): string {
 }
 
 async function toggleAlwaysOnTop(next: boolean): Promise<void> {
-  if (settingsLoading.value || alwaysOnTopBusy.value) return;
+  if (!settingsReady.value || settingsLoading.value || alwaysOnTopBusy.value)
+    return;
   const request = ++alwaysOnTopRequest;
   settingsRevision += 1;
   alwaysOnTopBusy.value = true;
@@ -215,24 +251,9 @@ async function toggleAlwaysOnTop(next: boolean): Promise<void> {
   }
 }
 
-function dismissSettings(): void {
-  if (!densityBusy.value) settingsOpen.value = false;
-}
-
-function guardSettingsDismiss(event: Event): void {
-  if (!densityBusy.value) return;
-  const isEscape = event instanceof KeyboardEvent && event.key === "Escape";
-  const isCloseClick =
-    event instanceof MouseEvent &&
-    event.target instanceof Element &&
-    event.target.closest("button[aria-label='关闭便签设置']") !== null;
-  if (!isEscape && !isCloseClick) return;
-  event.preventDefault();
-  event.stopImmediatePropagation();
-}
-
 async function toggleDensity(): Promise<void> {
-  if (settingsLoading.value || densityBusy.value) return;
+  if (!settingsReady.value || settingsLoading.value || densityBusy.value)
+    return;
   const next: StickyDensity =
     density.value === "comfortable" ? "compact" : "comfortable";
   const request = ++densityRequest;
@@ -243,7 +264,6 @@ async function toggleDensity(): Promise<void> {
     const settings = await windowApi.setStickySettings({ density: next });
     if (!disposed && request === densityRequest) {
       density.value = settings.density ?? next;
-      settingsOpen.value = false;
     }
   } catch {
     if (!disposed && request === densityRequest) {
@@ -254,16 +274,17 @@ async function toggleDensity(): Promise<void> {
   }
 }
 
-async function enterMainMode(): Promise<void> {
+async function enterMainMode(intent?: MainIntent): Promise<void> {
   if (switchingMode.value) return;
   const request = ++mainModeRequest;
   switchingMode.value = true;
   windowError.value = "";
   try {
-    await windowApi.enterMainMode();
+    await windowApi.enterMainMode(intent);
   } catch {
     if (!disposed && request === mainModeRequest) {
-      windowError.value = "无法切换到完整模式";
+      windowError.value =
+        intent === "manage-sticky" ? "无法打开置顶排序" : "无法切换到完整模式";
     }
   } finally {
     if (!disposed && request === mainModeRequest) switchingMode.value = false;
@@ -299,10 +320,12 @@ async function initializeSettings(): Promise<void> {
     ) {
       alwaysOnTop.value = settings.alwaysOnTop;
       density.value = settings.density ?? "comfortable";
+      settingsError.value = "";
+      settingsReady.value = true;
     }
   } catch {
     if (!disposed && request === settingsRequest) {
-      windowError.value = "无法读取便签设置";
+      settingsError.value = "无法读取便签设置";
     }
   } finally {
     if (!disposed && request === settingsRequest) settingsLoading.value = false;
@@ -348,17 +371,19 @@ onBeforeUnmount(() => {
       <strong class="sticky-brand">PromptDock</strong>
       <div class="sticky-window-actions">
         <PdIconButton
-          data-test="sticky-menu"
-          label="便签设置"
-          :icon="Settings"
-          @click="settingsOpen = true"
+          data-test="sticky-density-toggle"
+          :label="densityToggleLabel"
+          :icon="density === 'comfortable' ? Shrink : Expand"
+          :disabled="!settingsReady || settingsLoading || densityBusy"
+          :aria-busy="densityBusy ? 'true' : undefined"
+          @click="toggleDensity"
         />
         <PdIconButton
           data-test="enter-main-mode"
           label="切换到完整模式"
           :icon="PanelTopOpen"
           :disabled="switchingMode"
-          @click="enterMainMode"
+          @click="enterMainMode()"
         />
         <PdIconButton
           label="收起便签"
@@ -426,33 +451,23 @@ onBeforeUnmount(() => {
           v-else
           data-test="sticky-slot"
           class="sticky-row empty"
-          :aria-label="`空位 ${index + 1}，打开完整窗口添加置顶`"
+          :aria-label="`空位 ${index + 1}，前往完整模式添加置顶`"
           :disabled="switchingMode || copyingId !== null || routingId !== null"
-          @click="enterMainMode"
+          @click="enterMainMode()"
         >
           <span class="sticky-glyph" aria-hidden="true"><Plus /></span>
-          <span>空位 {{ index + 1 }} · 在完整窗口添加置顶</span>
+          <span>空位 {{ index + 1 }} · 在完整模式添加置顶</span>
         </button>
       </template>
     </section>
 
     <footer class="sticky-footer">
       <PdButton
-        data-test="manage-in-main"
-        size="sm"
-        variant="ghost"
-        :disabled="switchingMode"
-        @click="enterMainMode"
-      >
-        <template #leading><Settings aria-hidden="true" /></template>
-        管理
-      </PdButton>
-      <PdButton
         data-test="sort-in-main"
         size="sm"
         variant="ghost"
         :disabled="switchingMode"
-        @click="enterMainMode"
+        @click="enterMainMode('manage-sticky')"
       >
         <template #leading><GripVertical aria-hidden="true" /></template>
         排序
@@ -460,7 +475,7 @@ onBeforeUnmount(() => {
       <div class="sticky-top-toggle">
         <PdSwitch
           :model-value="alwaysOnTop"
-          :disabled="settingsLoading || alwaysOnTopBusy"
+          :disabled="!settingsReady || settingsLoading || alwaysOnTopBusy"
           label="切换始终置顶"
           @update:model-value="toggleAlwaysOnTop"
         />
@@ -468,64 +483,16 @@ onBeforeUnmount(() => {
       </div>
     </footer>
 
-    <PdDialog
-      class="sticky-settings-dialog"
-      :class="`sticky-settings-dialog--${density}`"
-      :open="settingsOpen"
-      title="便签设置"
-      description="舒适模式展示两行预览；紧凑模式保留 340 × 270 的五条标题。"
-      close-label="关闭便签设置"
-      :close-on-outside="!densityBusy"
-      @click.capture="guardSettingsDismiss"
-      @keydown.capture="guardSettingsDismiss"
-      @dismiss="dismissSettings"
-    >
-      <div class="sticky-setting-row">
-        <span>
-          <strong>窗口显示密度</strong>
-          <small>当前：{{ density === "comfortable" ? "舒适" : "紧凑" }}</small>
-        </span>
-        <PdButton
-          data-test="sticky-density-toggle"
-          size="sm"
-          :disabled="settingsLoading"
-          :loading="densityBusy"
-          @click="toggleDensity"
-        >
-          {{
-            densityBusy
-              ? "调整中…"
-              : density === "comfortable"
-                ? "切换紧凑模式"
-                : "切换舒适模式"
-          }}
-        </PdButton>
-      </div>
-      <div class="sticky-setting-row">
-        <span>
-          <strong>管理 5 个位置</strong>
-          <small>排序和移除均在完整窗口中完成</small>
-        </span>
-        <PdButton
-          size="sm"
-          :disabled="switchingMode || densityBusy"
-          @click="enterMainMode"
-        >
-          打开完整窗口
-        </PdButton>
-      </div>
-    </PdDialog>
-
     <div
       class="sticky-window-status"
       :class="{
-        error: statusTone === 'error',
-        warning: statusTone === 'warning',
+        error: statusModel.tone === 'error',
+        warning: statusModel.tone === 'warning',
       }"
-      :role="statusTone === 'error' ? 'alert' : 'status'"
-      :aria-live="statusTone === 'error' ? 'assertive' : 'polite'"
+      :role="statusModel.role"
+      :aria-live="statusModel.live"
     >
-      {{ windowError || (feedback ? feedback.text : "") }}
+      {{ statusModel.text }}
     </div>
   </main>
 </template>

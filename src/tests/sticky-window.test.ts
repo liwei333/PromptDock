@@ -95,6 +95,16 @@ function enableTauri(): void {
   });
 }
 
+const defaultStickySettings = {
+  visible: true,
+  alwaysOnTop: true,
+  x: 120,
+  y: 80,
+  monitorName: "Built-in Retina Display",
+  scaleFactor: 2,
+  density: "comfortable" as const,
+};
+
 describe("StickyWindow", () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -103,24 +113,8 @@ describe("StickyWindow", () => {
     windowApi.enterMainMode.mockResolvedValue({ mode: "main" });
     windowApi.hideSticky.mockResolvedValue({ hidden: true });
     windowApi.showQuick.mockResolvedValue({ shown: true });
-    windowApi.getStickySettings.mockResolvedValue({
-      visible: true,
-      alwaysOnTop: true,
-      x: 120,
-      y: 80,
-      monitorName: "Built-in Retina Display",
-      scaleFactor: 2,
-      density: "comfortable",
-    });
-    windowApi.setStickySettings.mockResolvedValue({
-      visible: true,
-      alwaysOnTop: true,
-      x: 120,
-      y: 80,
-      monitorName: "Built-in Retina Display",
-      scaleFactor: 2,
-      density: "comfortable",
-    });
+    windowApi.getStickySettings.mockResolvedValue(defaultStickySettings);
+    windowApi.setStickySettings.mockResolvedValue(defaultStickySettings);
     copyPromptText.mockResolvedValue({
       status: "copied",
       stats: { copyCount: 13, lastCopiedAt: 2 },
@@ -250,56 +244,182 @@ describe("StickyWindow", () => {
     wrapper.unmount();
   });
 
-  it("reports settings initialization failures accessibly", async () => {
+  it("keeps native settings controls disabled after initialization fails", async () => {
     enableTauri();
     windowApi.getStickySettings.mockRejectedValueOnce(
       new Error("settings rejected"),
     );
-    const wrapper = mount(StickyWindow);
+    const wrapper = mountSticky();
     await flushPromises();
 
+    const densityToggle = () =>
+      wrapper.get<HTMLButtonElement>("[data-test='sticky-density-toggle']");
+    const alwaysOnTopToggle = wrapper.get(
+      "[role='switch'][aria-label='切换始终置顶']",
+    );
+    expect(densityToggle().attributes("disabled")).toBeDefined();
+    expect(alwaysOnTopToggle.attributes("disabled")).toBeDefined();
+    await densityToggle().trigger("click");
+    await alwaysOnTopToggle.trigger("click");
+    expect(windowApi.setStickySettings).not.toHaveBeenCalled();
     expect(wrapper.get("[role='alert']").text()).toContain("无法读取便签设置");
     wrapper.unmount();
   });
 
-  it("disables settings controls until native settings initialization settles", async () => {
+  it("keeps a settings failure announced after prompts reload successfully", async () => {
     enableTauri();
-    const settings = deferred<{
+    let promptsChanged!: () => void;
+    listen.mockImplementationOnce(async (_name, handler) => {
+      promptsChanged = handler as () => void;
+      return () => undefined;
+    });
+    windowApi.getStickySettings.mockRejectedValueOnce(
+      new Error("settings rejected"),
+    );
+    const wrapper = mountSticky();
+    await flushPromises();
+    const densityToggle = wrapper.get<HTMLButtonElement>(
+      "[data-test='sticky-density-toggle']",
+    );
+
+    expect(wrapper.get("[role='alert']").text()).toBe("无法读取便签设置");
+    expect(densityToggle.attributes("disabled")).toBeDefined();
+
+    promptsChanged();
+    await flushPromises();
+
+    expect(promptApi.listSticky).toHaveBeenCalledTimes(2);
+    expect(wrapper.get("[role='alert']").text()).toBe("无法读取便签设置");
+    expect(densityToggle.attributes("disabled")).toBeDefined();
+    wrapper.unmount();
+  });
+
+  it("disables only native settings controls while initialization is pending", async () => {
+    enableTauri();
+    const settings = deferred<typeof defaultStickySettings>();
+    windowApi.getStickySettings.mockReturnValueOnce(settings.promise);
+    const wrapper = mountSticky();
+    await flushPromises();
+
+    const densityToggle = () =>
+      wrapper.get<HTMLButtonElement>("[data-test='sticky-density-toggle']");
+    const alwaysOnTopToggle = wrapper.get(
+      "[role='switch'][aria-label='切换始终置顶']",
+    );
+    expect(densityToggle().attributes("disabled")).toBeDefined();
+    expect(alwaysOnTopToggle.attributes("disabled")).toBeDefined();
+    expect(
+      wrapper.get("[data-test='enter-main-mode']").attributes("disabled"),
+    ).toBeUndefined();
+    expect(
+      wrapper.get("button[aria-label='收起便签']").attributes("disabled"),
+    ).toBeUndefined();
+
+    await densityToggle().trigger("click");
+    await alwaysOnTopToggle.trigger("click");
+    expect(windowApi.setStickySettings).not.toHaveBeenCalled();
+
+    settings.resolve(defaultStickySettings);
+    await flushPromises();
+    expect(alwaysOnTopToggle.attributes("disabled")).toBeUndefined();
+    expect(densityToggle().attributes("disabled")).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it("toggles directly between comfortable and compact density", async () => {
+    enableTauri();
+    windowApi.setStickySettings
+      .mockResolvedValueOnce({ ...defaultStickySettings, density: "compact" })
+      .mockResolvedValueOnce(defaultStickySettings);
+    const wrapper = mountSticky();
+    await flushPromises();
+
+    const densityToggle = () =>
+      wrapper.get<HTMLButtonElement>("[data-test='sticky-density-toggle']");
+    expect(densityToggle().attributes("aria-label")).toBe("切换到精简模式");
+    expect(densityToggle().find(".lucide-shrink").exists()).toBe(true);
+    await densityToggle().trigger("click");
+    await flushPromises();
+    expect(windowApi.setStickySettings).toHaveBeenLastCalledWith({
+      density: "compact",
+    });
+    expect(densityToggle().attributes("aria-label")).toBe("切换到舒适模式");
+    expect(densityToggle().find(".lucide-expand").exists()).toBe(true);
+
+    await densityToggle().trigger("click");
+    await flushPromises();
+    expect(windowApi.setStickySettings).toHaveBeenLastCalledWith({
+      density: "comfortable",
+    });
+    wrapper.unmount();
+  });
+
+  it("disables and marks density busy while one resize is pending", async () => {
+    enableTauri();
+    const mutation = deferred<{
       visible: boolean;
       alwaysOnTop: boolean;
       x: number;
       y: number;
       monitorName: string;
       scaleFactor: number;
-      density: "comfortable";
+      density: "compact";
     }>();
-    windowApi.getStickySettings.mockReturnValueOnce(settings.promise);
+    windowApi.setStickySettings.mockReturnValueOnce(mutation.promise);
     const wrapper = mountSticky();
     await flushPromises();
+    const densityToggle = () =>
+      wrapper.get<HTMLButtonElement>("[data-test='sticky-density-toggle']");
 
-    const toggle = wrapper.get("[role='switch'][aria-label='切换始终置顶']");
-    expect(toggle.attributes("disabled")).toBeDefined();
-    await toggle.trigger("click");
-    expect(windowApi.setStickySettings).not.toHaveBeenCalled();
+    await densityToggle().trigger("click");
+    await densityToggle().trigger("click");
+    expect(densityToggle().attributes("disabled")).toBeDefined();
+    expect(densityToggle().attributes("aria-busy")).toBe("true");
+    expect(windowApi.setStickySettings).toHaveBeenCalledOnce();
 
-    await wrapper.get("[data-test='sticky-menu']").trigger("click");
-    const densityToggle = document.body.querySelector<HTMLButtonElement>(
-      "[data-test='sticky-density-toggle']",
-    )!;
-    expect(densityToggle.disabled).toBe(true);
-
-    settings.resolve({
-      visible: true,
-      alwaysOnTop: true,
-      x: 120,
-      y: 80,
-      monitorName: "Built-in Retina Display",
-      scaleFactor: 2,
-      density: "comfortable",
-    });
+    mutation.resolve({ ...defaultStickySettings, density: "compact" });
     await flushPromises();
-    expect(toggle.attributes("disabled")).toBeUndefined();
-    expect(densityToggle.disabled).toBe(false);
+    expect(densityToggle().attributes("disabled")).toBeUndefined();
+    expect(densityToggle().attributes("aria-busy")).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it("keeps comfortable density and reports resize failures accessibly", async () => {
+    enableTauri();
+    windowApi.setStickySettings.mockRejectedValueOnce(
+      new Error("native failure"),
+    );
+    const wrapper = mountSticky();
+    await flushPromises();
+    const densityToggle = () =>
+      wrapper.get<HTMLButtonElement>("[data-test='sticky-density-toggle']");
+
+    await densityToggle().trigger("click");
+    await flushPromises();
+
+    expect(wrapper.get(".sticky-window").classes()).toContain("comfortable");
+    expect(densityToggle().attributes("aria-busy")).toBeUndefined();
+    expect(densityToggle().attributes("disabled")).toBeUndefined();
+    expect(wrapper.get("[role='alert']").text()).toContain("无法调整便签尺寸");
+    wrapper.unmount();
+  });
+
+  it("uses the backend-returned density as the final UI truth", async () => {
+    enableTauri();
+    windowApi.setStickySettings.mockResolvedValueOnce(defaultStickySettings);
+    const wrapper = mountSticky();
+    await flushPromises();
+    const densityToggle = () =>
+      wrapper.get<HTMLButtonElement>("[data-test='sticky-density-toggle']");
+
+    await densityToggle().trigger("click");
+    await flushPromises();
+
+    expect(windowApi.setStickySettings).toHaveBeenCalledWith({
+      density: "compact",
+    });
+    expect(wrapper.get(".sticky-window").classes()).toContain("comfortable");
+    expect(densityToggle().attributes("aria-label")).toBe("切换到精简模式");
     wrapper.unmount();
   });
 
@@ -345,6 +465,7 @@ describe("StickyWindow", () => {
   });
 
   it("does not apply an always-on-top mutation after unmount", async () => {
+    enableTauri();
     const mutation = deferred<{
       visible: boolean;
       alwaysOnTop: boolean;
@@ -362,10 +483,13 @@ describe("StickyWindow", () => {
         setupState: { alwaysOnTop: boolean };
       }
     ).setupState;
+    const toggle = wrapper.get("[role='switch'][aria-label='切换始终置顶']");
 
-    await wrapper
-      .get("[role='switch'][aria-label='切换始终置顶']")
-      .trigger("click");
+    expect(toggle.attributes("disabled")).toBeUndefined();
+    await toggle.trigger("click");
+    expect(windowApi.setStickySettings).toHaveBeenCalledWith({
+      alwaysOnTop: false,
+    });
     wrapper.unmount();
     mutation.resolve({
       visible: true,
@@ -381,7 +505,8 @@ describe("StickyWindow", () => {
     expect(setupState.alwaysOnTop).toBe(true);
   });
 
-  it("does not apply a density mutation after unmount", async () => {
+  it("does not apply a successful density mutation after unmount", async () => {
+    enableTauri();
     const mutation = deferred<{
       visible: boolean;
       alwaysOnTop: boolean;
@@ -399,32 +524,65 @@ describe("StickyWindow", () => {
         setupState: { density: "comfortable" | "compact" };
       }
     ).setupState;
-    await wrapper.get("[data-test='sticky-menu']").trigger("click");
-    document.body
-      .querySelector<HTMLButtonElement>("[data-test='sticky-density-toggle']")!
-      .click();
+    const densityToggle = () =>
+      wrapper.get<HTMLButtonElement>("[data-test='sticky-density-toggle']");
+    await densityToggle().trigger("click");
     await nextTick();
-
-    wrapper.unmount();
-    mutation.resolve({
-      visible: true,
-      alwaysOnTop: true,
-      x: 120,
-      y: 80,
-      monitorName: "Built-in Retina Display",
-      scaleFactor: 2,
+    expect(windowApi.setStickySettings).toHaveBeenCalledWith({
       density: "compact",
     });
+
+    wrapper.unmount();
+    mutation.resolve({ ...defaultStickySettings, density: "compact" });
     await flushPromises();
 
     expect(setupState.density).toBe("comfortable");
   });
 
-  it("gives every icon-only titlebar action a focused visible tooltip", async () => {
+  it("does not report a rejected density mutation after unmount", async () => {
+    enableTauri();
+    const mutation = deferred<never>();
+    windowApi.setStickySettings.mockReturnValueOnce(mutation.promise);
     const wrapper = mountSticky();
     await flushPromises();
+    const setupState = (
+      wrapper.vm.$ as unknown as {
+        setupState: {
+          density: "comfortable" | "compact";
+          windowError: string;
+        };
+      }
+    ).setupState;
+    const densityToggle = () =>
+      wrapper.get<HTMLButtonElement>("[data-test='sticky-density-toggle']");
 
-    for (const label of ["便签设置", "切换到完整模式", "收起便签"]) {
+    expect(setupState.windowError).toBe("");
+    await densityToggle().trigger("click");
+    await nextTick();
+    expect(windowApi.setStickySettings).toHaveBeenCalledWith({
+      density: "compact",
+    });
+
+    wrapper.unmount();
+    mutation.reject(new Error("late native failure"));
+    await flushPromises();
+
+    expect(setupState.density).toBe("comfortable");
+    expect(setupState.windowError).toBe("");
+  });
+
+  it("keeps target labels and tooltips synchronized in both densities", async () => {
+    enableTauri();
+    windowApi.setStickySettings.mockResolvedValueOnce({
+      ...defaultStickySettings,
+      density: "compact",
+    });
+    const wrapper = mountSticky();
+    await flushPromises();
+    const densityToggle = () =>
+      wrapper.get<HTMLButtonElement>("[data-test='sticky-density-toggle']");
+
+    for (const label of ["切换到精简模式", "切换到完整模式", "收起便签"]) {
       const control = wrapper.get(`button[aria-label='${label}']`);
       await control.trigger("focus");
       await nextTick();
@@ -435,6 +593,16 @@ describe("StickyWindow", () => {
       await control.trigger("blur");
       await nextTick();
     }
+
+    await densityToggle().trigger("click");
+    await flushPromises();
+    expect(densityToggle().attributes("aria-label")).toBe("切换到舒适模式");
+    await densityToggle().trigger("focus");
+    await nextTick();
+    expect(
+      document.body.querySelector<HTMLElement>(".pd-tooltip-content")
+        ?.textContent,
+    ).toContain("切换到舒适模式");
 
     wrapper.unmount();
   });
@@ -451,6 +619,7 @@ describe("StickyWindow", () => {
     await empty.trigger("click");
     await flushPromises();
     expect(windowApi.enterMainMode).toHaveBeenCalledOnce();
+    expect(windowApi.enterMainMode).toHaveBeenCalledWith(undefined);
     wrapper.unmount();
   });
 
@@ -490,23 +659,18 @@ describe("StickyWindow", () => {
   });
 
   it("persists compact density and removes descriptions from compact rows", async () => {
+    enableTauri();
     promptApi.listSticky.mockResolvedValue([pinnedPrompt]);
     windowApi.setStickySettings.mockResolvedValueOnce({
-      visible: true,
-      alwaysOnTop: true,
-      x: 120,
-      y: 80,
-      monitorName: "Built-in Retina Display",
-      scaleFactor: 2,
+      ...defaultStickySettings,
       density: "compact",
     });
     const wrapper = mountSticky();
     await flushPromises();
+    const densityToggle = () =>
+      wrapper.get<HTMLButtonElement>("[data-test='sticky-density-toggle']");
 
-    await wrapper.get("[data-test='sticky-menu']").trigger("click");
-    document.body
-      .querySelector<HTMLButtonElement>("[data-test='sticky-density-toggle']")!
-      .click();
+    await densityToggle().trigger("click");
     await flushPromises();
 
     expect(windowApi.setStickySettings).toHaveBeenCalledWith({
@@ -519,108 +683,48 @@ describe("StickyWindow", () => {
   });
 
   it("keeps five ordered title-only rows and the footer in compact density", async () => {
+    enableTauri();
     promptApi.listSticky.mockResolvedValue(fivePinnedPrompts);
     windowApi.setStickySettings.mockResolvedValueOnce({
-      visible: true,
-      alwaysOnTop: true,
-      x: 120,
-      y: 80,
-      monitorName: "Built-in Retina Display",
-      scaleFactor: 2,
+      ...defaultStickySettings,
       density: "compact",
     });
     const wrapper = mountSticky();
     await flushPromises();
+    const densityToggle = () =>
+      wrapper.get<HTMLButtonElement>("[data-test='sticky-density-toggle']");
 
-    await wrapper.get("[data-test='sticky-menu']").trigger("click");
-    document.body
-      .querySelector<HTMLButtonElement>("[data-test='sticky-density-toggle']")!
-      .click();
+    await densityToggle().trigger("click");
     await flushPromises();
 
     expect(
       wrapper.findAll(".sticky-row-title").map((row) => row.text()),
     ).toEqual(fivePinnedPrompts.map((prompt) => prompt.title));
     expect(wrapper.findAll(".sticky-description")).toHaveLength(0);
-    expect(wrapper.get(".sticky-footer").text()).toContain("管理");
     expect(wrapper.get(".sticky-footer").text()).toContain("排序");
     expect(wrapper.get(".sticky-footer").text()).toContain("始终置顶");
+    expect(wrapper.get(".sticky-footer").text()).not.toContain("管理");
     wrapper.unmount();
   });
 
-  it("opens a named settings dialog, moves focus inside, dismisses with Escape, and restores focus", async () => {
+  it("removes the old settings dialog and duplicate management controls", async () => {
+    enableTauri();
     const wrapper = mountSticky();
     await flushPromises();
-    const trigger = wrapper.get("[data-test='sticky-menu']");
-    (trigger.element as HTMLButtonElement).focus();
-    await trigger.trigger("click");
-    await flushPromises();
 
-    const dialog = document.body.querySelector<HTMLElement>("[role='dialog']")!;
-    expect(dialog).not.toBeNull();
-    const titleId = dialog.getAttribute("aria-labelledby")!;
-    expect(document.getElementById(titleId)?.textContent).toContain("便签设置");
-    expect(dialog.contains(document.activeElement)).toBe(true);
-
-    window.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
-    );
-    await flushPromises();
-
-    expect(document.body.querySelector("[role='dialog']")).toBeNull();
-    expect(document.activeElement).toBe(trigger.element);
-    wrapper.unmount();
-  });
-
-  it("prevents Escape, outside, and close dismissal while density transition is pending", async () => {
-    const pending = deferred<{
-      visible: boolean;
-      alwaysOnTop: boolean;
-      density: "compact";
-      x: number;
-      y: number;
-      monitorName: string;
-      scaleFactor: number;
-    }>();
-    windowApi.setStickySettings.mockReturnValueOnce(pending.promise);
-    const wrapper = mountSticky();
-    await flushPromises();
-    await wrapper.get("[data-test='sticky-menu']").trigger("click");
-    await flushPromises();
-    document.body
-      .querySelector<HTMLButtonElement>("[data-test='sticky-density-toggle']")!
-      .click();
-    await nextTick();
-
-    window.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
-    );
-    document.body
-      .querySelector<HTMLElement>(".pd-dialog-overlay")!
-      .dispatchEvent(
-        new PointerEvent("pointerdown", { bubbles: true, button: 0 }),
-      );
-    document.body
-      .querySelector<HTMLButtonElement>("button[aria-label='关闭便签设置']")!
-      .click();
-    await flushPromises();
-
-    expect(document.body.querySelector("[role='dialog']")).not.toBeNull();
-    pending.resolve({
-      visible: true,
-      alwaysOnTop: true,
-      density: "compact",
-      x: 120,
-      y: 80,
-      monitorName: "Built-in Retina Display",
-      scaleFactor: 2,
-    });
-    await flushPromises();
-    expect(document.body.querySelector("[role='dialog']")).toBeNull();
+    expect(wrapper.find("[data-test='sticky-menu']").exists()).toBe(false);
+    expect(wrapper.find("[role='dialog']").exists()).toBe(false);
+    expect(wrapper.find("[data-test='manage-in-main']").exists()).toBe(false);
+    expect(wrapper.html()).not.toContain("打开完整窗口");
+    expect(stickySource).not.toContain("sticky-settings-dialog");
+    expect(stickySource).not.toContain("sticky-setting-row");
+    expect(globalCss).not.toContain(".sticky-settings-dialog");
+    expect(globalCss).not.toContain(".sticky-setting-row");
     wrapper.unmount();
   });
 
   it("uses a disabled role switch while always-on-top is pending and rolls back on failure", async () => {
+    enableTauri();
     const pending = deferred<never>();
     windowApi.setStickySettings.mockReturnValueOnce(pending.promise);
     const wrapper = mount(StickyWindow);
@@ -696,7 +800,45 @@ describe("StickyWindow", () => {
     wrapper.unmount();
   });
 
+  it("temporarily prioritizes a clipboard failure over a persistent settings failure", async () => {
+    vi.useFakeTimers();
+    enableTauri();
+    promptApi.listSticky.mockResolvedValue([pinnedPrompt]);
+    windowApi.getStickySettings.mockRejectedValueOnce(
+      new Error("settings rejected"),
+    );
+    copyPromptText.mockRejectedValueOnce(new Error("无法写入系统剪贴板"));
+    const wrapper = mount(StickyWindow);
+    await flushPromises();
+    const densityToggle = wrapper.get<HTMLButtonElement>(
+      "[data-test='sticky-density-toggle']",
+    );
+    const status = wrapper.get(".sticky-window-status");
+
+    expect(status.text()).toBe("无法读取便签设置");
+    expect(densityToggle.attributes("disabled")).toBeDefined();
+
+    await wrapper.get("button[data-test='sticky-slot']").trigger("click");
+    await flushPromises();
+
+    expect(status.text()).toBe("无法写入系统剪贴板");
+    expect(status.classes()).toContain("error");
+    expect(status.attributes("role")).toBe("alert");
+    expect(status.attributes("aria-live")).toBe("assertive");
+    expect(densityToggle.attributes("disabled")).toBeDefined();
+
+    await vi.advanceTimersByTimeAsync(1600);
+    await nextTick();
+    expect(status.text()).toBe("无法读取便签设置");
+    expect(status.classes()).toContain("error");
+    expect(status.attributes("role")).toBe("alert");
+    expect(status.attributes("aria-live")).toBe("assertive");
+    expect(densityToggle.attributes("disabled")).toBeDefined();
+    wrapper.unmount();
+  });
+
   it("clears an old window error when a later copy succeeds", async () => {
+    enableTauri();
     promptApi.listSticky.mockResolvedValue([pinnedPrompt]);
     windowApi.setStickySettings.mockRejectedValueOnce(
       new Error("native failure"),
@@ -935,14 +1077,17 @@ describe("StickyWindow", () => {
     wrapper.unmount();
   });
 
-  it("keeps settings, reorder, copy, and empty-slot actions accessibly named", async () => {
+  it("keeps density, reorder, copy, and empty-slot actions accessibly named", async () => {
+    enableTauri();
     promptApi.listSticky.mockResolvedValue([pinnedPrompt]);
-    const wrapper = mount(StickyWindow);
+    const wrapper = mountSticky();
     await flushPromises();
 
     expect(
-      wrapper.get("[data-test='sticky-menu']").attributes("aria-label"),
-    ).toBe("便签设置");
+      wrapper
+        .get("[data-test='sticky-density-toggle']")
+        .attributes("aria-label"),
+    ).toBe("切换到精简模式");
     expect(wrapper.get("[data-test='sort-in-main']").text()).toContain("排序");
     expect(
       wrapper.find("[data-test='sort-in-main'] .lucide-grip-vertical").exists(),
@@ -956,38 +1101,21 @@ describe("StickyWindow", () => {
     wrapper.unmount();
   });
 
-  it("keeps the displayed density and reports an accessible error when resize fails", async () => {
-    promptApi.listSticky.mockResolvedValue([pinnedPrompt]);
-    windowApi.setStickySettings.mockRejectedValueOnce(
-      new Error("native failure"),
-    );
-    const wrapper = mountSticky();
-    await flushPromises();
-
-    await wrapper.get("[data-test='sticky-menu']").trigger("click");
-    document.body
-      .querySelector<HTMLButtonElement>("[data-test='sticky-density-toggle']")!
-      .click();
-    await flushPromises();
-
-    expect(wrapper.get(".sticky-window").classes()).toContain("comfortable");
-    expect(wrapper.get("[role='alert']").text()).toContain("无法调整便签尺寸");
-    wrapper.unmount();
-  });
-
-  it("switches to full mode from the title icon and footer", async () => {
+  it("routes the title and sort controls with their distinct intents", async () => {
     const wrapper = mount(StickyWindow);
 
     await wrapper.get("[aria-label='切换到完整模式']").trigger("click");
     await flushPromises();
-    await wrapper.get("[data-test='manage-in-main']").trigger("click");
+    await wrapper.get("[data-test='sort-in-main']").trigger("click");
     await flushPromises();
 
     expect(windowApi.enterMainMode).toHaveBeenCalledTimes(2);
+    expect(windowApi.enterMainMode).toHaveBeenNthCalledWith(1, undefined);
+    expect(windowApi.enterMainMode).toHaveBeenNthCalledWith(2, "manage-sticky");
     wrapper.unmount();
   });
 
-  it("suppresses repeated full-mode transitions while one is pending", async () => {
+  it("shares one pending guard between full-mode and sort transitions", async () => {
     let resolveTransition!: (value: { mode: "main" }) => void;
     windowApi.enterMainMode.mockReturnValueOnce(
       new Promise((resolve) => {
@@ -996,15 +1124,16 @@ describe("StickyWindow", () => {
     );
     const wrapper = mount(StickyWindow);
     const titleControl = wrapper.get("[aria-label='切换到完整模式']");
-    const footerControl = wrapper.get("[data-test='manage-in-main']");
+    const sortControl = wrapper.get("[data-test='sort-in-main']");
 
     const titleClick = titleControl.trigger("click");
-    const footerClick = footerControl.trigger("click");
-    await Promise.all([titleClick, footerClick]);
+    const sortClick = sortControl.trigger("click");
+    await Promise.all([titleClick, sortClick]);
 
     expect(windowApi.enterMainMode).toHaveBeenCalledOnce();
+    expect(windowApi.enterMainMode).toHaveBeenCalledWith(undefined);
     expect(titleControl.attributes("disabled")).toBeDefined();
-    expect(footerControl.attributes("disabled")).toBeDefined();
+    expect(sortControl.attributes("disabled")).toBeDefined();
 
     resolveTransition({ mode: "main" });
     await flushPromises();
@@ -1022,6 +1151,18 @@ describe("StickyWindow", () => {
     expect(wrapper.get("[role='alert']").text()).toContain(
       "无法切换到完整模式",
     );
+    wrapper.unmount();
+  });
+
+  it("renders intent-specific feedback when opening Sort fails", async () => {
+    windowApi.enterMainMode.mockRejectedValueOnce(new Error("native failure"));
+    const wrapper = mount(StickyWindow);
+
+    await wrapper.get("[data-test='sort-in-main']").trigger("click");
+    await flushPromises();
+
+    expect(windowApi.enterMainMode).toHaveBeenCalledWith("manage-sticky");
+    expect(wrapper.get("[role='alert']").text()).toBe("无法打开置顶排序");
     wrapper.unmount();
   });
 
