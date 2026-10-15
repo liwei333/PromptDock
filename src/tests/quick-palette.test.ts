@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 // @ts-expect-error -- Vitest executes this test with Node, while the app tsconfig intentionally excludes Node globals.
 import { resolve } from "node:path";
 
-import { flushPromises, mount } from "@vue/test-utils";
+import { flushPromises, mount as mountVue } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { copyPromptText, listen, promptApi, windowApi } = vi.hoisted(() => ({
@@ -19,6 +19,14 @@ vi.mock("@/api/commands", () => ({ promptApi, windowApi }));
 
 import QuickPalette from "@/components/QuickPalette.vue";
 import type { Prompt } from "@/types/prompt";
+
+const mountedWrappers = new Set<ReturnType<typeof mountVue>>();
+
+function mount(...args: Parameters<typeof mountVue>) {
+  const wrapper = mountVue(...args);
+  mountedWrappers.add(wrapper);
+  return wrapper;
+}
 
 const quickSource = readFileSync(
   resolve("src/components/QuickPalette.vue"),
@@ -74,6 +82,12 @@ describe("QuickPalette", () => {
   });
 
   afterEach(() => {
+    for (const wrapper of [...mountedWrappers].reverse()) {
+      if (!wrapper.vm.$.isUnmounted) wrapper.unmount();
+    }
+    mountedWrappers.clear();
+    document.body.replaceChildren();
+    if (vi.isFakeTimers()) vi.clearAllTimers();
     vi.useRealTimers();
     delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
   });
@@ -309,6 +323,138 @@ describe("QuickPalette", () => {
     expect(wrapper.get("[role='alert']").text()).toContain("native get failed");
     wrapper.unmount();
   });
+
+  it.each([
+    { key: "ArrowDown", expectedIndex: 1, outcome: "resolve" },
+    { key: "ArrowDown", expectedIndex: 1, outcome: "reject" },
+    { key: "ArrowUp", expectedIndex: 2, outcome: "resolve" },
+    { key: "ArrowUp", expectedIndex: 2, outcome: "reject" },
+  ] as const)(
+    "keeps $key navigation when an older native selection settles via $outcome",
+    async ({ key, expectedIndex, outcome }) => {
+      enableTauri();
+      const pendingSelection = deferred<Prompt>();
+      const staleTemplate = { ...item(9), body: "旧 {{主题}}" };
+      let selectPrompt!: (event: { payload: string }) => Promise<void>;
+      promptApi.get.mockReturnValueOnce(pendingSelection.promise);
+      listen.mockImplementationOnce(async (_name, handler) => {
+        selectPrompt = handler as (event: { payload: string }) => Promise<void>;
+        return () => undefined;
+      });
+      const prompts = [item(0), item(1), item(2)];
+      const wrapper = mount(QuickPalette, {
+        props: { initialPrompts: prompts },
+      });
+      await flushPromises();
+
+      const selection = selectPrompt({ payload: staleTemplate.id });
+      await wrapper.get("input").trigger("keydown", { key });
+      expect(wrapper.get("[aria-selected='true']").text()).toContain(
+        prompts[expectedIndex].title,
+      );
+
+      if (outcome === "resolve") pendingSelection.resolve(staleTemplate);
+      else pendingSelection.reject(new Error("stale navigation error"));
+      await selection;
+      await flushPromises();
+
+      expect(wrapper.find(".variable-panel").exists()).toBe(false);
+      expect(wrapper.find("[role='alert']").exists()).toBe(false);
+      expect(wrapper.get("[aria-selected='true']").text()).toContain(
+        prompts[expectedIndex].title,
+      );
+      wrapper.unmount();
+    },
+  );
+
+  it.each(["resolve", "reject"] as const)(
+    "keeps mouse-selected local result when an older native selection %ss",
+    async (outcome) => {
+      enableTauri();
+      const pendingSelection = deferred<Prompt>();
+      const staleTemplate = { ...item(9), body: "旧 {{主题}}" };
+      let selectPrompt!: (event: { payload: string }) => Promise<void>;
+      promptApi.get.mockReturnValueOnce(pendingSelection.promise);
+      listen.mockImplementationOnce(async (_name, handler) => {
+        selectPrompt = handler as (event: { payload: string }) => Promise<void>;
+        return () => undefined;
+      });
+      const prompts = [item(0), item(1), item(2)];
+      const wrapper = mount(QuickPalette, {
+        props: { initialPrompts: prompts },
+      });
+      await flushPromises();
+
+      const selection = selectPrompt({ payload: staleTemplate.id });
+      await wrapper
+        .findAll("[data-test='quick-result']")[2]
+        .trigger("mouseenter");
+      expect(wrapper.get("[aria-selected='true']").text()).toContain(
+        prompts[2].title,
+      );
+
+      if (outcome === "resolve") pendingSelection.resolve(staleTemplate);
+      else pendingSelection.reject(new Error("stale hover error"));
+      await selection;
+      await flushPromises();
+
+      expect(wrapper.find(".variable-panel").exists()).toBe(false);
+      expect(wrapper.find("[role='alert']").exists()).toBe(false);
+      expect(wrapper.get("[aria-selected='true']").text()).toContain(
+        prompts[2].title,
+      );
+      wrapper.unmount();
+    },
+  );
+
+  it.each(["resolve", "reject"] as const)(
+    "preserves local pasted template input when a newer native selection %ss",
+    async (outcome) => {
+      enableTauri();
+      const pendingSelection = deferred<Prompt>();
+      const localTemplate = { ...item(1), body: "本地 {{项目}}" };
+      const staleTemplate = { ...item(9), body: "旧 {{主题}}" };
+      let selectPrompt!: (event: { payload: string }) => Promise<void>;
+      promptApi.get.mockReturnValueOnce(pendingSelection.promise);
+      listen.mockImplementationOnce(async (_name, handler) => {
+        selectPrompt = handler as (event: { payload: string }) => Promise<void>;
+        return () => undefined;
+      });
+      const wrapper = mount(QuickPalette, {
+        props: { initialPrompts: [localTemplate] },
+      });
+      await flushPromises();
+
+      await wrapper.get("[data-test='quick-result']").trigger("click");
+      const selection = selectPrompt({ payload: staleTemplate.id });
+      const field = wrapper.get("input[placeholder='填写项目']");
+      (field.element as HTMLInputElement).value = "粘贴的 PromptDock";
+      await field.trigger("input", { inputType: "insertFromPaste" });
+      expect(wrapper.get(".preview-block pre").text()).toContain(
+        "粘贴的 PromptDock",
+      );
+
+      if (outcome === "resolve") pendingSelection.resolve(staleTemplate);
+      else pendingSelection.reject(new Error("stale edit error"));
+      await selection;
+      await flushPromises();
+
+      expect(wrapper.get(".variable-panel").text()).toContain(
+        localTemplate.title,
+      );
+      expect(
+        (
+          wrapper.get("input[placeholder='填写项目']")
+            .element as HTMLInputElement
+        ).value,
+      ).toBe("粘贴的 PromptDock");
+      expect(wrapper.get(".preview-block pre").text()).toContain(
+        "粘贴的 PromptDock",
+      );
+      expect(wrapper.find("[role='alert']").exists()).toBe(false);
+      wrapper.unmount();
+    },
+  );
 
   it.each(["resolve", "reject"] as const)(
     "ignores a native selection that %ss after Escape closes the native palette",

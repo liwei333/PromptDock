@@ -147,8 +147,18 @@ function showCopySuccess(prompt: Prompt, sequence: number): void {
 
 function move(delta: number): void {
   if (!results.value.length) return;
+  invalidateNativeSelection();
   activeIndex.value =
     (activeIndex.value + delta + results.value.length) % results.value.length;
+}
+
+function setActiveIndex(index: number): void {
+  invalidateNativeSelection();
+  activeIndex.value = index;
+}
+
+function preserveTemplateEditingIntent(): void {
+  if (templatePrompt.value) invalidateNativeSelection();
 }
 
 async function activate(
@@ -311,7 +321,12 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="quick-palette" @keydown="onKeydown">
+  <div
+    class="quick-palette"
+    @keydown="onKeydown"
+    @input.capture="preserveTemplateEditingIntent"
+    @change.capture="preserveTemplateEditingIntent"
+  >
     <TemplateVariablesPanel
       v-if="templatePrompt"
       :prompt="templatePrompt"
@@ -351,7 +366,7 @@ onBeforeUnmount(() => {
           tabindex="-1"
           :aria-selected="index === activeIndex"
           :aria-label="`${prompt.title}，${actionLabel(prompt)}`"
-          @mouseenter="activeIndex = index"
+          @mouseenter="setActiveIndex(index)"
           @mousedown.prevent
           @click="activate(prompt)"
         >
