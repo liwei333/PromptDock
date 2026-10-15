@@ -243,17 +243,109 @@ describe("CategoryManagerDialog", () => {
     );
     await settle();
 
+    const deleteButton = document.body.querySelector<HTMLButtonElement>(
+      "[data-test='delete-category-category-a']",
+    )!;
+    expect(deleteButton.disabled).toBe(false);
+    expect(deleteButton.getAttribute("aria-disabled")).toBe("true");
+    const helpId = deleteButton.getAttribute("aria-describedby")!;
+    expect(document.getElementById(helpId)?.textContent).toContain(
+      "至少保留一个分类",
+    );
+    deleteButton.focus();
+    await settle();
     expect(
-      document.body
-        .querySelector<HTMLButtonElement>(
-          "[data-test='delete-category-category-a']",
-        )
-        ?.hasAttribute("disabled"),
-    ).toBe(true);
+      document.body.querySelector(".pd-tooltip-content")?.textContent,
+    ).toContain("至少保留一个分类");
+    deleteButton.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        code: "Enter",
+        bubbles: true,
+      }),
+    );
+    deleteButton.click();
+    await settle();
+    expect(document.body.querySelectorAll('[role="dialog"]')).toHaveLength(1);
     expect(
       getDialog("分类管理").querySelector('[role="alert"]')?.textContent,
     ).toContain("分类名称已经存在");
     expect(wrapper.emitted("close")).toBeUndefined();
+  });
+
+  it("guards create and rename keyboard submission while busy", async () => {
+    const wrapper = track(
+      mount(CategoryManagerDialog, {
+        attachTo: document.body,
+        props: { categories, busy: false },
+        global: { stubs: { Teleport: false } },
+      }),
+    );
+    await settle();
+
+    document.body
+      .querySelector<HTMLButtonElement>("[data-test='open-category-create']")!
+      .click();
+    await settle();
+    const createInput = document.body.querySelector<HTMLInputElement>(
+      "[data-test='category-create-input']",
+    )!;
+    createInput.value = "键盘新建";
+    createInput.dispatchEvent(new Event("input", { bubbles: true }));
+    await wrapper.setProps({ busy: true });
+    expect(createInput.disabled).toBe(true);
+    createInput.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        code: "Enter",
+        bubbles: true,
+      }),
+    );
+    await settle();
+    expect(wrapper.emitted("create")).toBeUndefined();
+    await wrapper.setProps({ busy: false });
+    createInput.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        code: "Enter",
+        bubbles: true,
+      }),
+    );
+    await settle();
+    expect(wrapper.emitted("create")).toEqual([["键盘新建"]]);
+
+    document.body
+      .querySelector<HTMLButtonElement>(
+        "[data-test='rename-category-category-a']",
+      )!
+      .click();
+    await settle();
+    const renameInput = document.body.querySelector<HTMLInputElement>(
+      "[data-test='category-rename-input']",
+    )!;
+    renameInput.value = "键盘重命名";
+    renameInput.dispatchEvent(new Event("input", { bubbles: true }));
+    await wrapper.setProps({ busy: true });
+    expect(renameInput.disabled).toBe(true);
+    renameInput.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        code: "Enter",
+        bubbles: true,
+      }),
+    );
+    await settle();
+    expect(wrapper.emitted("rename")).toBeUndefined();
+    await wrapper.setProps({ busy: false });
+    renameInput.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        code: "Enter",
+        bubbles: true,
+      }),
+    );
+    await settle();
+    expect(wrapper.emitted("rename")).toEqual([["category-a", "键盘重命名"]]);
   });
 
   it("uses the shared dialog shell for the standalone create flow", async () => {

@@ -40,16 +40,7 @@ const categoryOptions = computed<PdSelectOption[]>(() =>
     label: category.name,
   })),
 );
-const tagsText = computed({
-  get: () => form.tags.join("，"),
-  set: (value: string) => {
-    form.tags = value
-      .split(/[,，]/u)
-      .map((tag) => tag.trim())
-      .filter(Boolean)
-      .slice(0, 10);
-  },
-});
+const tagsText = ref(form.tags.join("，"));
 const validation = computed(() => {
   if (!form.title.trim()) return "请输入标题";
   if (Array.from(form.title.trim()).length > 80)
@@ -64,6 +55,45 @@ const dialogTitle = computed(() =>
 const dialogDescription = computed(() =>
   props.prompt ? props.prompt.title : "把常用工作流保存到本机",
 );
+
+function updateTextField(
+  field: "title" | "description" | "body",
+  event: Event,
+): void {
+  const input = event.target as HTMLInputElement | HTMLTextAreaElement;
+  if (props.saving) {
+    input.value = form[field];
+    return;
+  }
+  form[field] = input.value;
+}
+
+function updateTags(event: Event): void {
+  const input = event.target as HTMLInputElement;
+  if (props.saving) {
+    input.value = tagsText.value;
+    return;
+  }
+  tagsText.value = input.value;
+  form.tags = tagsText.value
+    .split(/[,，]/u)
+    .map((tag) => tag.trim())
+    .filter(Boolean)
+    .slice(0, 10);
+}
+
+function updateCategory(categoryId: string): void {
+  if (!props.saving) form.categoryId = categoryId;
+}
+
+function updateBoolean(field: "isFavorite" | "isPinned", event: Event): void {
+  const input = event.target as HTMLInputElement;
+  if (props.saving) {
+    input.checked = form[field];
+    return;
+  }
+  form[field] = input.checked;
+}
 
 async function requestClose(): Promise<void> {
   if (props.saving || confirmingClose.value) return;
@@ -112,51 +142,73 @@ function save(): void {
         <label class="span-2">
           <span>标题 *</span>
           <input
-            v-model="form.title"
+            :value="form.title"
             data-test="prompt-title"
             autofocus
             maxlength="80"
             placeholder="例如：严谨的代码审查"
+            :disabled="saving"
+            @input="updateTextField('title', $event)"
           />
         </label>
         <label>
           <span>分类 *</span>
           <PdSelect
-            v-model="form.categoryId"
+            :model-value="form.categoryId"
             label="分类"
             placeholder="请选择分类"
             :options="categoryOptions"
             :disabled="saving"
+            @update:model-value="updateCategory"
           />
         </label>
         <label>
           <span>标签</span>
-          <input v-model="tagsText" placeholder="用逗号分隔，最多 10 个" />
+          <input
+            :value="tagsText"
+            placeholder="用逗号分隔，最多 10 个"
+            :disabled="saving"
+            @input="updateTags"
+          />
         </label>
         <label class="span-2">
           <span>说明</span>
           <input
-            v-model="form.description"
+            :value="form.description"
             maxlength="160"
             placeholder="一句话说明使用场景"
+            :disabled="saving"
+            @input="updateTextField('description', $event)"
           />
         </label>
         <label class="span-2">
           <span>提示词正文 *</span>
           <textarea
-            v-model="form.body"
+            :value="form.body"
             rows="12"
             placeholder="支持多行正文；变量写作 {{项目名称}}"
+            :disabled="saving"
+            @input="updateTextField('body', $event)"
           />
         </label>
       </div>
       <div class="toggle-row">
         <label>
-          <input v-model="form.isFavorite" type="checkbox" :disabled="saving" />
+          <input
+            type="checkbox"
+            :checked="form.isFavorite"
+            :disabled="saving"
+            @change="updateBoolean('isFavorite', $event)"
+          />
           加入收藏
         </label>
         <label>
-          <input v-model="form.isPinned" type="checkbox" :disabled="saving" />
+          <input
+            type="checkbox"
+            :checked="form.isPinned"
+            :disabled="saving"
+            @change="updateBoolean('isPinned', $event)"
+          />
           加入快捷便签（最多 5 条）
         </label>
       </div>
@@ -179,7 +231,12 @@ function save(): void {
         删除提示词
       </PdButton>
       <span class="spacer" />
-      <PdButton variant="ghost" :disabled="saving" @click="requestClose">
+      <PdButton
+        data-test="cancel-prompt-edit"
+        variant="ghost"
+        :disabled="saving"
+        @click="requestClose"
+      >
         取消
       </PdButton>
       <PdButton

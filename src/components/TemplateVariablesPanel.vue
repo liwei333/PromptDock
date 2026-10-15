@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { X } from "lucide-vue-next";
-import { computed, reactive, ref } from "vue";
+import { computed, reactive, ref, useId } from "vue";
 
 import PdButton from "@/components/ui/PdButton.vue";
 import PdIconButton from "@/components/ui/PdIconButton.vue";
@@ -20,6 +20,7 @@ const names = computed(() => template.value.variables);
 const values = reactive<Record<string, string>>({});
 const error = ref("");
 const copying = ref(false);
+const titleId = useId();
 const preview = computed(() =>
   template.value.error
     ? props.prompt.body
@@ -46,11 +47,11 @@ async function copy(): Promise<void> {
 </script>
 
 <template>
-  <section class="variable-panel" aria-labelledby="variable-panel-title">
+  <section class="variable-panel" :aria-labelledby="titleId">
     <header>
       <div>
         <span class="eyebrow">变量模板</span>
-        <h3 id="variable-panel-title">{{ prompt.title }}</h3>
+        <h3 :id="titleId">{{ prompt.title }}</h3>
       </div>
       <PdIconButton label="关闭变量填写" :icon="X" @click="emit('cancel')" />
     </header>

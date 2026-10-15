@@ -60,22 +60,35 @@ function commit(): void {
         }}</span
       >
     </p>
-    <div class="import-modes">
+    <fieldset class="import-modes">
+      <legend>导入方式</legend>
       <label :class="{ active: mode === 'merge' }">
-        <input v-model="mode" type="radio" value="merge" :disabled="busy" />
+        <input
+          v-model="mode"
+          type="radio"
+          name="import-mode"
+          value="merge"
+          :disabled="busy"
+        />
         <span>
           <strong>合并导入（推荐）</strong>
           <small>现有内容不会被覆盖；冲突项创建“导入副本”。</small>
         </span>
       </label>
       <label :class="{ active: mode === 'replace' }">
-        <input v-model="mode" type="radio" value="replace" :disabled="busy" />
+        <input
+          v-model="mode"
+          type="radio"
+          name="import-mode"
+          value="replace"
+          :disabled="busy"
+        />
         <span>
           <strong>替换现有库</strong>
           <small>先创建安全备份，再用文件内容替换当前分类和提示词。</small>
         </span>
       </label>
-    </div>
+    </fieldset>
     <PdStatusMessage v-if="error" tone="danger" :message="error" />
 
     <template #footer>

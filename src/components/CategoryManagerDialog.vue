@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Folder, Pencil, Plus, Trash2 } from "lucide-vue-next";
-import { ref, watch } from "vue";
+import { ref, useId, watch } from "vue";
 
 import CategoryDeleteDialog from "@/components/CategoryDeleteDialog.vue";
 import PdButton from "@/components/ui/PdButton.vue";
@@ -27,6 +27,7 @@ const editingId = ref<string | null>(null);
 const editingName = ref("");
 const deleteSource = ref<Category | null>(null);
 const localError = ref("");
+const finalCategoryHelpId = useId();
 let previousCount = props.categories.length;
 
 watch(
@@ -58,6 +59,7 @@ function requestClose(): void {
 }
 
 function submitCreate(): void {
+  if (props.busy) return;
   const name = newName.value.trim();
   if (!name) {
     localError.value = "请输入分类名称";
@@ -68,12 +70,14 @@ function submitCreate(): void {
 }
 
 function startRename(category: Category): void {
+  if (props.busy) return;
   localError.value = "";
   editingId.value = category.id;
   editingName.value = category.name;
 }
 
 function submitRename(): void {
+  if (props.busy) return;
   const name = editingName.value.trim();
   if (!editingId.value || !name) {
     localError.value = "请输入分类名称";
@@ -81,6 +85,11 @@ function submitRename(): void {
   }
   localError.value = "";
   emit("rename", editingId.value, name);
+}
+
+function requestDelete(category: Category): void {
+  if (props.busy || props.categories.length <= 1) return;
+  deleteSource.value = category;
 }
 </script>
 
@@ -132,8 +141,15 @@ function submitRename(): void {
         maxlength="18"
         autofocus
         placeholder="分类名称"
+        :disabled="busy"
+        @keydown.enter.prevent="submitCreate"
       />
-      <PdButton variant="ghost" size="sm" @click="creating = false">
+      <PdButton
+        variant="ghost"
+        size="sm"
+        :disabled="busy"
+        @click="creating = false"
+      >
         取消
       </PdButton>
       <PdButton
@@ -159,10 +175,16 @@ function submitRename(): void {
             v-model="editingName"
             data-test="category-rename-input"
             maxlength="18"
+            :disabled="busy"
             @keydown.esc="editingId = null"
             @keydown.enter.prevent="submitRename"
           />
-          <PdButton variant="ghost" size="sm" @click="editingId = null">
+          <PdButton
+            variant="ghost"
+            size="sm"
+            :disabled="busy"
+            @click="editingId = null"
+          >
             取消
           </PdButton>
           <PdButton
@@ -200,16 +222,28 @@ function submitRename(): void {
             :label="`删除 ${category.name}`"
             :tooltip="
               categories.length <= 1
-                ? '不能删除最后一个分类'
+                ? `至少保留一个分类，无法删除 ${category.name}`
                 : `删除 ${category.name}`
             "
             :icon="Trash2"
-            :disabled="busy || categories.length <= 1"
-            @click="deleteSource = category"
+            :disabled="busy"
+            :aria-disabled="categories.length <= 1 ? 'true' : undefined"
+            :aria-describedby="
+              categories.length <= 1 ? finalCategoryHelpId : undefined
+            "
+            @click="requestDelete(category)"
           />
         </template>
       </div>
     </div>
+
+    <p
+      v-if="categories.length <= 1"
+      :id="finalCategoryHelpId"
+      class="category-final-note"
+    >
+      至少保留一个分类，无法删除最后一个分类。
+    </p>
 
     <PdStatusMessage
       v-if="localError || error"

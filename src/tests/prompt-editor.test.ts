@@ -212,6 +212,59 @@ describe("PromptEditorDialog", () => {
     await settle();
     expect(wrapper.emitted("close")).toBeUndefined();
   });
+
+  it("locks every editable field and action while a save snapshot is in flight", async () => {
+    const wrapper = track(
+      mount(PromptEditorDialog, {
+        attachTo: document.body,
+        props: { prompt, categories, saving: false },
+        global: { stubs: { Teleport: false } },
+      }),
+    );
+    await settle();
+    const title = document.body.querySelector<HTMLInputElement>(
+      "[data-test='prompt-title']",
+    )!;
+    title.value = "保存中的快照";
+    title.dispatchEvent(new Event("input", { bubbles: true }));
+    await wrapper.setProps({ saving: true });
+    await settle();
+
+    const dialog = document.body.querySelector<HTMLElement>('[role="dialog"]')!;
+    for (const field of dialog.querySelectorAll<
+      HTMLInputElement | HTMLTextAreaElement
+    >(".editor-form input, .editor-form textarea")) {
+      expect(field.disabled, `${field.tagName} should be disabled`).toBe(true);
+    }
+    expect(
+      dialog.querySelector<HTMLButtonElement>(
+        'button[role="combobox"][aria-label="分类"]',
+      )?.disabled,
+    ).toBe(true);
+
+    title.value = "保存期间丢失的修改";
+    title.dispatchEvent(new Event("input", { bubbles: true }));
+    title.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        code: "Enter",
+        bubbles: true,
+      }),
+    );
+    dialog
+      .querySelector<HTMLButtonElement>("[data-test='save-prompt']")!
+      .click();
+    dialog.querySelector<HTMLButtonElement>(".editor-delete")!.click();
+    dialog
+      .querySelector<HTMLButtonElement>("[data-test='cancel-prompt-edit']")!
+      .click();
+    await settle();
+
+    expect(title.value).toBe("保存中的快照");
+    expect(wrapper.emitted("save")).toBeUndefined();
+    expect(wrapper.emitted("delete")).toBeUndefined();
+    expect(wrapper.emitted("close")).toBeUndefined();
+  });
 });
 
 describe("StickyManagerDialog", () => {

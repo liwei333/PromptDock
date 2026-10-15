@@ -88,4 +88,40 @@ describe("template variables", () => {
       true,
     );
   });
+
+  it("uses unique title relationships for multiple variable panels", () => {
+    const prompt = {
+      id: "prompt-a",
+      title: "变量模板",
+      description: "",
+      body: "你好 {{姓名}}",
+      categoryId: "category-a",
+      categoryName: "通用效率",
+      tags: [],
+      isFavorite: false,
+      isPinned: false,
+      pinOrder: null,
+      copyCount: 0,
+      lastCopiedAt: null,
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const wrapper = mount({
+      components: { TemplateVariablesPanel },
+      setup: () => ({ prompt }),
+      template: `
+        <TemplateVariablesPanel :prompt="prompt" />
+        <TemplateVariablesPanel :prompt="prompt" />
+      `,
+    });
+
+    const panels = wrapper.findAll(".variable-panel");
+    const ids = panels.map((panel) => panel.attributes("aria-labelledby"));
+    expect(new Set(ids).size).toBe(2);
+    for (const [index, panel] of panels.entries()) {
+      const id = ids[index];
+      expect(id).toBeDefined();
+      expect(panel.find(`#${CSS.escape(id!)}`).text()).toBe("变量模板");
+    }
+  });
 });

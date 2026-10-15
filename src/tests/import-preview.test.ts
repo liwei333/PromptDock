@@ -43,6 +43,14 @@ describe("ImportPreviewDialog", () => {
     expect(
       dialog.querySelector<HTMLInputElement>("input[value='merge']")?.checked,
     ).toBe(true);
+    expect(
+      dialog.querySelector("fieldset.import-modes legend")?.textContent,
+    ).toBe("导入方式");
+    expect(
+      dialog.querySelectorAll<HTMLInputElement>(
+        'input[type="radio"][name="import-mode"]',
+      ),
+    ).toHaveLength(2);
 
     dialog
       .querySelector<HTMLButtonElement>("[data-test='commit-import']")!

@@ -2936,6 +2936,16 @@ button.sticky-row:hover {
 .category-manager-row > .pd-icon-button {
   flex: 0 0 auto;
 }
+.category-manager-row > .pd-icon-button[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.46;
+}
+.category-final-note {
+  margin: 12px 22px 0;
+  color: var(--pd-text-secondary);
+  font-size: 10px;
+  line-height: 1.5;
+}
 .category-dialog-status {
   margin: 12px 22px 0;
 }
@@ -2983,6 +2993,17 @@ button.sticky-row:hover {
   width: 15px;
   height: 15px;
   stroke-width: 1.8;
+}
+.import-modes {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+}
+.import-modes legend {
+  padding: 0;
+  color: var(--pd-text-secondary);
+  font-size: 10px;
+  font-weight: 750;
 }
 .import-preview .pd-status-message,
 .sticky-manager .pd-status-message {
