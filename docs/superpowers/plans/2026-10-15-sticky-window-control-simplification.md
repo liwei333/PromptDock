@@ -694,8 +694,9 @@ Add a helper in the test file to enable Tauri before mounting. Then add tests pr
 5. A rejected acknowledgment leaves the already opened/queued UI idempotent; the next focus can peek the same ID and acknowledge it without creating another manager.
 6. If an acknowledgment response is lost after the backend cleared the slot, the next peek returns `null` and the existing manager remains single.
 7. After unmount, focus no longer calls `peekMainIntent` and late results do not mutate state or acknowledge.
+8. If the first peek is pending, a focus event queues another check, and that first peek then resolves `null`, the code issues one second, serialized peek; when the second peek returns the intent envelope, it opens and acknowledges normally.
 
-For cases 4–6, script the mock sequence explicitly rather than merely retrying the same frontend promise: a peek rejection is followed by the same envelope on the next focus; an acknowledgment rejection is followed by the same envelope; and a lost acknowledgment response is followed by `null`. Assert the exact acknowledgment ID in every envelope case.
+For cases 4–6 and 8, script the mock sequence explicitly rather than merely retrying the same frontend promise: a peek rejection is followed by the same envelope on the next focus; an acknowledgment rejection is followed by the same envelope; a lost acknowledgment response is followed by `null`; and the pending-null race uses a deferred first peek followed by a second envelope. Assert the exact acknowledgment ID in every envelope case and assert that no two peek calls are concurrently unresolved.
 
 Representative first-load test:
 
@@ -800,9 +801,14 @@ async function consumeMainIntent(): Promise<void> {
         pending = await windowApi.peekMainIntent();
       } catch {
         if (!disposed) notify("无法打开置顶排序，请重试", "error");
-        break;
+        if (!mainIntentCheckQueued) break;
+        continue;
       }
-      if (disposed || !pending) break;
+      if (disposed) break;
+      if (!pending) {
+        if (!mainIntentCheckQueued) break;
+        continue;
+      }
       if (pending.intent === "manage-sticky") openOrQueueStickyManager();
       try {
         const result = await windowApi.ackMainIntent(pending.id);
@@ -811,7 +817,8 @@ async function consumeMainIntent(): Promise<void> {
         if (!disposed) {
           notify("置顶排序请求已保留，导航确认将在下次聚焦时重试", "error");
         }
-        break;
+        if (!mainIntentCheckQueued) break;
+        continue;
       }
     } while (!disposed && mainIntentCheckQueued);
   } finally {

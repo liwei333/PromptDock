@@ -99,7 +99,7 @@
 - 主窗口完成本地打开或排队后调用 `ack_main_intent(id)`。只有 ID 与当前 pending 完全匹配时才清除并返回 `acknowledged: true`；旧确认不得清除后来到达的新请求；
 - 锁顺序固定为：带 intent 的路径先获取 pending-intent 锁，再由 `transition_to` 获取 `mode_transition` 锁；任何代码不得以相反顺序同时获取两把锁。普通无 intent 的 `enterMainMode()` 不创建、消费或清除已有的待重试 intent；
 - 主窗口必须在任何 `await store.load()` 之前同步注册浏览器 `focus` 监听，并立即调用一次 intent 交付；这样无论 focus 发生在组件挂载前还是后，持久于 Rust 进程内的 intent 都不会因一次事件丢失；
-- 主窗口的 intent 交付使用单飞忙碌锁；挂载与 focus 同时触发时不并发执行两个 peek/ack 流程；
+- 主窗口的 intent 交付使用单飞忙碌锁；挂载与 focus 同时触发时不并发执行两个 peek/ack 流程。忙碌期间到达的 focus 会记录为待检查触发；即使当前 peek 返回 `None` 或失败，也必须先串行执行这次已排队检查，不能因当前分支结束而丢弃；
 - `peek_main_intent` 失败不会删除 pending；主窗口显示可访问错误“无法打开置顶排序，请重试”，并在下次获得焦点时重试；
 - `ack_main_intent` 失败或响应丢失时，pending 可能仍存在，也可能已清除。主窗口保留已打开/排队的幂等本地状态，在下次 focus 重新 peek：若仍返回同一 ID，则重复幂等处理并再次确认；若返回 `None`，视为先前确认已经生效；
 - 同一个 `manage-sticky` intent 在界面上只产生一个管理实例；如果管理弹窗已经打开，则幂等保持现有实例并将焦点留在该弹窗，不重复挂载；
@@ -185,7 +185,7 @@
 8. DOM 中不存在旧设置齿轮、设置 dialog、遮罩、底部“管理”和弹窗“打开完整窗口”；相关专用 CSS 选择器也已删除；
 9. 标题栏完整模式调用无 intent 的普通切窗；“排序”调用 `manage-sticky` intent；二者共享防重复锁；
 10. Rust 普通切窗不创建或误清除 intent；`manage-sticky` 在持有 pending-intent 锁期间完成切窗，失败时清除后让并发 peek 返回 `None`；成功时 peek 非破坏性返回同一 ID，只有匹配 ID 的 ack 才清除；
-11. `store.load()` 延迟或 focus 早于组件挂载时，主窗口仍能在挂载/获得焦点的双触发中交付 intent 并打开 `StickyManagerDialog`；两个触发重叠时由单飞锁合并；
+11. `store.load()` 延迟或 focus 早于组件挂载时，主窗口仍能在挂载/获得焦点的双触发中交付 intent 并打开 `StickyManagerDialog`；两个触发重叠时不并发调用 IPC，且第一次 peek 返回 `None` 或失败时仍会串行执行已排队的第二次 peek；
 12. 主窗口 intent 读取失败时在可见主窗口显示错误并保留重试机会；组件卸载后不响应 focus，也不更新界面；
 13. 已有编辑、导入、分类管理、运行信息或快捷面板时只排队一个排序 intent，关闭当前界面后才打开管理弹窗；管理弹窗已经打开时不重复挂载；
 14. Rust 成功竞态：暂停窗口切换并并发调用 `peek_main_intent`，peek 在切窗结束前保持等待，成功后稳定返回同一个带 ID 的 `manage-sticky`，匹配 ack 后才变为 `None`；
