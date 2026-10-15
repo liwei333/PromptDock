@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { listen } from "@tauri-apps/api/event";
+import { Braces, Check, Copy, Search } from "lucide-vue-next";
 import {
   computed,
   nextTick,
   onBeforeUnmount,
   onMounted,
   ref,
+  useId,
   watch,
 } from "vue";
 
@@ -27,8 +29,13 @@ const activeIndex = ref(0);
 const loading = ref(false);
 const error = ref("");
 const templatePrompt = ref<Prompt | null>(null);
+const copyingId = ref<string | null>(null);
+const copiedId = ref<string | null>(null);
+const listboxId = useId();
 let searchSequence = 0;
+let activationSequence = 0;
 let stopSelectListener: (() => void) | null = null;
+let disposed = false;
 
 function matches(prompt: Prompt, keyword: string): boolean {
   if (!keyword) return true;
@@ -55,6 +62,7 @@ async function load(): Promise<void> {
   if (props.initialPrompts) return;
   const sequence = ++searchSequence;
   loading.value = true;
+  error.value = "";
   try {
     const page = await promptApi.list({
       search: search.value || undefined,
@@ -63,9 +71,11 @@ async function load(): Promise<void> {
     });
     if (sequence === searchSequence) remoteResults.value = page.items;
   } catch (reason) {
-    error.value = reason instanceof Error ? reason.message : String(reason);
+    if (sequence === searchSequence) {
+      error.value = reason instanceof Error ? reason.message : String(reason);
+    }
   } finally {
-    loading.value = false;
+    if (sequence === searchSequence) loading.value = false;
   }
 }
 
@@ -83,27 +93,45 @@ function move(delta: number): void {
 async function activate(
   prompt = results.value[activeIndex.value],
 ): Promise<void> {
-  if (!prompt) return;
+  if (!prompt || copyingId.value) return;
   error.value = "";
   const template = inspectTemplateVariables(prompt.body);
   if (!template.error && template.variables.length) {
     templatePrompt.value = prompt;
     return;
   }
+  const sequence = ++activationSequence;
+  copyingId.value = prompt.id;
+  copiedId.value = null;
   try {
     await copyPromptText({ id: prompt.id, text: prompt.body });
+    if (disposed || sequence !== activationSequence) return;
+    copyingId.value = null;
+    copiedId.value = prompt.id;
     emit("copied", prompt);
     if (!props.embedded) await windowApi.hideQuick();
     else emit("close");
   } catch (reason) {
-    error.value = reason instanceof Error ? reason.message : "复制失败";
+    if (!disposed && sequence === activationSequence) {
+      error.value = reason instanceof Error ? reason.message : "复制失败";
+    }
+  } finally {
+    if (!disposed && sequence === activationSequence) copyingId.value = null;
   }
 }
 
 function actionLabel(prompt: Prompt): string {
+  if (copyingId.value === prompt.id) return "正在复制";
+  if (copiedId.value === prompt.id) return "已复制";
   const template = inspectTemplateVariables(prompt.body);
-  if (template.error) return "复制原文 ↵";
-  return template.variables.length ? "填变量 ↵" : "复制 ↵";
+  if (template.error) return "复制原文";
+  return template.variables.length ? "填写变量" : "复制";
+}
+
+function actionIcon(prompt: Prompt) {
+  if (copiedId.value === prompt.id) return Check;
+  const template = inspectTemplateVariables(prompt.body);
+  return !template.error && template.variables.length ? Braces : Copy;
 }
 
 async function templateCopied(): Promise<void> {
@@ -114,11 +142,20 @@ async function templateCopied(): Promise<void> {
 }
 
 function close(): void {
+  activationSequence += 1;
+  copyingId.value = null;
   if (templatePrompt.value) templatePrompt.value = null;
   else emit("close");
 }
 
 function onKeydown(event: KeyboardEvent): void {
+  if (templatePrompt.value) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      close();
+    }
+    return;
+  }
   if (event.key === "ArrowDown") {
     event.preventDefault();
     move(1);
@@ -147,7 +184,11 @@ onMounted(async () => {
     );
   }
 });
-onBeforeUnmount(() => stopSelectListener?.());
+onBeforeUnmount(() => {
+  disposed = true;
+  activationSequence += 1;
+  stopSelectListener?.();
+});
 </script>
 
 <template>
@@ -160,27 +201,41 @@ onBeforeUnmount(() => stopSelectListener?.());
     />
     <template v-else>
       <header class="quick-search">
-        <span aria-hidden="true">⌕</span>
+        <Search class="quick-search-icon" aria-hidden="true" />
         <input
           ref="input"
           v-model="search"
+          role="combobox"
           aria-label="搜索提示词"
+          aria-autocomplete="list"
+          aria-expanded="true"
+          :aria-controls="listboxId"
+          :aria-activedescendant="
+            results.length ? `${listboxId}-option-${activeIndex}` : undefined
+          "
           placeholder="搜索并快速复制提示词…"
         />
         <kbd>ESC</kbd>
       </header>
-      <div class="quick-results" role="listbox">
-        <button
+      <div :id="listboxId" class="quick-results" role="listbox">
+        <div
           v-for="(prompt, index) in results"
           :key="prompt.id"
+          :id="`${listboxId}-option-${index}`"
           data-test="quick-result"
           class="quick-result"
           :class="{ active: index === activeIndex }"
+          role="option"
+          tabindex="-1"
           :aria-selected="index === activeIndex"
+          :aria-label="`${prompt.title}，${actionLabel(prompt)}`"
           @mouseenter="activeIndex = index"
+          @mousedown.prevent
           @click="activate(prompt)"
         >
-          <span class="quick-icon">{{ prompt.isPinned ? "⌁" : "P" }}</span>
+          <span class="quick-icon" aria-hidden="true">
+            <component :is="actionIcon(prompt)" />
+          </span>
           <span class="quick-copy">
             <strong>{{ prompt.title }}</strong>
             <small
@@ -188,8 +243,11 @@ onBeforeUnmount(() => stopSelectListener?.());
               {{ prompt.description || prompt.body }}</small
             >
           </span>
-          <span class="quick-action">{{ actionLabel(prompt) }}</span>
-        </button>
+          <span class="quick-action">
+            <component :is="actionIcon(prompt)" aria-hidden="true" />
+            {{ actionLabel(prompt) }}
+          </span>
+        </div>
         <div v-if="loading" class="quick-empty">正在检索本机 SQLite…</div>
         <div v-else-if="!results.length" class="quick-empty">
           没有匹配的提示词

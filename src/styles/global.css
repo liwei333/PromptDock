@@ -1348,10 +1348,10 @@ select {
 .quick-palette {
   width: min(680px, 100%);
   overflow: hidden;
-  border: 1px solid #e0e4ec;
-  border-radius: 15px;
-  background: #fff;
-  box-shadow: 0 30px 80px #17203342;
+  border: 1px solid var(--pd-border-strong);
+  border-radius: var(--pd-radius-xl);
+  background: var(--pd-surface-elevated);
+  box-shadow: var(--pd-shadow-popover);
 }
 .quick-window-page .quick-palette {
   width: 100%;
@@ -1365,7 +1365,13 @@ select {
   align-items: center;
   height: 62px;
   padding: 0 17px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--pd-border);
+}
+.quick-search-icon {
+  width: 17px;
+  height: 17px;
+  color: var(--pd-text-secondary);
+  stroke-width: 1.8;
 }
 .quick-search input {
   width: 100%;
@@ -1403,9 +1409,12 @@ kbd {
   border: 0;
   border-radius: 9px;
   background: transparent;
+  cursor: default;
   text-align: left;
+  transition: background var(--pd-motion-fast) ease;
 }
-.quick-result.active {
+.quick-result.active,
+.quick-result:hover {
   background: var(--blue-soft);
 }
 .quick-icon {
@@ -1417,8 +1426,11 @@ kbd {
   border-radius: 9px;
   background: #fff;
   box-shadow: inset 0 0 0 1px #dfe3f3;
-  font-size: 11px;
-  font-weight: 850;
+}
+.quick-icon svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 1.8;
 }
 .quick-copy {
   display: flex;
@@ -1440,8 +1452,16 @@ kbd {
   font-size: 9.5px;
 }
 .quick-action {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
   color: #7a85bb;
   font-size: 9px;
+}
+.quick-action svg {
+  width: 13px;
+  height: 13px;
+  stroke-width: 1.9;
 }
 .quick-empty {
   display: grid;
@@ -2323,18 +2343,28 @@ kbd {
 }
 
 .sticky-window {
+  --sticky-ink: #453d2b;
+  --sticky-muted: #817552;
+  --sticky-accent: #8b6a18;
+  --sticky-surface: color-mix(in srgb, var(--pd-paper) 84%, white);
+  --sticky-surface-strong: color-mix(in srgb, var(--pd-paper) 66%, white);
   position: relative;
   display: flex;
   flex-direction: column;
   width: 100%;
   height: 100%;
   overflow: hidden;
-  color: #453d2b;
-  border: 1px solid #dfce88;
+  color: var(--sticky-ink);
+  border: 1px solid var(--pd-paper-border);
   border-radius: 17px;
-  background: linear-gradient(145deg, #fff8c9 0%, #fff3ae 55%, #fff1a2 100%);
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--pd-paper) 82%, white) 0%,
+    var(--pd-paper) 58%,
+    color-mix(in srgb, var(--pd-paper) 90%, #edc95c) 100%
+  );
   box-shadow:
-    inset 0 1px #fffce3,
+    inset 0 1px color-mix(in srgb, var(--pd-paper) 40%, white),
     0 20px 52px #58513233;
   user-select: none;
 }
@@ -2348,58 +2378,28 @@ kbd {
   padding: 0 13px 0 16px;
   -webkit-app-region: drag;
 }
-.sticky-traffic,
 .sticky-window-actions {
   display: flex;
   align-items: center;
   gap: 5px;
-}
-.sticky-traffic {
-  gap: 7px;
-}
-.sticky-traffic i {
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-  background: #ed6a62;
-}
-.sticky-traffic i:nth-child(2) {
-  background: #f2bd48;
-}
-.sticky-traffic i:nth-child(3) {
-  background: #66c477;
+  margin-left: auto;
 }
 .sticky-brand {
-  position: absolute;
-  left: 50%;
-  color: #827853;
+  color: var(--sticky-muted);
   font-size: 12px;
-  font-weight: 650;
-  transform: translateX(-50%);
+  font-weight: 680;
+  letter-spacing: 0.01em;
 }
-.sticky-titlebar button {
-  display: grid;
-  place-items: center;
+.sticky-window-actions .pd-icon-button {
   width: 27px;
   height: 27px;
-  padding: 0;
-  color: #89753d;
-  border: 0;
+  color: var(--sticky-muted);
   border-radius: 8px;
-  background: transparent;
   -webkit-app-region: no-drag;
 }
-.sticky-titlebar button:hover {
-  background: #ffe99c;
-}
-.mode-window-icon {
-  width: 16px;
-  height: 16px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.25;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+.sticky-window-actions .pd-icon-button:hover:not(:disabled) {
+  color: var(--sticky-ink);
+  background: color-mix(in srgb, var(--pd-paper-border) 30%, transparent);
 }
 .sticky-heading {
   display: flex;
@@ -2410,30 +2410,24 @@ kbd {
   padding: 11px 21px 13px;
 }
 .sticky-heading h1 {
-  display: flex;
-  gap: 8px;
-  align-items: center;
   margin: 0;
-  color: #453d2b;
+  color: var(--sticky-ink);
   font-size: 20px;
   font-weight: 830;
   letter-spacing: -0.3px;
 }
-.sticky-heading h1 > span {
-  color: #9a771d;
-}
 .sticky-heading p {
   margin: 8px 0 0;
-  color: #a1905a;
+  color: var(--sticky-muted);
   font-size: 11.5px;
   line-height: 1.6;
 }
 .sticky-count {
   padding: 7px 11px;
-  color: #8a742e;
-  border: 1px solid #e6d38a;
+  color: var(--sticky-accent);
+  border: 1px solid var(--pd-paper-border);
   border-radius: 999px;
-  background: #fffbd699;
+  background: var(--sticky-surface-strong);
   font-size: 11px;
   font-weight: 680;
   white-space: nowrap;
@@ -2456,25 +2450,32 @@ kbd {
   max-height: 94px;
   min-height: 0;
   padding: 11px 12px;
-  color: #3b342a;
-  border: 1px solid #ebdb9c;
+  color: var(--sticky-ink);
+  border: 1px solid color-mix(in srgb, var(--pd-paper-border) 82%, white);
   border-radius: 12px;
-  background: #fffbe0ad;
+  background: var(--sticky-surface);
   box-shadow: 0 2px 6px #8569270a;
   text-align: left;
   transition:
-    border-color 0.15s ease,
-    background 0.15s ease,
-    transform 0.15s ease;
+    border-color var(--pd-motion-fast) ease,
+    background var(--pd-motion-fast) ease,
+    transform var(--pd-motion-fast) ease;
 }
-button.sticky-row:hover {
-  border-color: #cda853;
-  background: #fffeeeef;
+button.sticky-row:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--pd-paper-border) 72%, #8b6a18);
+  background: color-mix(in srgb, var(--pd-paper) 54%, white);
   transform: translateY(-1px);
 }
+button.sticky-row:disabled {
+  opacity: 0.62;
+}
 .sticky-row.copied {
-  border-color: #a9c78a;
-  background: #e8f6d6;
+  border-color: color-mix(
+    in srgb,
+    var(--pd-success) 42%,
+    var(--pd-paper-border)
+  );
+  background: color-mix(in srgb, var(--pd-success-soft) 78%, var(--pd-paper));
 }
 .sticky-glyph {
   display: grid;
@@ -2482,14 +2483,14 @@ button.sticky-row:hover {
   place-items: center;
   width: 34px;
   height: 34px;
-  color: #3c8ece;
+  color: var(--pd-accent-foreground);
   border-radius: 9px;
-  background: #eef7ff;
-  font:
-    800 10px ui-monospace,
-    SFMono-Regular,
-    Menlo,
-    monospace;
+  background: color-mix(in srgb, var(--pd-accent-soft) 72%, white);
+}
+.sticky-glyph svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.8;
 }
 .sticky-card-copy {
   display: grid;
@@ -2502,7 +2503,7 @@ button.sticky-row:hover {
   gap: 5px;
   align-items: center;
   overflow: hidden;
-  color: #3b342a;
+  color: var(--sticky-ink);
   font-size: 12.5px;
   font-weight: 780;
   text-overflow: ellipsis;
@@ -2510,8 +2511,8 @@ button.sticky-row:hover {
 }
 .sticky-row-title small {
   padding: 2px 5px;
-  color: #997d44;
-  border: 1px solid #ead28c;
+  color: var(--sticky-accent);
+  border: 1px solid var(--pd-paper-border);
   border-radius: 5px;
   font-size: 9px;
   font-weight: 600;
@@ -2519,7 +2520,7 @@ button.sticky-row:hover {
 .sticky-description {
   display: -webkit-box;
   overflow: hidden;
-  color: #96885f;
+  color: var(--sticky-muted);
   font-size: 10.8px;
   line-height: 1.55;
   -webkit-box-orient: vertical;
@@ -2530,18 +2531,25 @@ button.sticky-row:hover {
   flex: 0 0 58px;
   gap: 5px;
   place-items: center;
-  color: #867850;
-  font-size: 17px;
+  color: var(--sticky-muted);
   text-align: center;
+}
+.sticky-copy-action svg {
+  width: 17px;
+  height: 17px;
+  stroke-width: 1.8;
+}
+.sticky-row.copied .sticky-copy-action {
+  color: var(--pd-success-foreground);
 }
 .sticky-copy-action small {
   font-size: 9px;
   white-space: nowrap;
 }
 .sticky-row.empty {
-  color: #9b8b49;
+  color: var(--sticky-accent);
   border-style: dashed;
-  background: #fff7c94d;
+  background: color-mix(in srgb, var(--pd-paper) 74%, transparent);
 }
 .sticky-row.empty > span:nth-child(2) {
   font-size: 10.5px;
@@ -2553,118 +2561,68 @@ button.sticky-row:hover {
   align-items: center;
   height: 57px;
   padding: 0 20px;
-  border-top: 1px solid #b7913830;
-  background: #fff8be8c;
+  border-top: 1px solid
+    color-mix(in srgb, var(--pd-paper-border) 45%, transparent);
+  background: color-mix(in srgb, var(--pd-paper) 76%, white 24%);
 }
-.sticky-footer button {
-  padding: 7px 1px;
-  color: #695a33;
+.sticky-footer .pd-button {
+  padding-inline: 4px;
+  color: var(--sticky-ink);
   border: 0;
   background: transparent;
-  font-size: 12px;
-  font-weight: 680;
 }
-.sticky-footer button:hover {
-  color: #b17b13;
-}
-.sticky-footer-separator {
-  width: 1px;
-  height: 23px;
-  background: #e1cc82;
+.sticky-footer .pd-button:hover:not(:disabled) {
+  color: var(--sticky-accent);
+  background: color-mix(in srgb, var(--pd-paper-border) 24%, transparent);
 }
 .sticky-top-toggle {
   display: flex;
   gap: 8px;
   align-items: center;
   margin-left: auto;
-  color: #695a33;
+  color: var(--sticky-ink);
   font-size: 11px;
   font-weight: 690;
   white-space: nowrap;
 }
-.sticky-top-toggle button {
-  position: relative;
-  width: 39px;
-  height: 23px;
-  padding: 0;
-  border-radius: 999px;
-  background: #e1d69d;
-  transition: background 0.2s ease;
+.sticky-top-toggle .pd-switch {
+  flex: 0 0 auto;
+  background: color-mix(in srgb, var(--pd-paper-border) 72%, white);
 }
-.sticky-top-toggle button::before {
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 17px;
-  height: 17px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 1px 3px #bdb080;
-  content: "";
-  transition: left 0.2s ease;
+.sticky-top-toggle .pd-switch[data-state="checked"] {
+  background: var(--sticky-accent);
 }
-.sticky-top-toggle button.on {
-  background: #eab334;
-}
-.sticky-top-toggle button.on::before {
-  left: 19px;
-}
-.sticky-titlebar button:disabled,
-.sticky-footer button:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-.sticky-settings-layer {
-  position: absolute;
-  inset: 0;
-  z-index: 9;
-  display: grid;
-  place-items: center;
-  padding: 14px;
-  background: #45351740;
-  backdrop-filter: blur(2px);
-}
-.sticky-settings-layer > section {
-  width: 100%;
-  max-height: 90%;
+.sticky-settings-dialog {
+  --sticky-ink: #453d2b;
+  --sticky-muted: #817552;
+  width: min(360px, calc(100vw - 24px));
+  max-height: min(560px, calc(100vh - 24px));
   overflow: auto;
-  color: #594b2e;
-  border: 1px solid #e0c97c;
-  border-radius: 13px;
-  background: #fff9d8;
+  color: var(--sticky-ink);
+  border-color: var(--pd-paper-border);
+  background: color-mix(in srgb, var(--pd-paper) 54%, white);
   box-shadow: 0 20px 50px #3c2e113b;
 }
-.sticky-settings-layer header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 13px 15px;
-  border-bottom: 1px solid #eddfa9;
+.sticky-settings-dialog .pd-dialog-header {
+  border-bottom-color: color-mix(
+    in srgb,
+    var(--pd-paper-border) 62%,
+    transparent
+  );
 }
-.sticky-settings-layer header button {
-  width: 26px;
-  height: 26px;
-  color: #806f45;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-}
-.sticky-settings-layer > section > p {
-  margin: 0;
-  padding: 13px 15px 7px;
-  color: #9c8756;
-  font-size: 10.5px;
-  line-height: 1.6;
+.sticky-settings-dialog .pd-dialog-body {
+  display: grid;
+  gap: 9px;
+  padding: 14px;
 }
 .sticky-setting-row {
   display: flex;
   gap: 9px;
   align-items: center;
-  margin: 7px 15px 12px;
   padding: 10px;
-  border: 1px solid #f0e1af;
+  border: 1px solid color-mix(in srgb, var(--pd-paper-border) 64%, white);
   border-radius: 9px;
-  background: #ffffff87;
+  background: color-mix(in srgb, var(--pd-paper) 28%, white);
 }
 .sticky-setting-row > span {
   display: grid;
@@ -2676,18 +2634,16 @@ button.sticky-row:hover {
   font-size: 11px;
 }
 .sticky-setting-row small {
-  color: #9c8756;
+  color: var(--sticky-muted);
   font-size: 9px;
 }
-.sticky-setting-row > button {
-  min-height: 31px;
-  padding: 0 9px;
-  color: #756036;
-  border: 1px solid #e5d8a3;
-  border-radius: 7px;
-  background: #fffbeb;
-  font-size: 9.5px;
-  font-weight: 680;
+.sticky-setting-row > .pd-button {
+  flex: 0 0 auto;
+  max-width: 132px;
+  color: var(--sticky-ink);
+  border-color: var(--pd-paper-border);
+  background: color-mix(in srgb, var(--pd-paper) 24%, white);
+  white-space: nowrap;
 }
 .sticky-window-status {
   position: absolute;
@@ -2722,25 +2678,17 @@ button.sticky-row:hover {
   height: 32px;
   padding: 0 8px 0 10px;
 }
-.compact .sticky-traffic {
-  gap: 5px;
-}
-.compact .sticky-traffic i {
-  width: 8px;
-  height: 8px;
-}
 .compact .sticky-brand {
   font-size: 9px;
 }
-.compact .sticky-titlebar button {
+.compact .sticky-window-actions .pd-icon-button {
   width: 22px;
   height: 22px;
   border-radius: 6px;
-  font-size: 11px;
 }
-.compact .mode-window-icon {
-  width: 14px;
-  height: 14px;
+.compact .sticky-window-actions .pd-icon-button svg {
+  width: 13px;
+  height: 13px;
 }
 .compact .sticky-heading {
   flex-basis: 30px;
@@ -2769,7 +2717,10 @@ button.sticky-row:hover {
   width: 22px;
   height: 22px;
   border-radius: 5px;
-  font-size: 7.5px;
+}
+.compact .sticky-glyph svg {
+  width: 13px;
+  height: 13px;
 }
 .compact .sticky-card-copy {
   gap: 0;
@@ -2779,50 +2730,62 @@ button.sticky-row:hover {
 }
 .compact .sticky-copy-action {
   flex-basis: 20px;
-  font-size: 13px;
+}
+.compact .sticky-copy-action svg {
+  width: 14px;
+  height: 14px;
 }
 .compact .sticky-row.empty > span:nth-child(2) {
   font-size: 9.5px;
 }
 .compact .sticky-footer {
-  flex-basis: 32px;
-  gap: 9px;
-  height: 32px;
+  flex-basis: 36px;
+  gap: 7px;
+  height: 36px;
   padding: 0 10px;
 }
-.compact .sticky-footer button {
+.compact .sticky-footer .pd-button {
+  height: 26px;
+  padding-inline: 2px;
   font-size: 9px;
-}
-.compact .sticky-footer-separator {
-  height: 14px;
 }
 .compact .sticky-top-toggle {
   gap: 5px;
   font-size: 9px;
 }
-.compact .sticky-top-toggle button {
+.compact .sticky-top-toggle .pd-switch {
   width: 33px;
   height: 19px;
 }
-.compact .sticky-top-toggle button::before {
+.compact .sticky-top-toggle .pd-switch__thumb {
   width: 13px;
   height: 13px;
 }
-.compact .sticky-top-toggle button.on::before {
-  left: 17px;
+.compact .sticky-top-toggle .pd-switch__thumb[data-state="checked"] {
+  transform: translateX(14px);
 }
-.compact .sticky-settings-layer {
-  padding: 9px;
+.sticky-settings-dialog--compact {
+  width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
 }
-.compact .sticky-settings-layer > section > p {
+.sticky-settings-dialog--compact .pd-dialog-header {
+  padding: 9px 11px 7px;
+}
+.sticky-settings-dialog--compact .pd-dialog-description {
   display: none;
 }
-.compact .sticky-settings-layer header {
-  padding: 8px 11px;
+.sticky-settings-dialog--compact .pd-dialog-body {
+  gap: 6px;
+  padding: 7px 9px 9px;
 }
-.compact .sticky-setting-row {
-  margin: 6px 10px;
-  padding: 7px;
+.sticky-settings-dialog--compact .sticky-setting-row {
+  padding: 6px 7px;
+}
+.sticky-settings-dialog--compact .sticky-setting-row > .pd-button {
+  max-width: 118px;
+  height: 28px;
+  padding-inline: 8px;
+  font-size: 9px;
 }
 .compact .sticky-window-status {
   right: 10px;
