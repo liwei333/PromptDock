@@ -1461,9 +1461,10 @@ kbd {
   width: 100%;
   height: 100%;
   padding: 18px;
-  color: #1f2937;
+  color: var(--pd-text);
   background:
-    radial-gradient(circle at 0 0, #edf4ff 0, transparent 31%), #f4f6fa;
+    radial-gradient(circle at 0 0, var(--pd-accent-soft) 0, transparent 31%),
+    var(--pd-bg);
 }
 .workbench-rail {
   position: relative;
@@ -1473,31 +1474,21 @@ kbd {
   align-items: center;
   min-height: 0;
   padding: 19px 12px 15px;
-  border: 1px solid #dce4ef;
+  border: 1px solid var(--pd-border);
   border-right: 0;
   border-radius: 18px 0 0 18px;
-  background: linear-gradient(180deg, #fbfdff 0%, #f5f8fd 100%);
-  box-shadow: -8px 15px 40px #31527d0c;
-}
-.mac-lights {
-  display: flex;
-  gap: 5px;
-  height: 17px;
-}
-.mac-lights i {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #ff6259;
-  box-shadow:
-    13px 0 #ffbd2e,
-    26px 0 #28c941;
+  background: linear-gradient(
+    180deg,
+    var(--pd-surface-elevated) 0%,
+    var(--pd-bg) 100%
+  );
+  box-shadow: -8px 15px 40px rgba(49, 82, 125, 0.05);
 }
 .rail-brand {
   width: 100%;
-  margin: 15px 0 25px;
+  margin: 3px 0 25px;
   overflow: hidden;
-  color: #5266e8;
+  color: var(--pd-accent);
   font-size: 9px;
   font-weight: 850;
   letter-spacing: -0.025em;
@@ -1515,29 +1506,36 @@ kbd {
   width: 46px;
   height: 46px;
   padding: 0;
-  color: #8390a4;
+  color: var(--pd-text-tertiary);
   border: 1px solid transparent;
   border-radius: 14px;
   background: transparent;
   font-size: 21px;
   transition:
-    color 0.15s ease,
-    border-color 0.15s ease,
-    background 0.15s ease,
-    transform 0.15s ease;
+    color var(--pd-motion-fast) ease,
+    border-color var(--pd-motion-fast) ease,
+    background var(--pd-motion-fast) ease,
+    transform var(--pd-motion-fast) ease;
 }
 .workbench-rail nav button:hover,
 .rail-settings:hover {
-  color: #5266e8;
-  border-color: #dfe5ff;
-  background: #f1f3ff;
+  color: var(--pd-accent);
+  border-color: color-mix(in srgb, var(--pd-accent) 18%, transparent);
+  background: var(--pd-accent-soft);
   transform: translateY(-1px);
 }
-.workbench-rail nav button.active {
-  color: #485bd5;
-  border-color: #dce3ff;
-  background: #eaf0ff;
-  box-shadow: 0 7px 18px #5266e817;
+.workbench-rail nav button.active,
+.workbench-rail nav button[aria-current="page"],
+.workbench-rail nav button[aria-pressed="true"] {
+  color: var(--pd-accent-foreground);
+  border-color: color-mix(in srgb, var(--pd-accent) 18%, transparent);
+  background: var(--pd-accent-soft);
+  box-shadow: 0 7px 18px color-mix(in srgb, var(--pd-accent) 9%, transparent);
+}
+.workbench-rail .pd-icon-button svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 1.7;
 }
 .rail-settings {
   margin-top: auto;
@@ -1548,97 +1546,96 @@ kbd {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  border: 1px solid #dce4ef;
+  border: 1px solid var(--pd-border);
   border-radius: 0 18px 18px 0;
-  background: #f8fafd;
-  box-shadow: 12px 15px 40px #31527d14;
+  background: var(--pd-bg);
+  box-shadow: 12px 15px 40px rgba(49, 82, 125, 0.08);
 }
 .workbench-filters {
   display: flex;
-  flex-wrap: wrap;
-  gap: 9px;
+  flex-wrap: nowrap;
+  gap: 8px;
   align-items: center;
   padding: 15px 18px;
-  border-bottom: 1px solid #e4e9f1;
-  background: #fff;
+  overflow: visible;
+  border-bottom: 1px solid var(--pd-border);
+  background: var(--pd-surface-elevated);
 }
 .v3-search {
   display: flex;
-  flex: 1 1 210px;
+  flex: 1 1 260px;
   align-items: center;
-  min-width: 200px;
-  height: 42px;
+  min-width: 190px;
+  height: var(--pd-control-md);
   padding: 0 11px;
-  color: #8a95a7;
-  border: 1px solid #dce2eb;
-  border-radius: 10px;
-  background: #f8fafc;
+  color: var(--pd-text-tertiary);
+  border: 1px solid var(--pd-border);
+  border-radius: var(--pd-radius-sm);
+  background: var(--pd-bg);
   transition:
-    border-color 0.15s ease,
-    box-shadow 0.15s ease,
-    background 0.15s ease;
+    border-color var(--pd-motion-fast) ease,
+    box-shadow var(--pd-motion-fast) ease,
+    background var(--pd-motion-fast) ease;
 }
 .v3-search:focus-within {
-  border-color: #9eaae9;
-  background: #fff;
-  box-shadow: 0 0 0 3px #5266e814;
+  border-color: var(--pd-accent);
+  background: var(--pd-surface-elevated);
+  box-shadow: 0 0 0 3px var(--pd-focus-ring);
 }
-.v3-search > span {
+.v3-search > svg {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
   margin-right: 8px;
-  font-size: 20px;
+  stroke-width: 1.8;
 }
 .v3-search input {
   flex: 1;
   min-width: 0;
   border: 0;
   background: transparent;
-  color: #263247;
+  color: var(--pd-text);
   font-size: 12px;
 }
 .v3-search kbd {
   min-width: 30px;
   padding: 3px 6px;
-  color: #8893a5;
-  border: 1px solid #e1e5ed;
+  color: var(--pd-text-tertiary);
+  border: 1px solid var(--pd-border);
   border-radius: 6px;
-  background: #fff;
-  box-shadow: 0 1px 2px #1c27310c;
+  background: var(--pd-surface-elevated);
+  box-shadow: 0 1px 2px rgba(28, 39, 49, 0.05);
   font-size: 9px;
   text-align: center;
 }
-.workbench-filters select {
-  flex: 0 1 100px;
+.workbench-filters .pd-select-trigger {
+  flex: 0 1 110px;
   width: auto;
-  min-width: 90px;
-  max-width: 116px;
-  height: 42px;
-  padding: 0 29px 0 10px;
-  color: #526076;
-  border: 1px solid #dce2eb;
-  border-radius: 10px;
-  background-color: #fff;
+  min-width: 98px;
+  max-width: 124px;
   font-size: 11px;
 }
-.workbench-filters select:hover {
-  border-color: #bfc8d8;
+.workbench-filters .pd-toggle {
+  flex: 0 0 var(--pd-control-sm);
 }
 .workbench-filters .filter-sort {
-  color: #354056;
+  color: var(--pd-text);
   font-weight: 700;
 }
 .filter-clear {
-  height: 42px;
-  padding: 0 12px;
-  color: #6d788c;
+  flex: 0 0 auto;
+  height: var(--pd-control-md);
+  padding: 0 8px;
+  color: var(--pd-text-secondary);
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: var(--pd-radius-sm);
   background: transparent;
   font-size: 11px;
   font-weight: 700;
 }
 .filter-clear:hover {
-  color: #5266e8;
-  background: #f0f3ff;
+  color: var(--pd-accent);
+  background: var(--pd-accent-soft);
 }
 .dashboard-stat-grid {
   display: grid;
@@ -1653,10 +1650,10 @@ kbd {
   min-width: 0;
   min-height: 72px;
   padding: 12px 15px;
-  border: 1px solid #e2e7ef;
+  border: 1px solid var(--pd-border);
   border-radius: 13px;
-  background: #fff;
-  box-shadow: 0 5px 16px #2d466909;
+  background: var(--pd-surface-elevated);
+  box-shadow: 0 5px 16px rgba(45, 70, 105, 0.04);
 }
 .dashboard-stat-grid article > div {
   display: grid;
@@ -1665,14 +1662,14 @@ kbd {
 }
 .dashboard-stat-grid small {
   overflow: hidden;
-  color: #7a869a;
+  color: var(--pd-text-secondary);
   font-size: 10px;
   font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .dashboard-stat-grid strong {
-  color: #253047;
+  color: var(--pd-text);
   font-size: 20px;
   letter-spacing: -0.04em;
 }
@@ -1683,24 +1680,42 @@ kbd {
   width: 35px;
   height: 35px;
   border-radius: 11px;
-  font-size: 16px;
-  font-weight: 850;
+}
+.stat-icon svg {
+  width: 17px;
+  height: 17px;
+  stroke-width: 1.8;
 }
 .stat-icon.blue {
-  color: #5266e8;
-  background: #edf0ff;
+  color: var(--pd-accent);
+  background: var(--pd-accent-soft);
 }
 .stat-icon.amber {
-  color: #d88b28;
-  background: #fff4df;
+  color: var(--pd-warning);
+  background: var(--pd-warning-soft);
 }
 .stat-icon.gold {
-  color: #c7962d;
-  background: #fff7d9;
+  color: var(--pd-warning-foreground);
+  background: var(--pd-warning-soft);
 }
 .stat-icon.rose {
-  color: #c85d76;
-  background: #fff0f3;
+  color: var(--pd-danger);
+  background: var(--pd-danger-soft);
+}
+.pin-capacity {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 2px;
+  width: 44px;
+  margin-top: 2px;
+}
+.pin-capacity i {
+  height: 2px;
+  border-radius: 999px;
+  background: var(--pd-border-strong);
+}
+.pin-capacity i.active {
+  background: var(--pd-danger);
 }
 .v3-workbench {
   display: grid;
@@ -2745,8 +2760,13 @@ button.sticky-row:hover {
   .workbench-rail {
     padding-inline: 9px;
   }
-  .workbench-filters select {
-    flex-basis: 96px;
+  .workbench-filters {
+    gap: 6px;
+    padding-inline: 12px;
+  }
+  .workbench-filters .pd-select-trigger {
+    min-width: 92px;
+    max-width: 108px;
   }
   .v3-workbench {
     grid-template-columns: minmax(330px, 46fr) minmax(400px, 54fr);

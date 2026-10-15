@@ -64,6 +64,8 @@ vi.mock("@/api/commands", () => ({
 
 import MainWindow from "@/windows/MainWindow.vue";
 import StickyWindow from "@/windows/StickyWindow.vue";
+import WorkbenchFilters from "@/components/WorkbenchFilters.vue";
+import PdSelect from "@/components/ui/PdSelect.vue";
 
 const categories: Category[] = [
   {
@@ -165,9 +167,12 @@ describe("category and raw-copy regressions", () => {
 
     await wrapper.get("[data-test='rail-favorites']").trigger("click");
     await flushPromises();
-    await wrapper
-      .get("[data-test='filter-category']")
-      .setValue("10000000-0000-4000-8000-000000000002");
+    const filters = wrapper.getComponent(WorkbenchFilters);
+    const [categorySelect] = filters.findAllComponents(PdSelect);
+    categorySelect.vm.$emit(
+      "update:modelValue",
+      "10000000-0000-4000-8000-000000000002",
+    );
     await flushPromises();
 
     expect(promptApi.list).toHaveBeenLastCalledWith(

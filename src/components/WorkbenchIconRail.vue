@@ -1,4 +1,14 @@
 <script setup lang="ts">
+import {
+  FolderTree,
+  LayoutDashboard,
+  PanelsTopLeft,
+  Settings,
+  Star,
+} from "lucide-vue-next";
+
+import PdIconButton from "@/components/ui/PdIconButton.vue";
+
 defineProps<{ favoriteActive?: boolean; switchingSticky?: boolean }>();
 defineEmits<{
   home: [];
@@ -11,53 +21,47 @@ defineEmits<{
 
 <template>
   <aside class="workbench-rail" aria-label="主导航">
-    <div class="mac-lights" aria-hidden="true"><i /><i /><i /></div>
     <strong class="rail-brand">PromptDock</strong>
     <nav>
-      <button
+      <PdIconButton
         data-test="rail-home"
         class="active"
-        aria-label="工作台"
-        title="工作台"
+        label="工作台"
+        tooltip="工作台"
+        :icon="LayoutDashboard"
+        aria-current="page"
         @click="$emit('home')"
-      >
-        <span aria-hidden="true">⌂</span>
-      </button>
-      <button
+      />
+      <PdIconButton
         data-test="rail-favorites"
         :class="{ active: favoriteActive }"
-        aria-label="收藏"
-        title="收藏"
+        label="收藏"
+        tooltip="仅看收藏"
+        :icon="Star"
+        :pressed="Boolean(favoriteActive)"
         @click="$emit('favorites')"
-      >
-        <span aria-hidden="true">☆</span>
-      </button>
-      <button
+      />
+      <PdIconButton
         data-test="rail-categories"
-        aria-label="分类管理"
-        title="分类管理"
+        label="分类管理"
+        :icon="FolderTree"
         @click="$emit('categories')"
-      >
-        <span aria-hidden="true">▢</span>
-      </button>
-      <button
+      />
+      <PdIconButton
         data-test="rail-sticky-mode"
-        aria-label="快捷便签"
-        title="快捷便签"
+        label="快捷便签"
+        :icon="PanelsTopLeft"
         :disabled="switchingSticky"
         @click="$emit('sticky')"
-      >
-        <span aria-hidden="true">▤</span>
-      </button>
+      />
     </nav>
-    <button
+    <PdIconButton
       class="rail-settings"
       data-test="rail-settings"
-      aria-label="设置与运行信息"
-      title="设置"
+      label="设置与运行信息"
+      tooltip="设置与运行信息"
+      :icon="Settings"
       @click="$emit('settings')"
-    >
-      <span aria-hidden="true">⚙</span>
-    </button>
+    />
   </aside>
 </template>
