@@ -67,6 +67,8 @@ const {
     },
     windowApi: {
       enterStickyMode: vi.fn(),
+      peekMainIntent: vi.fn(),
+      ackMainIntent: vi.fn(),
     },
     pinnedPrompt,
     secondPrompt,
@@ -85,12 +87,36 @@ vi.mock("@tauri-apps/api/event", () => ({ listen }));
 vi.mock("@/services/clipboard", () => ({ copyPromptText }));
 
 import MainWindow from "@/windows/MainWindow.vue";
+import CategoryManagerDialog from "@/components/CategoryManagerDialog.vue";
 import DashboardStatCards from "@/components/DashboardStatCards.vue";
+import ImportPreviewDialog from "@/components/ImportPreviewDialog.vue";
 import PromptEditorDialog from "@/components/PromptEditorDialog.vue";
 import PromptListPane from "@/components/PromptListPane.vue";
+import QuickPalette from "@/components/QuickPalette.vue";
+import RuntimeInfoDialog from "@/components/RuntimeInfoDialog.vue";
+import StickyManagerDialog from "@/components/StickyManagerDialog.vue";
 import WorkbenchIconRail from "@/components/WorkbenchIconRail.vue";
 
 const STICKY_ENTRY_SELECTOR = "[data-test='rail-sticky-mode']";
+
+const mainWindowStubs = {
+  CategoryManagerDialog: true,
+  ImportPreviewDialog: true,
+  PromptCard: true,
+  PromptDetailDrawer: true,
+  PromptEditorDialog: true,
+  QuickPalette: true,
+  RuntimeInfoDialog: true,
+  StickyManagerDialog: true,
+  Teleport: false,
+};
+
+function enableTauri(): void {
+  Object.defineProperty(window, "__TAURI_INTERNALS__", {
+    configurable: true,
+    value: {},
+  });
+}
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -109,22 +135,15 @@ function successfulCopyResult(copyCount = 1): CopyResult {
   };
 }
 
-async function mountMainWindow(attachToBody = false) {
+async function mountMainWindow(
+  attachToBody = false,
+  stubs: Record<string, boolean> = mainWindowStubs,
+) {
   const wrapper = mount(MainWindow, {
     ...(attachToBody ? { attachTo: document.body } : {}),
     global: {
       plugins: [createPinia()],
-      stubs: {
-        CategoryCreateDialog: true,
-        ImportPreviewDialog: true,
-        PromptCard: true,
-        PromptDetailDrawer: true,
-        PromptEditorDialog: true,
-        QuickPalette: true,
-        RuntimeInfoDialog: true,
-        StickyManagerDialog: true,
-        Teleport: false,
-      },
+      stubs,
     },
   });
   await flushPromises();
@@ -192,9 +211,12 @@ describe("MainWindow V3 workbench", () => {
       cancelled: true,
       promptCount: 0,
     });
+    backupApi.cancel.mockResolvedValue(undefined);
     copyPromptText.mockResolvedValue(successfulCopyResult());
     listen.mockResolvedValue(() => undefined);
     windowApi.enterStickyMode.mockResolvedValue({ mode: "sticky" });
+    windowApi.peekMainIntent.mockResolvedValue(null);
+    windowApi.ackMainIntent.mockResolvedValue({ acknowledged: true });
   });
 
   afterEach(() => {
@@ -404,7 +426,10 @@ describe("MainWindow V3 workbench", () => {
   });
 
   it("opens category management from rail, list, and category filter", async () => {
-    const wrapper = await mountMainWindow(true);
+    const wrapper = await mountMainWindow(true, {
+      ...mainWindowStubs,
+      CategoryManagerDialog: false,
+    });
 
     try {
       for (const selector of [
@@ -909,6 +934,769 @@ describe("MainWindow V3 workbench", () => {
     await flushPromises();
 
     expect(unlisten).toHaveBeenCalledOnce();
+  });
+
+  it("consumes sticky-manager intent before the initial store load settles", async () => {
+    enableTauri();
+    const promptList = deferred<{
+      items: (typeof pinnedPrompt)[];
+      total: number;
+    }>();
+    promptApi.list.mockReturnValueOnce(promptList.promise);
+    windowApi.peekMainIntent.mockResolvedValueOnce({
+      id: 7,
+      intent: "manage-sticky",
+    });
+
+    const wrapper = mount(MainWindow, {
+      global: { plugins: [createPinia()], stubs: mainWindowStubs },
+    });
+    await flushPromises();
+
+    expect(windowApi.peekMainIntent).toHaveBeenCalledOnce();
+    expect(wrapper.find("sticky-manager-dialog-stub").exists()).toBe(true);
+    expect(windowApi.ackMainIntent).toHaveBeenCalledWith(7);
+
+    promptList.resolve({ items: [], total: 0 });
+    await flushPromises();
+    wrapper.unmount();
+  });
+
+  it("hydrates a real sticky manager when the initial pinned load settles", async () => {
+    enableTauri();
+    const promptList = deferred<{
+      items: (typeof pinnedPrompt)[];
+      total: number;
+    }>();
+    promptApi.list.mockReturnValueOnce(promptList.promise);
+    promptApi.listSticky.mockResolvedValueOnce([pinnedPrompt, secondPrompt]);
+    windowApi.peekMainIntent.mockResolvedValueOnce({
+      id: 70,
+      intent: "manage-sticky",
+    });
+
+    const wrapper = mount(MainWindow, {
+      attachTo: document.body,
+      global: {
+        plugins: [createPinia()],
+        stubs: { ...mainWindowStubs, StickyManagerDialog: false },
+      },
+    });
+    try {
+      await flushPromises();
+
+      expect(document.body.querySelector(".sticky-manager")).not.toBeNull();
+      expect(
+        document.body.querySelectorAll("[data-test='sticky-manager-row']"),
+      ).toHaveLength(0);
+      expect(windowApi.ackMainIntent).toHaveBeenCalledWith(70);
+
+      promptList.resolve({ items: [], total: 0 });
+      await flushPromises();
+
+      const rows = Array.from(
+        document.body.querySelectorAll("[data-test='sticky-manager-row']"),
+      );
+      expect(rows).toHaveLength(2);
+      expect(rows.map((row) => row.textContent)).toEqual([
+        expect.stringContaining("固定提示词"),
+        expect.stringContaining("第二条提示词"),
+      ]);
+      const { setupState } = wrapper.findComponent(StickyManagerDialog).vm
+        .$ as unknown as { setupState: { rows: (typeof pinnedPrompt)[] } };
+      expect(setupState.rows.map((row) => row.id)).toEqual([
+        "pinned-1",
+        "prompt-2",
+      ]);
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
+  it("opens one sticky manager before acknowledging the delivered intent", async () => {
+    enableTauri();
+    const acknowledgment = deferred<{ acknowledged: boolean }>();
+    const acknowledgmentIds: number[] = [];
+    windowApi.peekMainIntent.mockResolvedValueOnce({
+      id: 7,
+      intent: "manage-sticky",
+    });
+    windowApi.ackMainIntent.mockImplementationOnce((id: number) => {
+      acknowledgmentIds.push(id);
+      return acknowledgment.promise;
+    });
+
+    const wrapper = mount(MainWindow, {
+      attachTo: document.body,
+      global: { plugins: [createPinia()], stubs: mainWindowStubs },
+    });
+    await flushPromises();
+
+    expect(wrapper.findAll("sticky-manager-dialog-stub")).toHaveLength(1);
+    expect(acknowledgmentIds).toEqual([7]);
+    expect(windowApi.ackMainIntent).toHaveBeenCalledOnce();
+    expect(windowApi.ackMainIntent).toHaveBeenCalledWith(7);
+
+    acknowledgment.resolve({ acknowledged: true });
+    await flushPromises();
+    wrapper.unmount();
+  });
+
+  it("serializes mount and focus intent checks while the first peek is pending", async () => {
+    enableTauri();
+    const firstPeek = deferred<{
+      id: number;
+      intent: "manage-sticky";
+    } | null>();
+    let unresolvedPeeks = 0;
+    let maxUnresolvedPeeks = 0;
+    windowApi.peekMainIntent
+      .mockImplementationOnce(async () => {
+        unresolvedPeeks += 1;
+        maxUnresolvedPeeks = Math.max(maxUnresolvedPeeks, unresolvedPeeks);
+        try {
+          return await firstPeek.promise;
+        } finally {
+          unresolvedPeeks -= 1;
+        }
+      })
+      .mockImplementationOnce(async () => {
+        unresolvedPeeks += 1;
+        maxUnresolvedPeeks = Math.max(maxUnresolvedPeeks, unresolvedPeeks);
+        unresolvedPeeks -= 1;
+        return null;
+      });
+
+    const wrapper = mount(MainWindow, {
+      global: { plugins: [createPinia()], stubs: mainWindowStubs },
+    });
+    window.dispatchEvent(new Event("focus"));
+    await flushPromises();
+
+    expect(windowApi.peekMainIntent).toHaveBeenCalledOnce();
+    expect(maxUnresolvedPeeks).toBe(1);
+
+    firstPeek.resolve({ id: 8, intent: "manage-sticky" });
+    await flushPromises();
+
+    expect(windowApi.peekMainIntent).toHaveBeenCalledTimes(2);
+    expect(maxUnresolvedPeeks).toBe(1);
+    expect(windowApi.ackMainIntent).toHaveBeenCalledWith(8);
+    expect(wrapper.findAll("sticky-manager-dialog-stub")).toHaveLength(1);
+    wrapper.unmount();
+  });
+
+  it("preserves a queued focus when the in-flight peek rejects", async () => {
+    enableTauri();
+    const firstPeek = deferred<null>();
+    let unresolvedPeeks = 0;
+    let maxUnresolvedPeeks = 0;
+    windowApi.peekMainIntent
+      .mockImplementationOnce(async () => {
+        unresolvedPeeks += 1;
+        maxUnresolvedPeeks = Math.max(maxUnresolvedPeeks, unresolvedPeeks);
+        try {
+          return await firstPeek.promise;
+        } finally {
+          unresolvedPeeks -= 1;
+        }
+      })
+      .mockImplementationOnce(async () => {
+        unresolvedPeeks += 1;
+        maxUnresolvedPeeks = Math.max(maxUnresolvedPeeks, unresolvedPeeks);
+        unresolvedPeeks -= 1;
+        return { id: 18, intent: "manage-sticky" } as const;
+      });
+
+    const wrapper = mount(MainWindow, {
+      global: { plugins: [createPinia()], stubs: mainWindowStubs },
+    });
+    window.dispatchEvent(new Event("focus"));
+    await flushPromises();
+
+    expect(windowApi.peekMainIntent).toHaveBeenCalledOnce();
+    expect(maxUnresolvedPeeks).toBe(1);
+
+    firstPeek.reject(new Error("first peek failed"));
+    await flushPromises();
+
+    expect(windowApi.peekMainIntent).toHaveBeenCalledTimes(2);
+    expect(maxUnresolvedPeeks).toBe(1);
+    expect(wrapper.get("[data-test='main-live-region']").text()).toBe(
+      "无法打开置顶排序，请重试",
+    );
+    expect(wrapper.findAll("sticky-manager-dialog-stub")).toHaveLength(1);
+    expect(windowApi.ackMainIntent).toHaveBeenCalledOnce();
+    expect(windowApi.ackMainIntent).toHaveBeenCalledWith(18);
+    wrapper.unmount();
+  });
+
+  it("preserves a queued focus when the in-flight acknowledgment rejects", async () => {
+    enableTauri();
+    const firstAck = deferred<{ acknowledged: boolean }>();
+    let unresolvedPeeks = 0;
+    let maxUnresolvedPeeks = 0;
+    windowApi.peekMainIntent
+      .mockImplementationOnce(async () => {
+        unresolvedPeeks += 1;
+        maxUnresolvedPeeks = Math.max(maxUnresolvedPeeks, unresolvedPeeks);
+        unresolvedPeeks -= 1;
+        return { id: 19, intent: "manage-sticky" } as const;
+      })
+      .mockImplementationOnce(async () => {
+        unresolvedPeeks += 1;
+        maxUnresolvedPeeks = Math.max(maxUnresolvedPeeks, unresolvedPeeks);
+        unresolvedPeeks -= 1;
+        return { id: 19, intent: "manage-sticky" } as const;
+      });
+    windowApi.ackMainIntent
+      .mockReturnValueOnce(firstAck.promise)
+      .mockResolvedValueOnce({ acknowledged: true });
+
+    const wrapper = mount(MainWindow, {
+      global: { plugins: [createPinia()], stubs: mainWindowStubs },
+    });
+    await flushPromises();
+    expect(windowApi.ackMainIntent).toHaveBeenCalledOnce();
+
+    window.dispatchEvent(new Event("focus"));
+    await flushPromises();
+    expect(windowApi.peekMainIntent).toHaveBeenCalledOnce();
+
+    firstAck.reject(new Error("first ack failed"));
+    await flushPromises();
+
+    expect(windowApi.peekMainIntent).toHaveBeenCalledTimes(2);
+    expect(maxUnresolvedPeeks).toBe(1);
+    expect(wrapper.get("[data-test='main-live-region']").text()).toBe(
+      "置顶排序请求已保留，导航确认将在下次聚焦时重试",
+    );
+    expect(wrapper.findAll("sticky-manager-dialog-stub")).toHaveLength(1);
+    expect(windowApi.ackMainIntent).toHaveBeenCalledTimes(2);
+    expect(windowApi.ackMainIntent).toHaveBeenNthCalledWith(1, 19);
+    expect(windowApi.ackMainIntent).toHaveBeenNthCalledWith(2, 19);
+    wrapper.unmount();
+  });
+
+  it("announces a rejected peek and retries successfully on the next focus", async () => {
+    enableTauri();
+    windowApi.peekMainIntent
+      .mockRejectedValueOnce(new Error("peek unavailable"))
+      .mockResolvedValueOnce({ id: 9, intent: "manage-sticky" });
+
+    const wrapper = mount(MainWindow, {
+      global: { plugins: [createPinia()], stubs: mainWindowStubs },
+    });
+    await flushPromises();
+
+    expect(wrapper.get("[data-test='main-live-region']").text()).toContain(
+      "无法打开置顶排序，请重试",
+    );
+    expect(wrapper.find("sticky-manager-dialog-stub").exists()).toBe(false);
+
+    window.dispatchEvent(new Event("focus"));
+    await flushPromises();
+
+    expect(windowApi.peekMainIntent).toHaveBeenCalledTimes(2);
+    expect(wrapper.findAll("sticky-manager-dialog-stub")).toHaveLength(1);
+    expect(windowApi.ackMainIntent).toHaveBeenCalledOnce();
+    expect(windowApi.ackMainIntent).toHaveBeenCalledWith(9);
+    wrapper.unmount();
+  });
+
+  it("retries a rejected acknowledgment without opening a second manager", async () => {
+    enableTauri();
+    windowApi.peekMainIntent
+      .mockResolvedValueOnce({ id: 10, intent: "manage-sticky" })
+      .mockResolvedValueOnce({ id: 10, intent: "manage-sticky" });
+    windowApi.ackMainIntent
+      .mockRejectedValueOnce(new Error("response lost"))
+      .mockResolvedValueOnce({ acknowledged: true });
+
+    const wrapper = mount(MainWindow, {
+      global: { plugins: [createPinia()], stubs: mainWindowStubs },
+    });
+    await flushPromises();
+
+    expect(wrapper.findAll("sticky-manager-dialog-stub")).toHaveLength(1);
+    expect(windowApi.ackMainIntent).toHaveBeenNthCalledWith(1, 10);
+
+    window.dispatchEvent(new Event("focus"));
+    await flushPromises();
+
+    expect(wrapper.findAll("sticky-manager-dialog-stub")).toHaveLength(1);
+    expect(windowApi.peekMainIntent).toHaveBeenCalledTimes(2);
+    expect(windowApi.ackMainIntent).toHaveBeenCalledTimes(2);
+    expect(windowApi.ackMainIntent).toHaveBeenNthCalledWith(2, 10);
+    wrapper.unmount();
+  });
+
+  it("keeps one manager when an acknowledgment response is lost after backend cleanup", async () => {
+    enableTauri();
+    windowApi.peekMainIntent
+      .mockResolvedValueOnce({ id: 11, intent: "manage-sticky" })
+      .mockResolvedValueOnce(null);
+    windowApi.ackMainIntent.mockRejectedValueOnce(
+      new Error("ack response lost after commit"),
+    );
+
+    const wrapper = mount(MainWindow, {
+      global: { plugins: [createPinia()], stubs: mainWindowStubs },
+    });
+    await flushPromises();
+    window.dispatchEvent(new Event("focus"));
+    await flushPromises();
+
+    expect(windowApi.peekMainIntent).toHaveBeenCalledTimes(2);
+    expect(windowApi.ackMainIntent).toHaveBeenCalledOnce();
+    expect(windowApi.ackMainIntent).toHaveBeenCalledWith(11);
+    expect(wrapper.findAll("sticky-manager-dialog-stub")).toHaveLength(1);
+    wrapper.unmount();
+  });
+
+  it("continues from an unacknowledged intent to the next envelope", async () => {
+    enableTauri();
+    windowApi.peekMainIntent
+      .mockResolvedValueOnce({ id: 40, intent: "manage-sticky" })
+      .mockResolvedValueOnce({ id: 41, intent: "manage-sticky" });
+    windowApi.ackMainIntent
+      .mockResolvedValueOnce({ acknowledged: false })
+      .mockResolvedValueOnce({ acknowledged: true });
+
+    const wrapper = mount(MainWindow, {
+      global: { plugins: [createPinia()], stubs: mainWindowStubs },
+    });
+    await flushPromises();
+
+    expect(windowApi.peekMainIntent).toHaveBeenCalledTimes(2);
+    expect(windowApi.ackMainIntent).toHaveBeenCalledTimes(2);
+    expect(windowApi.ackMainIntent).toHaveBeenNthCalledWith(1, 40);
+    expect(windowApi.ackMainIntent).toHaveBeenNthCalledWith(2, 41);
+    expect(wrapper.findAll("sticky-manager-dialog-stub")).toHaveLength(1);
+    wrapper.unmount();
+  });
+
+  it("stops draining when an unacknowledged intent is followed by no envelope", async () => {
+    enableTauri();
+    windowApi.peekMainIntent
+      .mockResolvedValueOnce({ id: 42, intent: "manage-sticky" })
+      .mockResolvedValueOnce(null);
+    windowApi.ackMainIntent.mockResolvedValueOnce({ acknowledged: false });
+
+    const wrapper = mount(MainWindow, {
+      global: { plugins: [createPinia()], stubs: mainWindowStubs },
+    });
+    await flushPromises();
+
+    expect(windowApi.peekMainIntent).toHaveBeenCalledTimes(2);
+    expect(windowApi.ackMainIntent).toHaveBeenCalledOnce();
+    expect(windowApi.ackMainIntent).toHaveBeenCalledWith(42);
+    expect(wrapper.findAll("sticky-manager-dialog-stub")).toHaveLength(1);
+    wrapper.unmount();
+  });
+
+  it.each([
+    {
+      outcome: "resolves unacknowledged",
+      settleAck: (
+        pending: ReturnType<typeof deferred<{ acknowledged: boolean }>>,
+      ) => pending.resolve({ acknowledged: false }),
+    },
+    {
+      outcome: "rejects",
+      settleAck: (
+        pending: ReturnType<typeof deferred<{ acknowledged: boolean }>>,
+      ) => pending.reject(new Error("late ack failure")),
+    },
+  ])(
+    "ignores an acknowledgment that $outcome after unmount",
+    async ({ settleAck }) => {
+      enableTauri();
+      const pendingAck = deferred<{ acknowledged: boolean }>();
+      windowApi.peekMainIntent.mockResolvedValueOnce({
+        id: 43,
+        intent: "manage-sticky",
+      });
+      windowApi.ackMainIntent.mockReturnValueOnce(pendingAck.promise);
+      const wrapper = mount(MainWindow, {
+        global: { plugins: [createPinia()], stubs: mainWindowStubs },
+      });
+      const { setupState } = wrapper.vm.$ as unknown as {
+        setupState: {
+          mainIntentBusy: boolean;
+          queuedStickyManager: boolean;
+          stickyManagerOpen: boolean;
+          toast: { text: string } | null;
+        };
+      };
+      await flushPromises();
+
+      expect(windowApi.peekMainIntent).toHaveBeenCalledOnce();
+      expect(windowApi.ackMainIntent).toHaveBeenCalledWith(43);
+      const stateBeforeUnmount = {
+        mainIntentBusy: setupState.mainIntentBusy,
+        queuedStickyManager: setupState.queuedStickyManager,
+        stickyManagerOpen: setupState.stickyManagerOpen,
+        toast: setupState.toast,
+      };
+
+      wrapper.unmount();
+      settleAck(pendingAck);
+      await flushPromises();
+
+      expect(windowApi.peekMainIntent).toHaveBeenCalledOnce();
+      expect({
+        mainIntentBusy: setupState.mainIntentBusy,
+        queuedStickyManager: setupState.queuedStickyManager,
+        stickyManagerOpen: setupState.stickyManagerOpen,
+        toast: setupState.toast,
+      }).toEqual(stateBeforeUnmount);
+    },
+  );
+
+  it("removes focus delivery and ignores a late peek after unmount", async () => {
+    enableTauri();
+    const pendingPeek = deferred<{
+      id: number;
+      intent: "manage-sticky";
+    } | null>();
+    windowApi.peekMainIntent.mockReturnValueOnce(pendingPeek.promise);
+    const wrapper = mount(MainWindow, {
+      global: { plugins: [createPinia()], stubs: mainWindowStubs },
+    });
+    const { setupState } = wrapper.vm.$ as unknown as {
+      setupState: { stickyManagerOpen: boolean };
+    };
+    await flushPromises();
+
+    expect(windowApi.peekMainIntent).toHaveBeenCalledOnce();
+    wrapper.unmount();
+    window.dispatchEvent(new Event("focus"));
+    pendingPeek.resolve({ id: 12, intent: "manage-sticky" });
+    await flushPromises();
+
+    expect(windowApi.peekMainIntent).toHaveBeenCalledOnce();
+    expect(windowApi.ackMainIntent).not.toHaveBeenCalled();
+    expect(setupState.stickyManagerOpen).toBe(false);
+  });
+
+  it("drains one queued focus check after a pending null peek", async () => {
+    enableTauri();
+    const firstPeek = deferred<null>();
+    let unresolvedPeeks = 0;
+    let maxUnresolvedPeeks = 0;
+    windowApi.peekMainIntent
+      .mockImplementationOnce(async () => {
+        unresolvedPeeks += 1;
+        maxUnresolvedPeeks = Math.max(maxUnresolvedPeeks, unresolvedPeeks);
+        try {
+          return await firstPeek.promise;
+        } finally {
+          unresolvedPeeks -= 1;
+        }
+      })
+      .mockImplementationOnce(async () => {
+        unresolvedPeeks += 1;
+        maxUnresolvedPeeks = Math.max(maxUnresolvedPeeks, unresolvedPeeks);
+        unresolvedPeeks -= 1;
+        return { id: 13, intent: "manage-sticky" } as const;
+      });
+
+    const wrapper = mount(MainWindow, {
+      global: { plugins: [createPinia()], stubs: mainWindowStubs },
+    });
+    window.dispatchEvent(new Event("focus"));
+    await flushPromises();
+    expect(windowApi.peekMainIntent).toHaveBeenCalledOnce();
+
+    firstPeek.resolve(null);
+    await flushPromises();
+
+    expect(windowApi.peekMainIntent).toHaveBeenCalledTimes(2);
+    expect(maxUnresolvedPeeks).toBe(1);
+    expect(wrapper.findAll("sticky-manager-dialog-stub")).toHaveLength(1);
+    expect(windowApi.ackMainIntent).toHaveBeenCalledOnce();
+    expect(windowApi.ackMainIntent).toHaveBeenCalledWith(13);
+    wrapper.unmount();
+  });
+
+  it("queues sticky management behind an editor and opens it after normal close", async () => {
+    enableTauri();
+    promptApi.list.mockResolvedValue({ items: [pinnedPrompt], total: 1 });
+    windowApi.peekMainIntent
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 14, intent: "manage-sticky" });
+    const wrapper = mount(MainWindow, {
+      global: { plugins: [createPinia()], stubs: mainWindowStubs },
+    });
+    await flushPromises();
+
+    await wrapper.get("[data-test='detail-edit']").trigger("click");
+    window.dispatchEvent(new Event("focus"));
+    await flushPromises();
+
+    const editor = wrapper.findComponent(PromptEditorDialog);
+    expect(editor.exists()).toBe(true);
+    expect(wrapper.find("sticky-manager-dialog-stub").exists()).toBe(false);
+    expect(wrapper.get("[data-test='main-live-region']").text()).toBe(
+      "关闭当前操作后将打开置顶排序",
+    );
+    expect(windowApi.ackMainIntent).toHaveBeenCalledWith(14);
+
+    editor.vm.$emit("close");
+    await flushPromises();
+
+    expect(wrapper.findComponent(PromptEditorDialog).exists()).toBe(false);
+    expect(wrapper.findAll("sticky-manager-dialog-stub")).toHaveLength(1);
+    wrapper.unmount();
+  });
+
+  it("coalesces repeated blocked and already-open sticky-manager intents", async () => {
+    enableTauri();
+    promptApi.list.mockResolvedValue({ items: [pinnedPrompt], total: 1 });
+    windowApi.peekMainIntent
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 15, intent: "manage-sticky" })
+      .mockResolvedValueOnce({ id: 16, intent: "manage-sticky" })
+      .mockResolvedValueOnce({ id: 17, intent: "manage-sticky" });
+    const wrapper = mount(MainWindow, {
+      global: { plugins: [createPinia()], stubs: mainWindowStubs },
+    });
+    await flushPromises();
+
+    await wrapper.get("[data-test='detail-edit']").trigger("click");
+    window.dispatchEvent(new Event("focus"));
+    await flushPromises();
+    window.dispatchEvent(new Event("focus"));
+    await flushPromises();
+
+    expect(wrapper.findComponent(PromptEditorDialog).exists()).toBe(true);
+    expect(wrapper.find("sticky-manager-dialog-stub").exists()).toBe(false);
+    expect(windowApi.ackMainIntent).toHaveBeenNthCalledWith(1, 15);
+    expect(windowApi.ackMainIntent).toHaveBeenNthCalledWith(2, 16);
+
+    wrapper.findComponent(PromptEditorDialog).vm.$emit("close");
+    await flushPromises();
+    expect(wrapper.findAll("sticky-manager-dialog-stub")).toHaveLength(1);
+
+    window.dispatchEvent(new Event("focus"));
+    await flushPromises();
+
+    expect(wrapper.findAll("sticky-manager-dialog-stub")).toHaveLength(1);
+    expect(windowApi.ackMainIntent).toHaveBeenNthCalledWith(3, 17);
+    wrapper.unmount();
+  });
+
+  it.each([
+    {
+      name: "editor",
+      open: async (wrapper: VueWrapper) => {
+        await wrapper.get("[data-test='detail-edit']").trigger("click");
+      },
+      exists: (wrapper: VueWrapper) =>
+        wrapper.findComponent(PromptEditorDialog).exists(),
+      close: (wrapper: VueWrapper) => {
+        wrapper.findComponent(PromptEditorDialog).vm.$emit("close");
+      },
+    },
+    {
+      name: "quick palette",
+      open: async () => {
+        document.body.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key: "k",
+            metaKey: true,
+            bubbles: true,
+          }),
+        );
+        await flushPromises();
+      },
+      exists: (wrapper: VueWrapper) =>
+        wrapper.findComponent(QuickPalette).exists(),
+      close: (wrapper: VueWrapper) => {
+        wrapper.findComponent(QuickPalette).vm.$emit("close");
+      },
+    },
+    {
+      name: "import preview",
+      open: async (wrapper: VueWrapper) => {
+        backupApi.previewWithDialog.mockResolvedValueOnce({
+          token: "blocking-preview",
+          summary: {
+            promptCount: 1,
+            categoryCount: 1,
+            idConflicts: 0,
+            categoriesAdded: 0,
+            invalidRecords: 0,
+            sourceVersion: 1,
+          },
+        });
+        await wrapper.get("[data-test='status-import']").trigger("click");
+        await flushPromises();
+      },
+      exists: (wrapper: VueWrapper) =>
+        wrapper.findComponent(ImportPreviewDialog).exists(),
+      close: (wrapper: VueWrapper) => {
+        wrapper.findComponent(ImportPreviewDialog).vm.$emit("cancel");
+      },
+    },
+    {
+      name: "runtime dialog",
+      open: async (wrapper: VueWrapper) => {
+        await wrapper.get("[data-test='rail-settings']").trigger("click");
+      },
+      exists: (wrapper: VueWrapper) =>
+        wrapper.findComponent(RuntimeInfoDialog).exists(),
+      close: (wrapper: VueWrapper) => {
+        wrapper.findComponent(RuntimeInfoDialog).vm.$emit("close");
+      },
+    },
+    {
+      name: "category manager",
+      open: async (wrapper: VueWrapper) => {
+        await wrapper.get("[data-test='rail-categories']").trigger("click");
+      },
+      exists: (wrapper: VueWrapper) =>
+        wrapper.findComponent(CategoryManagerDialog).exists(),
+      close: (wrapper: VueWrapper) => {
+        wrapper.findComponent(CategoryManagerDialog).vm.$emit("close");
+      },
+    },
+  ])(
+    "coalesces sticky-manager intents behind the $name blocking surface",
+    async ({ open, exists, close }) => {
+      enableTauri();
+      promptApi.list.mockResolvedValue({ items: [pinnedPrompt], total: 1 });
+      windowApi.peekMainIntent
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ id: 30, intent: "manage-sticky" })
+        .mockResolvedValueOnce({ id: 31, intent: "manage-sticky" });
+      const wrapper = mount(MainWindow, {
+        global: { plugins: [createPinia()], stubs: mainWindowStubs },
+      });
+      try {
+        await flushPromises();
+
+        await open(wrapper);
+        expect(exists(wrapper)).toBe(true);
+
+        window.dispatchEvent(new Event("focus"));
+        await flushPromises();
+
+        expect(exists(wrapper)).toBe(true);
+        expect(wrapper.find("sticky-manager-dialog-stub").exists()).toBe(false);
+        expect(wrapper.get("[data-test='main-live-region']").text()).toBe(
+          "关闭当前操作后将打开置顶排序",
+        );
+        expect(windowApi.ackMainIntent).toHaveBeenNthCalledWith(1, 30);
+
+        window.dispatchEvent(new Event("focus"));
+        await flushPromises();
+
+        expect(exists(wrapper)).toBe(true);
+        expect(wrapper.find("sticky-manager-dialog-stub").exists()).toBe(false);
+        expect(wrapper.get("[data-test='main-live-region']").text()).toBe(
+          "关闭当前操作后将打开置顶排序",
+        );
+        expect(windowApi.ackMainIntent).toHaveBeenNthCalledWith(2, 31);
+
+        close(wrapper);
+        await flushPromises();
+
+        expect(exists(wrapper)).toBe(false);
+        expect(wrapper.findAll("sticky-manager-dialog-stub")).toHaveLength(1);
+      } finally {
+        wrapper.unmount();
+      }
+    },
+  );
+
+  it("does not request main intents outside the Tauri runtime", async () => {
+    const wrapper = await mountMainWindow();
+
+    window.dispatchEvent(new Event("focus"));
+    await flushPromises();
+
+    expect(windowApi.peekMainIntent).not.toHaveBeenCalled();
+    expect(windowApi.ackMainIntent).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it("queues sticky management while import selection is pending", async () => {
+    const pendingPreview = deferred<{
+      token: string;
+      summary: {
+        promptCount: number;
+        categoryCount: number;
+        idConflicts: number;
+        categoriesAdded: number;
+        invalidRecords: number;
+        sourceVersion: number;
+      };
+    } | null>();
+    backupApi.previewWithDialog.mockReturnValueOnce(pendingPreview.promise);
+    const wrapper = await mountMainWindow();
+    const importTrigger = wrapper.get<HTMLButtonElement>(
+      "[data-test='status-import']",
+    );
+
+    importTrigger.element.click();
+    importTrigger.element.click();
+    await flushPromises();
+
+    expect(backupApi.previewWithDialog).toHaveBeenCalledOnce();
+    expect(importTrigger.attributes("disabled")).toBeDefined();
+
+    await wrapper.get("[data-test='manage-sticky']").trigger("click");
+    await flushPromises();
+
+    expect(wrapper.find("sticky-manager-dialog-stub").exists()).toBe(false);
+    expect(wrapper.get("[data-test='main-live-region']").text()).toBe(
+      "关闭当前操作后将打开置顶排序",
+    );
+
+    pendingPreview.resolve({
+      token: "pending-import-preview",
+      summary: {
+        promptCount: 1,
+        categoryCount: 1,
+        idConflicts: 0,
+        categoriesAdded: 0,
+        invalidRecords: 0,
+        sourceVersion: 1,
+      },
+    });
+    await flushPromises();
+
+    expect(wrapper.findComponent(ImportPreviewDialog).exists()).toBe(true);
+    expect(wrapper.find("sticky-manager-dialog-stub").exists()).toBe(false);
+
+    wrapper.findComponent(ImportPreviewDialog).vm.$emit("cancel");
+    await flushPromises();
+
+    expect(wrapper.findComponent(ImportPreviewDialog).exists()).toBe(false);
+    expect(wrapper.findAll("sticky-manager-dialog-stub")).toHaveLength(1);
+    wrapper.unmount();
+  });
+
+  it("queues the status-bar sticky manager behind the current editor", async () => {
+    promptApi.list.mockResolvedValue({ items: [pinnedPrompt], total: 1 });
+    const wrapper = await mountMainWindow();
+
+    await wrapper.get("[data-test='detail-edit']").trigger("click");
+    await wrapper.get("[data-test='manage-sticky']").trigger("click");
+    await flushPromises();
+
+    expect(wrapper.findComponent(PromptEditorDialog).exists()).toBe(true);
+    expect(wrapper.find("sticky-manager-dialog-stub").exists()).toBe(false);
+    expect(wrapper.get("[data-test='main-live-region']").text()).toBe(
+      "关闭当前操作后将打开置顶排序",
+    );
+
+    wrapper.findComponent(PromptEditorDialog).vm.$emit("close");
+    await flushPromises();
+    expect(wrapper.findAll("sticky-manager-dialog-stub")).toHaveLength(1);
+    wrapper.unmount();
   });
 
   it("renders low-emphasis status actions with SVG icons and preserves handlers", async () => {

@@ -43,6 +43,18 @@ const categoryManagerOpen = ref(false);
 const categoryBusy = ref(false);
 const categoryError = ref("");
 const importPreview = ref<ImportPreview | null>(null);
+const previewingImport = ref(false);
+const queuedStickyManager = ref(false);
+const mainIntentBusy = ref(false);
+const hasBlockingSurface = computed(
+  () =>
+    editing.value !== undefined ||
+    quickOpen.value ||
+    previewingImport.value ||
+    importPreview.value !== null ||
+    runtimeOpen.value ||
+    categoryManagerOpen.value,
+);
 const importing = ref(false);
 const importError = ref("");
 const saving = ref(false);
@@ -56,6 +68,7 @@ let searchTimer: ReturnType<typeof setTimeout> | null = null;
 let copySuccessTimer: ReturnType<typeof setTimeout> | null = null;
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
 let latestCopyRequest = 0;
+let mainIntentCheckQueued = false;
 let disposed = false;
 
 watch(
@@ -81,6 +94,84 @@ function notify(text: string, kind: "success" | "error" = "success"): void {
     if (!disposed && toast.value?.text === text) toast.value = null;
     toastTimer = null;
   }, 2600);
+}
+
+function openOrQueueStickyManager(): void {
+  if (stickyManagerOpen.value) {
+    queuedStickyManager.value = false;
+    return;
+  }
+  if (hasBlockingSurface.value) {
+    queuedStickyManager.value = true;
+    notify("关闭当前操作后将打开置顶排序");
+    return;
+  }
+  queuedStickyManager.value = false;
+  stickyManagerOpen.value = true;
+}
+
+watch(hasBlockingSurface, (blocked) => {
+  if (
+    !disposed &&
+    !blocked &&
+    queuedStickyManager.value &&
+    !stickyManagerOpen.value
+  ) {
+    queuedStickyManager.value = false;
+    stickyManagerOpen.value = true;
+  }
+});
+
+async function consumeMainIntent(): Promise<void> {
+  if (disposed || !("__TAURI_INTERNALS__" in window)) return;
+  if (mainIntentBusy.value) {
+    mainIntentCheckQueued = true;
+    return;
+  }
+  mainIntentBusy.value = true;
+  try {
+    do {
+      mainIntentCheckQueued = false;
+      let pending: Awaited<ReturnType<typeof windowApi.peekMainIntent>>;
+      try {
+        pending = await windowApi.peekMainIntent();
+      } catch {
+        if (!disposed) notify("无法打开置顶排序，请重试", "error");
+        if (!mainIntentCheckQueued) break;
+        continue;
+      }
+      if (disposed) break;
+      if (!pending) {
+        if (!mainIntentCheckQueued) break;
+        continue;
+      }
+      if (pending.intent === "manage-sticky") openOrQueueStickyManager();
+      try {
+        const result = await windowApi.ackMainIntent(pending.id);
+        if (!result.acknowledged) mainIntentCheckQueued = true;
+      } catch {
+        if (!disposed) {
+          notify("置顶排序请求已保留，导航确认将在下次聚焦时重试", "error");
+        }
+        if (!mainIntentCheckQueued) break;
+        continue;
+      }
+    } while (!disposed && mainIntentCheckQueued);
+  } finally {
+    if (!disposed) mainIntentBusy.value = false;
+  }
+}
+
+function handleMainFocus(): void {
+  void consumeMainIntent();
+}
+
+async function startPromptsListener(): Promise<void> {
+  const unlisten = await listen("prompts-changed", () => {
+    if (!disposed) void store.load();
+  });
+  if (disposed) unlisten();
+  else stopListening = unlisten;
 }
 
 function selectPrompt(prompt: Prompt): void {
@@ -289,6 +380,8 @@ async function enterStickyMode(): Promise<void> {
 }
 
 async function previewImport(): Promise<void> {
+  if (previewingImport.value) return;
+  previewingImport.value = true;
   try {
     importPreview.value = await backupApi.previewWithDialog();
   } catch (reason) {
@@ -296,6 +389,8 @@ async function previewImport(): Promise<void> {
       reason instanceof Error ? reason.message : "备份文件校验失败",
       "error",
     );
+  } finally {
+    previewingImport.value = false;
   }
 }
 
@@ -360,22 +455,20 @@ function keydown(event: KeyboardEvent): void {
   }
 }
 
-onMounted(async () => {
+onMounted(() => {
   window.addEventListener("keydown", keydown);
-  await store.load();
-  if (disposed) return;
+  window.addEventListener("focus", handleMainFocus);
   if ("__TAURI_INTERNALS__" in window) {
-    const unlisten = await listen("prompts-changed", () => {
-      if (!disposed) void store.load();
-    });
-    if (disposed) unlisten();
-    else stopListening = unlisten;
+    void consumeMainIntent();
+    void startPromptsListener();
   }
+  void store.load();
 });
 onBeforeUnmount(() => {
   disposed = true;
   latestCopyRequest += 1;
   window.removeEventListener("keydown", keydown);
+  window.removeEventListener("focus", handleMainFocus);
   stopListening?.();
   stopListening = null;
   if (searchTimer) {
@@ -456,7 +549,7 @@ onBeforeUnmount(() => {
             variant="ghost"
             size="sm"
             data-test="manage-sticky"
-            @click="stickyManagerOpen = true"
+            @click="openOrQueueStickyManager"
           >
             <template #leading><Pin aria-hidden="true" /></template>
             管理置顶
@@ -465,6 +558,7 @@ onBeforeUnmount(() => {
             variant="ghost"
             size="sm"
             data-test="status-import"
+            :disabled="previewingImport"
             @click="previewImport"
           >
             <template #leading><Upload aria-hidden="true" /></template>
