@@ -54,6 +54,7 @@ const toast = ref<{ text: string; kind: "success" | "error" } | null>(null);
 let stopListening: (() => void) | null = null;
 let searchTimer: ReturnType<typeof setTimeout> | null = null;
 let copySuccessTimer: ReturnType<typeof setTimeout> | null = null;
+let latestCopyRequest = 0;
 
 watch(
   () => store.prompts.map((prompt) => prompt.id).join("|"),
@@ -124,27 +125,32 @@ async function copy(prompt: Prompt): Promise<void> {
     variableMode.value = true;
     return;
   }
+  const request = ++latestCopyRequest;
   copyingId.value = prompt.id;
   try {
     const result = await copyPromptText({ id: prompt.id, text: prompt.body });
-    if (copyingId.value === prompt.id) {
-      copyingId.value = null;
+    if (request === latestCopyRequest) {
+      if (copyingId.value === prompt.id) copyingId.value = null;
       markCopied(prompt.id);
+      notify(
+        result.status === "copied"
+          ? "完整正文已复制"
+          : "已复制，但使用次数暂未更新",
+        result.status === "copied" ? "success" : "error",
+      );
     }
-    notify(
-      result.status === "copied"
-        ? "完整正文已复制"
-        : "已复制，但使用次数暂未更新",
-      result.status === "copied" ? "success" : "error",
-    );
     await store.load();
   } catch (reason) {
-    notify(
-      reason instanceof Error ? reason.message : "剪贴板写入失败",
-      "error",
-    );
+    if (request === latestCopyRequest) {
+      notify(
+        reason instanceof Error ? reason.message : "剪贴板写入失败",
+        "error",
+      );
+    }
   } finally {
-    if (copyingId.value === prompt.id) copyingId.value = null;
+    if (request === latestCopyRequest && copyingId.value === prompt.id) {
+      copyingId.value = null;
+    }
   }
 }
 

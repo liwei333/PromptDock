@@ -646,6 +646,89 @@ describe("MainWindow V3 workbench", () => {
     }
   });
 
+  it("keeps a repeated prompt copy pending when the older request rejects", async () => {
+    vi.useFakeTimers();
+    promptApi.list.mockResolvedValue({ items: [pinnedPrompt], total: 1 });
+    const olderCopy = deferred<CopyResult>();
+    const newerCopy = deferred<CopyResult>();
+    copyPromptText
+      .mockReturnValueOnce(olderCopy.promise)
+      .mockReturnValueOnce(newerCopy.promise);
+    const wrapper = await mountMainWindow();
+
+    try {
+      await wrapper.get("[data-test='list-copy']").trigger("click");
+      await wrapper.get("[data-test='detail-copy']").trigger("click");
+      expect(copyPromptText).toHaveBeenCalledTimes(2);
+
+      olderCopy.reject(new Error("stale same-prompt failure"));
+      await flushPromises();
+
+      const listCopy = wrapper.get("[data-test='list-copy']");
+      expect(listCopy.attributes("disabled")).toBeDefined();
+      expect(listCopy.attributes("aria-busy")).toBe("true");
+      expect(wrapper.get("[data-test='main-live-region']").text()).toBe("");
+
+      newerCopy.resolve(successfulCopyResult(2));
+      await flushPromises();
+      expect(
+        wrapper.get("[data-test='list-copy']").attributes("aria-label"),
+      ).toBe("已复制");
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
+  it("ignores an older repeated-prompt success after the newer request succeeds", async () => {
+    vi.useFakeTimers();
+    promptApi.list.mockResolvedValue({ items: [pinnedPrompt], total: 1 });
+    const olderCopy = deferred<CopyResult>();
+    const newerCopy = deferred<CopyResult>();
+    copyPromptText
+      .mockReturnValueOnce(olderCopy.promise)
+      .mockReturnValueOnce(newerCopy.promise);
+    const wrapper = await mountMainWindow();
+
+    try {
+      await wrapper.get("[data-test='list-copy']").trigger("click");
+      await wrapper.get("[data-test='detail-copy']").trigger("click");
+
+      newerCopy.resolve(successfulCopyResult(2));
+      await flushPromises();
+      expect(
+        wrapper.get("[data-test='list-copy']").attributes("aria-label"),
+      ).toBe("已复制");
+      expect(wrapper.get("[data-test='main-live-region']").text()).toBe(
+        "完整正文已复制",
+      );
+
+      await vi.advanceTimersByTimeAsync(400);
+      olderCopy.resolve({
+        status: "copied-with-stats-error",
+        error: new Error("stale stats failure"),
+      });
+      await flushPromises();
+
+      expect(
+        wrapper.get("[data-test='list-copy']").attributes("aria-label"),
+      ).toBe("已复制");
+      expect(wrapper.get("[data-test='main-live-region']").text()).toBe(
+        "完整正文已复制",
+      );
+
+      await vi.advanceTimersByTimeAsync(799);
+      expect(
+        wrapper.get("[data-test='list-copy']").attributes("aria-label"),
+      ).toBe("已复制");
+      await vi.advanceTimersByTimeAsync(1);
+      expect(
+        wrapper.get("[data-test='list-copy']").attributes("aria-label"),
+      ).toBe("复制提示词");
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
   it("clears the outstanding copied timer before MainWindow unmounts", async () => {
     vi.useFakeTimers();
     promptApi.list.mockResolvedValue({ items: [pinnedPrompt], total: 1 });
