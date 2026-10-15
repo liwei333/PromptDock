@@ -8,8 +8,12 @@ use std::{
 use tokio::sync::{Mutex as AsyncMutex, Notify};
 
 use crate::{
-    commands::windows::{StickyDensity, StickySettings},
+    commands::windows::{
+        StickyDensity, StickySettings, ack_main_intent_value, peek_main_intent_value,
+        transition_to_main_with_intent,
+    },
     domain::errors::{AppError, ErrorPayload},
+    state::{MainIntent, MainIntentSlot},
     window_mode::{
         ProductWindow, WindowMode, WindowModeRuntime, hide_sticky_explicitly,
         persist_sticky_position, reconcile_startup_mode, set_sticky_always_on_top,
@@ -203,6 +207,139 @@ fn expected_operations(target: WindowMode) -> Vec<&'static str> {
         ],
     });
     operations
+}
+
+#[test]
+fn main_intent_manage_sticky_uses_kebab_case_serialization() {
+    assert_eq!(
+        serde_json::to_value(MainIntent::ManageSticky).unwrap(),
+        serde_json::json!("manage-sticky")
+    );
+    assert_eq!(
+        serde_json::from_value::<MainIntent>(serde_json::json!("manage-sticky")).unwrap(),
+        MainIntent::ManageSticky
+    );
+    assert!(
+        serde_json::from_value::<MainIntent>(serde_json::json!("unknown-main-intent")).is_err()
+    );
+}
+
+#[tokio::test]
+async fn main_intent_waits_until_the_window_transition_commits() {
+    let runtime = FakeRuntime::new(false, true, true);
+    let mode_transition = AsyncMutex::new(());
+    let pending_intent = AsyncMutex::new(MainIntentSlot::default());
+    let gate = runtime.pause_next_write();
+
+    let mut transition = Box::pin(transition_to_main_with_intent(
+        &runtime,
+        &mode_transition,
+        &pending_intent,
+        Some(MainIntent::ManageSticky),
+    ));
+    assert_pending(transition.as_mut()).await;
+    gate.assert_entered().await;
+
+    let mut peek = Box::pin(peek_main_intent_value(&pending_intent));
+    assert_pending(peek.as_mut()).await;
+
+    gate.release.notify_one();
+    transition.await.unwrap();
+    let delivered = peek.await.unwrap();
+    assert_eq!(delivered.intent, MainIntent::ManageSticky);
+    assert_eq!(
+        peek_main_intent_value(&pending_intent).await,
+        Some(delivered.clone()),
+    );
+    assert!(ack_main_intent_value(&pending_intent, delivered.id).await);
+    assert_eq!(peek_main_intent_value(&pending_intent).await, None);
+}
+
+#[tokio::test]
+async fn failed_main_intent_transition_clears_before_waiting_peek_continues() {
+    let runtime = FakeRuntime::new(false, true, true);
+    runtime.fail(
+        "persist_visible_false",
+        FailureTiming::After,
+        native_failure(),
+    );
+    let mode_transition = AsyncMutex::new(());
+    let pending_intent = AsyncMutex::new(MainIntentSlot::default());
+    let gate = runtime.pause_next_write();
+
+    let mut transition = Box::pin(transition_to_main_with_intent(
+        &runtime,
+        &mode_transition,
+        &pending_intent,
+        Some(MainIntent::ManageSticky),
+    ));
+    assert_pending(transition.as_mut()).await;
+    gate.assert_entered().await;
+
+    let mut peek = Box::pin(peek_main_intent_value(&pending_intent));
+    assert_pending(peek.as_mut()).await;
+
+    gate.release.notify_one();
+    assert!(transition.await.is_err());
+    assert_eq!(peek.await, None);
+}
+
+#[tokio::test]
+async fn ordinary_main_intent_transition_preserves_pending_retry() {
+    let runtime = FakeRuntime::new(false, true, true);
+    let mode_transition = AsyncMutex::new(());
+    let pending_intent = AsyncMutex::new(MainIntentSlot::default());
+
+    transition_to_main_with_intent(&runtime, &mode_transition, &pending_intent, None)
+        .await
+        .unwrap();
+    assert_eq!(peek_main_intent_value(&pending_intent).await, None);
+
+    let retry = pending_intent.lock().await.assign(MainIntent::ManageSticky);
+
+    transition_to_main_with_intent(&runtime, &mode_transition, &pending_intent, None)
+        .await
+        .unwrap();
+
+    assert_eq!(peek_main_intent_value(&pending_intent).await, Some(retry));
+}
+
+#[tokio::test]
+async fn repeated_main_intent_peek_is_stable_until_matching_acknowledgment() {
+    let pending_intent = AsyncMutex::new(MainIntentSlot::default());
+    let assigned = pending_intent.lock().await.assign(MainIntent::ManageSticky);
+
+    assert_eq!(
+        peek_main_intent_value(&pending_intent).await,
+        Some(assigned.clone())
+    );
+    assert_eq!(
+        peek_main_intent_value(&pending_intent).await,
+        Some(assigned.clone())
+    );
+    assert!(ack_main_intent_value(&pending_intent, assigned.id).await);
+    assert_eq!(peek_main_intent_value(&pending_intent).await, None);
+}
+
+#[tokio::test]
+async fn stale_main_intent_ack_cannot_clear_a_newer_pending_intent() {
+    let pending_intent = AsyncMutex::new(MainIntentSlot::default());
+    let stale = pending_intent.lock().await.assign(MainIntent::ManageSticky);
+    let newer = pending_intent.lock().await.assign(MainIntent::ManageSticky);
+
+    assert!(!ack_main_intent_value(&pending_intent, stale.id).await);
+    assert!(!ack_main_intent_value(&pending_intent, newer.id + 1).await);
+    assert_eq!(peek_main_intent_value(&pending_intent).await, Some(newer));
+}
+
+#[tokio::test]
+async fn matching_main_intent_ack_clears_exactly_once() {
+    let pending_intent = AsyncMutex::new(MainIntentSlot::default());
+    let assigned = pending_intent.lock().await.assign(MainIntent::ManageSticky);
+
+    assert!(ack_main_intent_value(&pending_intent, assigned.id).await);
+    assert!(!ack_main_intent_value(&pending_intent, assigned.id).await);
+    assert_eq!(peek_main_intent_value(&pending_intent).await, None);
 }
 
 impl WindowModeRuntime for FakeRuntime {

@@ -5,10 +5,60 @@ use std::{
     time::Instant,
 };
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::db::Database;
 use crate::services::backup_service::BackupDocument;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum MainIntent {
+    ManageSticky,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingMainIntent {
+    pub id: u32,
+    pub intent: MainIntent,
+}
+
+#[derive(Debug, Default)]
+pub struct MainIntentSlot {
+    next_id: u32,
+    pending: Option<PendingMainIntent>,
+}
+
+impl MainIntentSlot {
+    pub(crate) fn assign(&mut self, intent: MainIntent) -> PendingMainIntent {
+        self.next_id = self
+            .next_id
+            .checked_add(1)
+            .expect("main intent sequence overflow");
+        let pending = PendingMainIntent {
+            id: self.next_id,
+            intent,
+        };
+        self.pending = Some(pending.clone());
+        pending
+    }
+
+    pub(crate) fn peek(&self) -> Option<PendingMainIntent> {
+        self.pending.clone()
+    }
+
+    pub(crate) fn clear_if(&mut self, id: u32) -> bool {
+        if self
+            .pending
+            .as_ref()
+            .is_some_and(|pending| pending.id == id)
+        {
+            self.pending = None;
+            return true;
+        }
+        false
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DesktopPlatform {
@@ -67,6 +117,7 @@ pub struct AppState {
     pub shortcut: Arc<RwLock<ShortcutStatus>>,
     pub pending_imports: Arc<Mutex<HashMap<String, PendingImport>>>,
     pub mode_transition: Arc<tokio::sync::Mutex<()>>,
+    pub pending_main_intent: Arc<tokio::sync::Mutex<MainIntentSlot>>,
 }
 
 impl AppState {
@@ -77,6 +128,7 @@ impl AppState {
             shortcut: Arc::new(RwLock::new(ShortcutStatus::default())),
             pending_imports: Arc::new(Mutex::new(HashMap::new())),
             mode_transition: Arc::new(tokio::sync::Mutex::new(())),
+            pending_main_intent: Arc::new(tokio::sync::Mutex::new(MainIntentSlot::default())),
         }
     }
 }
