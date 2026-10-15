@@ -117,6 +117,10 @@ select {
 .pd-select-content {
   z-index: 90;
   width: max(var(--reka-select-trigger-width), 132px);
+  max-width: min(
+    var(--reka-select-content-available-width, calc(100vw - 16px)),
+    calc(100vw - 16px)
+  );
   max-height: min(var(--reka-select-content-available-height), 280px);
   overflow: hidden;
   color: var(--pd-text);
@@ -241,6 +245,7 @@ select {
   display: flex;
   flex-direction: column;
   width: min(560px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
   max-height: calc(100vh - 24px);
   overflow: hidden;
   color: var(--pd-text);
@@ -778,17 +783,23 @@ select {
   font-weight: 750;
 }
 .template-mark {
+  display: inline-grid;
+  place-items: center;
   color: #8765b2;
-  font:
-    700 10px ui-monospace,
-    monospace;
+}
+.template-mark svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 1.8;
 }
 .template-mark.invalid {
   color: var(--danger);
 }
-.card-header .icon-button {
+.card-header .card-favorite {
   margin-left: auto;
-  font-size: 16px;
+}
+.card-header .card-favorite[aria-pressed="true"] svg {
+  fill: currentColor;
 }
 .prompt-card h3 {
   margin: 11px 0 7px;
@@ -2840,6 +2851,57 @@ button.sticky-row:disabled {
   .search-panel > select {
     grid-column: 2;
     grid-row: 2;
+  }
+}
+@media (max-width: 1100px) {
+  .workbench-filters {
+    flex-wrap: nowrap;
+    gap: 4px;
+    padding-inline: 10px;
+  }
+  .v3-search {
+    flex-basis: 190px;
+    min-width: 164px;
+    padding-inline: 8px;
+  }
+  .v3-search > svg {
+    margin-right: 5px;
+  }
+  .v3-search kbd {
+    min-width: 26px;
+    padding-inline: 4px;
+  }
+  .workbench-filters .pd-select-trigger {
+    flex-basis: 88px;
+    min-width: 82px;
+    max-width: 96px;
+    gap: 5px;
+    padding: 0 7px 0 8px;
+  }
+  .filter-clear {
+    padding-inline: 5px;
+  }
+  .dashboard-stat-grid {
+    gap: 8px;
+    padding-inline: 12px;
+  }
+  .dashboard-stat-grid article {
+    gap: 8px;
+    padding-inline: 11px;
+  }
+  .v3-workbench {
+    grid-template-columns: minmax(310px, 46fr) minmax(360px, 54fr);
+    gap: 8px;
+    padding-inline: 12px;
+  }
+  .prompt-detail-pane {
+    padding-inline: 18px;
+  }
+  .v3-statusbar {
+    padding-inline: 13px;
+  }
+  .v3-status-actions .pd-button {
+    padding-inline: 5px;
   }
 }
 @media (prefers-reduced-motion: reduce) {

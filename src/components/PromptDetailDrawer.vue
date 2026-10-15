@@ -1,9 +1,14 @@
 <script setup lang="ts">
+import { Copy, Pencil, TriangleAlert, X } from "lucide-vue-next";
 import { computed } from "vue";
 
+import TemplateVariablesPanel from "@/components/TemplateVariablesPanel.vue";
+import PdBadge from "@/components/ui/PdBadge.vue";
+import PdButton from "@/components/ui/PdButton.vue";
+import PdIconButton from "@/components/ui/PdIconButton.vue";
+import PdStatusMessage from "@/components/ui/PdStatusMessage.vue";
 import { inspectTemplateVariables } from "@/composables/useTemplateVariables";
 import type { Prompt } from "@/types/prompt";
-import TemplateVariablesPanel from "@/components/TemplateVariablesPanel.vue";
 
 const props = defineProps<{ prompt: Prompt; variableMode?: boolean }>();
 const emit = defineEmits<{
@@ -30,30 +35,26 @@ const hasVariables = computed(
       <template v-else>
         <header>
           <div>
-            <span class="category-pill">{{ prompt.categoryName }}</span>
+            <PdBadge class="category-pill" tone="accent">
+              {{ prompt.categoryName }}
+            </PdBadge>
             <h2>{{ prompt.title }}</h2>
           </div>
-          <button
-            class="icon-button"
-            aria-label="关闭详情"
-            @click="emit('close')"
-          >
-            ×
-          </button>
+          <PdIconButton label="关闭详情" :icon="X" @click="emit('close')" />
         </header>
         <p class="drawer-description">
           {{ prompt.description || "没有补充说明" }}
         </p>
-        <p
+        <PdStatusMessage
           v-if="template.error"
           class="template-error"
           data-test="template-error"
-          role="alert"
-        >
-          {{ template.error.message }}。复制时将保留原始占位符。
-        </p>
+          tone="danger"
+          :icon="TriangleAlert"
+          :message="`${template.error.message}。复制时将保留原始占位符。`"
+        />
         <div class="tags">
-          <span v-for="tag in prompt.tags" :key="tag">#{{ tag }}</span>
+          <PdBadge v-for="tag in prompt.tags" :key="tag">{{ tag }}</PdBadge>
         </div>
         <section class="body-panel">
           <span class="eyebrow">完整正文</span>
@@ -64,10 +65,20 @@ const hasVariables = computed(
           {{ prompt.isFavorite ? "已收藏" : "未收藏" }}
         </div>
         <footer>
-          <button class="ghost-button" @click="emit('edit', prompt)">
+          <PdButton
+            variant="ghost"
+            data-test="drawer-edit"
+            @click="emit('edit', prompt)"
+          >
+            <template #leading><Pencil aria-hidden="true" /></template>
             编辑
-          </button>
-          <button class="primary-button" @click="emit('copy', prompt)">
+          </PdButton>
+          <PdButton
+            variant="primary"
+            data-test="drawer-copy"
+            @click="emit('copy', prompt)"
+          >
+            <template #leading><Copy aria-hidden="true" /></template>
             {{
               template.error
                 ? "复制原始正文"
@@ -75,7 +86,7 @@ const hasVariables = computed(
                   ? "填写变量"
                   : "复制完整正文"
             }}
-          </button>
+          </PdButton>
         </footer>
       </template>
     </aside>
