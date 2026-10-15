@@ -1807,14 +1807,12 @@ kbd {
   color: var(--pd-text);
   font-size: 14px;
 }
-.prompt-list-pane > header span {
-  color: var(--pd-text-tertiary);
-  font-size: 9px;
-}
 .prompt-list-sort {
   display: inline-flex;
   align-items: center;
   gap: 2px;
+  color: var(--pd-text-tertiary);
+  font-size: 9px;
 }
 .prompt-list-sort svg {
   width: 11px;

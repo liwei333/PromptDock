@@ -35,6 +35,21 @@ describe("PromptListPane", () => {
     );
   });
 
+  it("keeps the new-prompt primary button out of header metadata styling", () => {
+    const wrapper = mount(PromptListPane, {
+      props: { prompts: [prompt], selectedId: prompt.id, total: 1 },
+    });
+
+    const newPrompt = wrapper.get("[data-test='list-new-prompt']");
+    expect(newPrompt.attributes("data-variant")).toBe("primary");
+    expect(globalCss).not.toMatch(
+      /\.prompt-list-pane\s*>\s*header\s+span\s*\{/,
+    );
+    expect(globalCss).toMatch(
+      /\.prompt-list-sort\s*\{[^}]*color:\s*var\(--pd-text-tertiary\);[^}]*font-size:\s*9px;/s,
+    );
+  });
+
   it("uses table selection semantics with an independent row selection button", async () => {
     const wrapper = mount(PromptListPane, {
       props: { prompts: [prompt], selectedId: prompt.id, total: 1 },

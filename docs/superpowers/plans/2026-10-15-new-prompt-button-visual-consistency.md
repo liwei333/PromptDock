@@ -29,7 +29,7 @@ No Vue behavior, shared `PdButton` implementation, dependency, Rust command, dat
 - Modify: `src/tests/prompt-list-pane.test.ts`
 - Modify: `src/styles/global.css:1790-1818`
 
-- [ ] **Step 1: Write the failing regression test**
+- [x] **Step 1: Write the failing regression test**
 
 Add this test inside `describe("PromptListPane", ...)`:
 
@@ -50,7 +50,7 @@ it("keeps the new-prompt primary button out of header metadata styling", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test and verify RED**
+- [x] **Step 2: Run the test and verify RED**
 
 Run:
 
@@ -60,7 +60,7 @@ pnpm vitest run src/tests/prompt-list-pane.test.ts
 
 Expected: FAIL in the new test because `global.css` still contains `.prompt-list-pane > header span { ... }`; existing tests remain passing.
 
-- [ ] **Step 3: Apply the minimal selector fix**
+- [x] **Step 3: Apply the minimal selector fix**
 
 In `src/styles/global.css`, replace the broad rule:
 
@@ -85,7 +85,7 @@ with the existing sort-specific rule carrying all four properties:
 
 The “新建提示词” control remains `variant="primary"`, so its internal label and Lucide `Plus` icon inherit white from `PdButton`; hover remains `--pd-accent-hover`, matching “一键复制”.
 
-- [ ] **Step 4: Run the targeted test and verify GREEN**
+- [x] **Step 4: Run the targeted test and verify GREEN**
 
 Run:
 
@@ -95,7 +95,7 @@ pnpm vitest run src/tests/prompt-list-pane.test.ts
 
 Expected: PASS with all `PromptListPane` tests green.
 
-- [ ] **Step 5: Run the frontend quality gate**
+- [x] **Step 5: Run the frontend quality gate**
 
 Run:
 
@@ -109,7 +109,7 @@ git diff --check
 
 Expected: every command exits 0; the full Vitest suite has zero failures; the production build completes without errors; the diff contains no whitespace errors.
 
-- [ ] **Step 6: Inspect the rendered state**
+- [x] **Step 6: Inspect the rendered state**
 
 Open the Main window with at least one prompt and verify:
 
@@ -122,7 +122,9 @@ Open the Main window with at least one prompt and verify:
 
 If a hover screenshot cannot be captured reliably, record that specific item as manual-only rather than claiming automation.
 
-- [ ] **Step 7: Commit the implementation**
+Execution note: native screenshots captured the rest, hover, active, and editor-open states. The exact “新建提示词” `focus-visible` ring could not be stably targeted through the macOS automation environment; the unchanged shared focus rule remains covered statically and this runtime evidence gap is reported explicitly.
+
+- [x] **Step 7: Commit the implementation**
 
 ```bash
 git add src/tests/prompt-list-pane.test.ts src/styles/global.css docs/superpowers/plans/2026-10-15-new-prompt-button-visual-consistency.md
