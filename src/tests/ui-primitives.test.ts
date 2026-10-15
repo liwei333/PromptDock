@@ -9,12 +9,19 @@ import PdStatusMessage from "@/components/ui/PdStatusMessage.vue";
 
 describe("PromptDock UI primitives", () => {
   it("exposes variants, accessible icon names, and visible tooltips", async () => {
-    const button = mount(PdButton, {
-      props: { variant: "primary", disabled: true },
-      slots: { default: "复制" },
-    });
-    expect(button.get("button").attributes("data-variant")).toBe("primary");
-    expect(button.get("button").attributes()).toHaveProperty("disabled");
+    const variants = ["primary", "secondary", "ghost", "danger"] as const;
+
+    for (const variant of variants) {
+      const button = mount(PdButton, {
+        props: { variant, disabled: variant === "primary" },
+        slots: { default: "复制" },
+      });
+      expect(button.get("button").attributes("data-variant")).toBe(variant);
+      if (variant === "primary") {
+        expect(button.get("button").attributes()).toHaveProperty("disabled");
+      }
+      button.unmount();
+    }
 
     const icon = mount(PdIconButton, {
       attachTo: document.body,
@@ -26,7 +33,6 @@ describe("PromptDock UI primitives", () => {
     expect(document.body.textContent).toContain("复制提示词");
 
     icon.unmount();
-    button.unmount();
   });
 
   it("renders loading semantics, slots, and semantic status roles", () => {
