@@ -1,7 +1,7 @@
 # PromptDock 便签窗口控件精简设计
 
 **日期：** 2026-10-15  
-**状态：** 用户已确认交互方向，待用户复核
+**状态：** 用户已确认
 **范围：** `sticky` 独立便签窗口及其进入主窗口管理场景的定向导航；不改变快捷搜索窗口、SQLite 数据结构或主窗口管理能力
 
 ## 1. 背景与目标
@@ -48,7 +48,7 @@
 - 删除“管理”，避免与标题栏“切换到完整模式”重复；
 - 不再显示任何设置弹窗入口。
 
-“排序”虽然也会进入完整窗口，但它表达的是明确任务，不视为重复的通用入口。实现上扩展现有 `enter_main_mode` 调用，增加可选的强类型 intent `manage-sticky`：普通标题栏入口不传 intent，“排序”入口传入该 intent。Rust 在切窗前将 intent 写入一次性待处理状态，主窗口在挂载或重新获得焦点时原子消费，再打开现有 `StickyManagerDialog`。弹窗自身的排序、移除和刷新流程保持不变。
+“排序”虽然也会进入完整窗口，但它表达的是明确任务，不视为重复的通用入口。实现上扩展现有 `enter_main_mode` 调用，增加可选的强类型 intent `manage-sticky`：普通标题栏入口不传 intent，“排序”入口传入该 intent。Rust 在切窗前将带递增 ID 的 intent 写入一次性待处理状态；主窗口在挂载或重新获得焦点时先读取但不删除，成功打开或排队 `StickyManagerDialog` 后再按 ID 确认清除。弹窗自身的排序、移除和刷新流程保持不变。
 
 ## 3. 删除范围
 
@@ -91,17 +91,19 @@
 ### 4.3 进入完整窗口
 
 - 标题栏“切换到完整模式”调用 `enterMainMode()`，只切换到普通主窗口；
-- 底部“排序”调用 `enterMainMode("manage-sticky")`；Rust 在切窗前保存一次性 `pendingMainIntent`，主窗口通过 `take_main_intent` 原子读取并清除后打开现有 `StickyManagerDialog`；
+- 底部“排序”调用 `enterMainMode("manage-sticky")`；Rust 在切窗前保存带递增 ID 的一次性 `pendingMainIntent`，主窗口通过 `peek_main_intent` 读取但不清除，打开或排队现有 `StickyManagerDialog` 后再调用 `ack_main_intent(id)`；
 - 转换进行中沿用现有防重复、失败提示和卸载安全机制；
 - 两个入口共享同一切窗忙碌锁，连续点击或交叉点击只允许一个请求；
-- `pendingMainIntent` 使用 `tokio::sync::Mutex<Option<MainIntent>>`。带 intent 的命令先获取 pending-intent 锁，写入 intent，并在仍持有该锁时完成整个 `transition_to(..., Main).await`；切窗成功后保留 intent、释放锁并返回“导航已接受”，切窗失败则先清除 intent、再释放锁并沿用便签中的可见切窗错误；
-- `take_main_intent` 获取同一把 pending-intent 锁；若主窗口在切窗事务完成前获得焦点，消费请求必须等待。切窗成功后它只返回并消费一次 `manage-sticky`，切窗失败后只返回 `None`，不得打开或排队管理弹窗；
+- `pendingMainIntent` 使用 `tokio::sync::Mutex<MainIntentSlot>`；slot 包含递增 `next_id` 和至多一个 `{ id, intent }`。带 intent 的命令先获取 pending-intent 锁，分配新 ID、写入 pending，并在仍持有该锁时完成整个 `transition_to(..., Main).await`；切窗成功后保留 pending、释放锁并返回“导航已接受”，切窗失败则先清除本次 pending、再释放锁并沿用便签中的可见切窗错误；
+- `peek_main_intent` 获取同一把 pending-intent 锁，但只克隆当前 pending，不删除。若主窗口在切窗事务完成前获得焦点，读取请求必须等待；切窗成功后返回 `{ id, intent: "manage-sticky" }`，切窗失败后返回 `None`，不得打开或排队管理弹窗；
+- 主窗口完成本地打开或排队后调用 `ack_main_intent(id)`。只有 ID 与当前 pending 完全匹配时才清除并返回 `acknowledged: true`；旧确认不得清除后来到达的新请求；
 - 锁顺序固定为：带 intent 的路径先获取 pending-intent 锁，再由 `transition_to` 获取 `mode_transition` 锁；任何代码不得以相反顺序同时获取两把锁。普通无 intent 的 `enterMainMode()` 不创建、消费或清除已有的待重试 intent；
-- 主窗口必须在任何 `await store.load()` 之前同步注册浏览器 `focus` 监听，并立即调用一次 intent 消费；这样无论 focus 发生在组件挂载前还是后，持久于 Rust 进程内的 intent 都不会因一次事件丢失；
-- 主窗口的 intent 消费使用单飞忙碌锁；挂载与 focus 同时触发时不并发执行两个 `take_main_intent` 请求；
-- `take_main_intent` 失败时不清除 Rust 中的 intent，主窗口显示可访问错误“无法打开置顶排序，请重试”，并在下次获得焦点时重试；
-- 同一个 `manage-sticky` intent 只消费一次；如果管理弹窗已经打开，则幂等保持现有实例并将焦点留在该弹窗，不重复挂载；
-- 如果提示词编辑、导入预览、分类管理、运行信息或快捷面板已打开，则先保留当前操作，不叠加第二个模态焦点域。主窗口将已消费的 intent 记录为单个布尔排队状态，显示“关闭当前操作后将打开置顶排序”，并在当前阻断界面正常关闭后自动打开 `StickyManagerDialog`；重复 intent 合并为同一个排队请求；
+- 主窗口必须在任何 `await store.load()` 之前同步注册浏览器 `focus` 监听，并立即调用一次 intent 交付；这样无论 focus 发生在组件挂载前还是后，持久于 Rust 进程内的 intent 都不会因一次事件丢失；
+- 主窗口的 intent 交付使用单飞忙碌锁；挂载与 focus 同时触发时不并发执行两个 peek/ack 流程；
+- `peek_main_intent` 失败不会删除 pending；主窗口显示可访问错误“无法打开置顶排序，请重试”，并在下次获得焦点时重试；
+- `ack_main_intent` 失败或响应丢失时，pending 可能仍存在，也可能已清除。主窗口保留已打开/排队的幂等本地状态，在下次 focus 重新 peek：若仍返回同一 ID，则重复幂等处理并再次确认；若返回 `None`，视为先前确认已经生效；
+- 同一个 `manage-sticky` intent 在界面上只产生一个管理实例；如果管理弹窗已经打开，则幂等保持现有实例并将焦点留在该弹窗，不重复挂载；
+- 如果提示词编辑、导入预览、分类管理、运行信息或快捷面板已打开，则先保留当前操作，不叠加第二个模态焦点域。主窗口将已交付的 intent 记录为单个布尔排队状态，显示“关闭当前操作后将打开置顶排序”，并在当前阻断界面正常关闭后自动打开 `StickyManagerDialog`；重复 intent 合并为同一个排队请求；
 - 页面上不再出现底部“管理”或弹窗“打开完整窗口”。
 
 ### 4.4 始终置顶
@@ -133,7 +135,7 @@
 
 文档必须将 340×270 定义为精简模式尺寸，而不是唯一尺寸；双密度是两个受控尺寸，不等于开放任意窗口缩放。
 
-技术契约同时说明：`enter_main_mode` 接受可选枚举 intent；`take_main_intent` 原子消费一次性待处理 intent；`get_sticky_settings` / `set_sticky_settings` 包含 `density`、默认值与两个受控尺寸。该待处理 intent 只存在于 Rust 进程内，不写入 SQLite 或 `localStorage`，应用退出后无需恢复。
+技术契约同时说明：`enter_main_mode` 接受可选枚举 intent；`peek_main_intent` 非破坏性读取 `{ id, intent }`；`ack_main_intent(id)` 只确认匹配 ID；`get_sticky_settings` / `set_sticky_settings` 包含 `density`、默认值与两个受控尺寸。该待处理 intent 只存在于 Rust 进程内，不写入 SQLite 或 `localStorage`，应用退出后无需恢复。
 
 ## 7. 实现边界
 
@@ -155,7 +157,7 @@
 - `docs/product/UI_DESIGN_SPEC.md`
 - `docs/product/TECH_ARCHITECTURE.md`
 
-不新增第三方依赖，不修改数据库 schema，不改变主窗口管理弹窗的业务能力。现有 `enter_main_mode` 增加可选的强类型 intent；新增一个只读且原子消费的 `take_main_intent` 命令，用 Rust 进程内单槽状态保证切窗期间的 intent 不丢失。
+不新增第三方依赖，不修改数据库 schema，不改变主窗口管理弹窗的业务能力。现有 `enter_main_mode` 增加可选的强类型 intent；新增非破坏性 `peek_main_intent` 和匹配 ID 的 `ack_main_intent` 命令，用 Rust 进程内单槽状态保证切窗与 IPC 响应失败时 intent 不丢失或误删新请求。
 
 ## 8. 验收标准
 
@@ -182,13 +184,14 @@
 7. 组件卸载：迟到的初始化、密度成功或失败响应不再更新状态或错误；
 8. DOM 中不存在旧设置齿轮、设置 dialog、遮罩、底部“管理”和弹窗“打开完整窗口”；相关专用 CSS 选择器也已删除；
 9. 标题栏完整模式调用无 intent 的普通切窗；“排序”调用 `manage-sticky` intent；二者共享防重复锁；
-10. Rust 普通切窗不创建或误清除 intent；`manage-sticky` 在持有 pending-intent 锁期间完成切窗，成功后 `take_main_intent` 只消费一次，失败时清除后让并发 take 返回 `None`；intent 读取命令自身失败时保留待处理值；
-11. `store.load()` 延迟或 focus 早于组件挂载时，主窗口仍能在挂载/获得焦点的双触发中消费 intent 并打开 `StickyManagerDialog`；两个触发重叠时由单飞锁合并；
+10. Rust 普通切窗不创建或误清除 intent；`manage-sticky` 在持有 pending-intent 锁期间完成切窗，失败时清除后让并发 peek 返回 `None`；成功时 peek 非破坏性返回同一 ID，只有匹配 ID 的 ack 才清除；
+11. `store.load()` 延迟或 focus 早于组件挂载时，主窗口仍能在挂载/获得焦点的双触发中交付 intent 并打开 `StickyManagerDialog`；两个触发重叠时由单飞锁合并；
 12. 主窗口 intent 读取失败时在可见主窗口显示错误并保留重试机会；组件卸载后不响应 focus，也不更新界面；
 13. 已有编辑、导入、分类管理、运行信息或快捷面板时只排队一个排序 intent，关闭当前界面后才打开管理弹窗；管理弹窗已经打开时不重复挂载；
-14. Rust 成功竞态：暂停窗口切换并并发调用 `take_main_intent`，take 在切窗结束前保持等待，成功后只返回一次 `manage-sticky`；
-15. Rust 失败竞态：暂停窗口切换并先发起 take，再让切窗失败；take 最终返回 `None`，主窗口不打开也不排队管理弹窗；
-16. 原生 `.app` 手工验证：420×695 与 340×270 下三个标题栏按钮、底栏、焦点、tooltip 和错误提示均无裁切，并验证双向切换及重启持久化。不得用 jsdom 布局断言替代该项。
+14. Rust 成功竞态：暂停窗口切换并并发调用 `peek_main_intent`，peek 在切窗结束前保持等待，成功后稳定返回同一个带 ID 的 `manage-sticky`，匹配 ack 后才变为 `None`；
+15. Rust 失败竞态：暂停窗口切换并先发起 peek，再让切窗失败；peek 最终返回 `None`，主窗口不打开也不排队管理弹窗；
+16. Rust 确认安全：读取本身不清除，错误/旧 ID 的 ack 不清除当前 pending，匹配 ack 只清除一次；前端 peek 或 ack 拒绝后可通过下一次 focus 幂等重试；
+17. 原生 `.app` 手工验证：420×695 与 340×270 下三个标题栏按钮、底栏、焦点、tooltip 和错误提示均无裁切，并验证双向切换及重启持久化。不得用 jsdom 布局断言替代该项。
 
 ## 9. 备选方案与决策
 
