@@ -325,6 +325,50 @@ describe("V3 workbench filter presentation", () => {
     expect(document.body.querySelector('[role="listbox"]')).toBeNull();
   });
 
+  it("keeps a stale active tag visible and clearable when tag metadata is empty", async () => {
+    const query: PromptQuery = {
+      view: "all",
+      tab: "all",
+      sort: "recent",
+      tag: "已失效标签",
+    };
+    const tags: string[] = [];
+    const wrapper = mountFilters(query, tags);
+    const tagTrigger = wrapper.get(
+      'button[role="combobox"][aria-label="标签筛选"]',
+    );
+
+    expect(tagTrigger.attributes()).not.toHaveProperty("disabled");
+    expect(tagTrigger.text()).toContain("已失效标签");
+
+    await tagTrigger.trigger("keydown", { key: "Enter", code: "Enter" });
+    await settleInteraction();
+
+    const options = Array.from(
+      document.body.querySelectorAll<HTMLElement>('[role="option"]'),
+    );
+    expect(options.map((option) => option.textContent?.trim())).toContain(
+      "已失效标签",
+    );
+    const clearOption = options.find(
+      (option) => option.textContent?.trim() === "全部标签",
+    );
+    expect(clearOption).toBeDefined();
+    clearOption!.dispatchEvent(
+      new MouseEvent("pointerup", { bubbles: true, button: 0 }),
+    );
+    await settleInteraction();
+
+    expect(wrapper.emitted("change")).toEqual([[{ tag: undefined }]]);
+    expect(query).toEqual({
+      view: "all",
+      tab: "all",
+      sort: "recent",
+      tag: "已失效标签",
+    });
+    expect(tags).toEqual([]);
+  });
+
   it("opens category management without leaking its sentinel into query patches", async () => {
     const wrapper = mountFilters();
 

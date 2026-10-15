@@ -41,9 +41,14 @@ const categoryOptions = computed<PdSelectOption[]>(() => [
   })),
   { value: "__manage__", label: "管理分类…" },
 ]);
-const tagOptions = computed<PdSelectOption[]>(() =>
-  props.tags.map((tag) => ({ value: tag, label: tag })),
-);
+const tagOptions = computed<PdSelectOption[]>(() => {
+  const options = props.tags.map((tag) => ({ value: tag, label: tag }));
+  const activeTag = props.query.tag;
+  if (activeTag && !props.tags.includes(activeTag)) {
+    return [{ value: activeTag, label: activeTag }, ...options];
+  }
+  return options;
+});
 const sortOptions: PdSelectOption[] = [
   { value: "recent", label: "最近更新" },
   { value: "popular", label: "最常使用" },
@@ -93,7 +98,7 @@ const hasActiveFilters = computed(
       clear-label="全部标签"
       :model-value="query.tag ?? ''"
       :options="tagOptions"
-      :disabled="tags.length === 0"
+      :disabled="tags.length === 0 && !query.tag"
       @update:model-value="$emit('change', { tag: optional($event) })"
     />
     <PdToggle
