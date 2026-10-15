@@ -34,20 +34,26 @@ export const usePromptStore = defineStore("prompts", () => {
   const loading = ref(false);
   const error = ref<string | null>(null);
   const pinned = computed(() => sticky.value);
+  let latestLoadRequest = 0;
 
   async function load(nextQuery?: PromptQuery): Promise<void> {
-    if (nextQuery) query.value = { ...query.value, ...nextQuery };
+    const request = ++latestLoadRequest;
+    const querySnapshot = nextQuery
+      ? { ...query.value, ...nextQuery }
+      : { ...query.value };
+    if (nextQuery) query.value = querySnapshot;
     loading.value = true;
     error.value = null;
     try {
       const [page, categoryRows, dashboard, stickyRows, tagRows] =
         await Promise.all([
-          promptApi.list({ ...query.value, limit: 200 }),
+          promptApi.list({ ...querySnapshot, limit: 200 }),
           categoryApi.list(),
           promptApi.stats(),
           promptApi.listSticky(),
           promptApi.listTags(),
         ]);
+      if (request !== latestLoadRequest) return;
       prompts.value = page.items;
       total.value = page.total;
       categories.value = categoryRows;
@@ -55,9 +61,9 @@ export const usePromptStore = defineStore("prompts", () => {
       sticky.value = stickyRows;
       tags.value = tagRows;
     } catch (reason) {
-      error.value = messageOf(reason);
+      if (request === latestLoadRequest) error.value = messageOf(reason);
     } finally {
-      loading.value = false;
+      if (request === latestLoadRequest) loading.value = false;
     }
   }
 

@@ -54,7 +54,9 @@ const toast = ref<{ text: string; kind: "success" | "error" } | null>(null);
 let stopListening: (() => void) | null = null;
 let searchTimer: ReturnType<typeof setTimeout> | null = null;
 let copySuccessTimer: ReturnType<typeof setTimeout> | null = null;
+let toastTimer: ReturnType<typeof setTimeout> | null = null;
 let latestCopyRequest = 0;
+let disposed = false;
 
 watch(
   () => store.prompts.map((prompt) => prompt.id).join("|"),
@@ -72,9 +74,12 @@ watch(
 );
 
 function notify(text: string, kind: "success" | "error" = "success"): void {
+  if (disposed) return;
+  if (toastTimer) window.clearTimeout(toastTimer);
   toast.value = { text, kind };
-  window.setTimeout(() => {
-    if (toast.value?.text === text) toast.value = null;
+  toastTimer = window.setTimeout(() => {
+    if (!disposed && toast.value?.text === text) toast.value = null;
+    toastTimer = null;
   }, 2600);
 }
 
@@ -84,10 +89,11 @@ function selectPrompt(prompt: Prompt): void {
 }
 
 function markCopied(promptId: string): void {
+  if (disposed) return;
   if (copySuccessTimer) window.clearTimeout(copySuccessTimer);
   copiedId.value = promptId;
   copySuccessTimer = window.setTimeout(() => {
-    if (copiedId.value === promptId) copiedId.value = null;
+    if (!disposed && copiedId.value === promptId) copiedId.value = null;
     copySuccessTimer = null;
   }, 1200);
 }
@@ -129,6 +135,7 @@ async function copy(prompt: Prompt): Promise<void> {
   copyingId.value = prompt.id;
   try {
     const result = await copyPromptText({ id: prompt.id, text: prompt.body });
+    if (disposed) return;
     if (request === latestCopyRequest) {
       if (copyingId.value === prompt.id) copyingId.value = null;
       markCopied(prompt.id);
@@ -141,14 +148,18 @@ async function copy(prompt: Prompt): Promise<void> {
     }
     await store.load();
   } catch (reason) {
-    if (request === latestCopyRequest) {
+    if (!disposed && request === latestCopyRequest) {
       notify(
         reason instanceof Error ? reason.message : "剪贴板写入失败",
         "error",
       );
     }
   } finally {
-    if (request === latestCopyRequest && copyingId.value === prompt.id) {
+    if (
+      !disposed &&
+      request === latestCopyRequest &&
+      copyingId.value === prompt.id
+    ) {
       copyingId.value = null;
     }
   }
@@ -351,15 +362,33 @@ function keydown(event: KeyboardEvent): void {
 onMounted(async () => {
   window.addEventListener("keydown", keydown);
   await store.load();
+  if (disposed) return;
   if ("__TAURI_INTERNALS__" in window) {
-    stopListening = await listen("prompts-changed", () => void store.load());
+    const unlisten = await listen("prompts-changed", () => {
+      if (!disposed) void store.load();
+    });
+    if (disposed) unlisten();
+    else stopListening = unlisten;
   }
 });
 onBeforeUnmount(() => {
+  disposed = true;
+  latestCopyRequest += 1;
   window.removeEventListener("keydown", keydown);
   stopListening?.();
-  if (searchTimer) window.clearTimeout(searchTimer);
-  if (copySuccessTimer) window.clearTimeout(copySuccessTimer);
+  stopListening = null;
+  if (searchTimer) {
+    window.clearTimeout(searchTimer);
+    searchTimer = null;
+  }
+  if (copySuccessTimer) {
+    window.clearTimeout(copySuccessTimer);
+    copySuccessTimer = null;
+  }
+  if (toastTimer) {
+    window.clearTimeout(toastTimer);
+    toastTimer = null;
+  }
 });
 </script>
 

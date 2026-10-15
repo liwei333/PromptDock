@@ -289,6 +289,24 @@ describe("category and raw-copy regressions", () => {
     expect(wrapper.get(".v3-detail-actions").text()).not.toMatch(/[▣✎＋⇩]/u);
   });
 
+  it("exposes the detail pin state as a labelled image", async () => {
+    const wrapper = mount(PromptDetailPane, {
+      props: { prompt: invalidTemplatePrompt },
+    });
+
+    const pinState = wrapper.get(".detail-pin");
+    expect(pinState.attributes("role")).toBe("img");
+    expect(pinState.attributes("aria-label")).toBe("已加入便签");
+    expect(pinState.get("svg").attributes("aria-hidden")).toBe("true");
+
+    await wrapper.setProps({
+      prompt: { ...invalidTemplatePrompt, isPinned: false, pinOrder: null },
+    });
+    expect(wrapper.get(".detail-pin").attributes("aria-label")).toBe(
+      "未加入便签",
+    );
+  });
+
   it("copies an invalid template from sticky mode as original text", async () => {
     promptApi.listSticky.mockResolvedValue([invalidTemplatePrompt]);
     const wrapper = mount(StickyWindow);

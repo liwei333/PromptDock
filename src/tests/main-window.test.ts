@@ -8,6 +8,7 @@ const {
   backupApi,
   categoryApi,
   copyPromptText,
+  listen,
   pinnedPrompt,
   promptApi,
   secondPrompt,
@@ -52,6 +53,7 @@ const {
       delete: vi.fn(),
     },
     copyPromptText: vi.fn(),
+    listen: vi.fn(),
     promptApi: {
       list: vi.fn(),
       listTags: vi.fn(),
@@ -77,6 +79,8 @@ vi.mock("@/api/commands", () => ({
   promptApi,
   windowApi,
 }));
+
+vi.mock("@tauri-apps/api/event", () => ({ listen }));
 
 vi.mock("@/services/clipboard", () => ({ copyPromptText }));
 
@@ -188,12 +192,15 @@ describe("MainWindow V3 workbench", () => {
       promptCount: 0,
     });
     copyPromptText.mockResolvedValue(successfulCopyResult());
+    listen.mockResolvedValue(() => undefined);
     windowApi.enterStickyMode.mockResolvedValue({ mode: "sticky" });
   });
 
   afterEach(() => {
     vi.useRealTimers();
     document.body.replaceChildren();
+    delete (window as typeof window & { __TAURI_INTERNALS__?: unknown })
+      .__TAURI_INTERNALS__;
   });
 
   it("renders labelled SVG rail actions with selection state and a focus tooltip", async () => {
@@ -397,13 +404,28 @@ describe("MainWindow V3 workbench", () => {
       const listPane = wrapper.findComponent(PromptListPane);
       expect(listPane.props("copyingId")).toBeNull();
       expect(listPane.props("copiedId")).toBe(pinnedPrompt.id);
+      const visibleCopy = wrapper.findAll("[data-test='list-copy']")[0];
+      expect(visibleCopy.exists()).toBe(true);
+      expect(visibleCopy.attributes("disabled")).toBeUndefined();
+      expect(visibleCopy.attributes("aria-busy")).toBeUndefined();
+      expect(visibleCopy.attributes("aria-label")).toBe("已复制");
+      expect(visibleCopy.get("svg").classes()).toContain("lucide-check");
+      expect(wrapper.get(".v3-prompt-list").attributes("aria-busy")).toBe(
+        "true",
+      );
       expect(wrapper.find(".toast svg").exists()).toBe(true);
       expect(wrapper.get(".toast").text()).not.toMatch(/[✓!]/u);
 
       await vi.advanceTimersByTimeAsync(1199);
       expect(listPane.props("copiedId")).toBe(pinnedPrompt.id);
+      expect(
+        wrapper.findAll("[data-test='list-copy']")[0].attributes("aria-label"),
+      ).toBe("已复制");
       await vi.advanceTimersByTimeAsync(1);
       expect(listPane.props("copiedId")).toBeNull();
+      expect(
+        wrapper.findAll("[data-test='list-copy']")[0].attributes("aria-label"),
+      ).toBe("复制提示词");
 
       reload.resolve({ items: [pinnedPrompt], total: 1 });
       await flushPromises();
@@ -759,6 +781,79 @@ describe("MainWindow V3 workbench", () => {
       if (!unmounted) wrapper.unmount();
       warn.mockRestore();
     }
+  });
+
+  it("ignores a pending clipboard success after MainWindow unmounts", async () => {
+    vi.useFakeTimers();
+    promptApi.list.mockResolvedValue({ items: [pinnedPrompt], total: 1 });
+    const pending = deferred<CopyResult>();
+    copyPromptText.mockReturnValueOnce(pending.promise);
+    const wrapper = await mountMainWindow();
+    const { setupState } = wrapper.vm.$ as unknown as {
+      setupState: {
+        copiedId: string | null;
+        copyingId: string | null;
+        toast: { text: string } | null;
+      };
+    };
+
+    await wrapper.get("[data-test='list-copy']").trigger("click");
+    expect(setupState.copyingId).toBe(pinnedPrompt.id);
+    expect(promptApi.list).toHaveBeenCalledTimes(1);
+    wrapper.unmount();
+
+    pending.resolve(successfulCopyResult());
+    await flushPromises();
+
+    expect(setupState.copyingId).toBe(pinnedPrompt.id);
+    expect(setupState.copiedId).toBeNull();
+    expect(setupState.toast).toBeNull();
+    expect(promptApi.list).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("ignores a pending clipboard rejection after MainWindow unmounts", async () => {
+    vi.useFakeTimers();
+    promptApi.list.mockResolvedValue({ items: [pinnedPrompt], total: 1 });
+    const pending = deferred<CopyResult>();
+    copyPromptText.mockReturnValueOnce(pending.promise);
+    const wrapper = await mountMainWindow();
+    const { setupState } = wrapper.vm.$ as unknown as {
+      setupState: {
+        copiedId: string | null;
+        copyingId: string | null;
+        toast: { text: string } | null;
+      };
+    };
+
+    await wrapper.get("[data-test='list-copy']").trigger("click");
+    wrapper.unmount();
+    pending.reject(new Error("late clipboard failure"));
+    await flushPromises();
+
+    expect(setupState.copyingId).toBe(pinnedPrompt.id);
+    expect(setupState.copiedId).toBeNull();
+    expect(setupState.toast).toBeNull();
+    expect(promptApi.list).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("immediately removes a listener whose registration finishes after unmount", async () => {
+    const registration = deferred<() => void>();
+    const unlisten = vi.fn();
+    listen.mockReturnValueOnce(registration.promise);
+    Object.defineProperty(window, "__TAURI_INTERNALS__", {
+      configurable: true,
+      value: {},
+    });
+    const wrapper = await mountMainWindow();
+
+    expect(listen).toHaveBeenCalledOnce();
+    wrapper.unmount();
+    registration.resolve(unlisten);
+    await flushPromises();
+
+    expect(unlisten).toHaveBeenCalledOnce();
   });
 
   it("renders low-emphasis status actions with SVG icons and preserves handlers", async () => {

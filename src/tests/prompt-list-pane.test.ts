@@ -35,27 +35,47 @@ describe("PromptListPane", () => {
     );
   });
 
-  it("uses listbox selection semantics and keeps row actions independent", async () => {
+  it("uses table selection semantics with an independent row selection button", async () => {
     const wrapper = mount(PromptListPane, {
       props: { prompts: [prompt], selectedId: prompt.id, total: 1 },
     });
 
-    expect(wrapper.get(".v3-prompt-list").attributes("role")).toBe("listbox");
-    const row = wrapper.get("[data-test='prompt-list-row']");
+    expect(wrapper.get(".v3-prompt-list").attributes("role")).toBe("table");
+    const row = wrapper.get(".v3-prompt-row.selected[aria-selected='true']");
     expect(row.classes()).toContain("selected");
-    expect(row.attributes("role")).toBe("option");
+    expect(row.attributes("role")).toBe("row");
     expect(row.attributes("aria-selected")).toBe("true");
+    expect(
+      Array.from(row.element.children).every(
+        (child) => child.getAttribute("role") === "cell",
+      ),
+    ).toBe(true);
     expect(row.text()).toContain(prompt.title);
     expect(row.text()).toContain("开发工具");
     expect(row.text()).toContain("复制 26 次");
 
-    await row.trigger("click");
-    await row.trigger("keydown", { key: "Enter" });
     await wrapper.get("[data-test='list-copy']").trigger("click");
     await wrapper.get("[data-test='list-favorite']").trigger("click");
     await wrapper.get("[data-test='list-pin']").trigger("click");
+    expect(wrapper.emitted("select")).toBeUndefined();
 
-    expect(wrapper.emitted("select")).toEqual([[prompt], [prompt]]);
+    const select = wrapper.get<HTMLButtonElement>(
+      "[data-test='prompt-row-select']",
+    );
+    expect(select.element.tagName).toBe("BUTTON");
+    expect(select.attributes("aria-label")).toBe(`选择提示词：${prompt.title}`);
+    expect(select.element.tabIndex).toBe(0);
+    await select.trigger("click");
+    await select.trigger("keydown", { key: "Enter" });
+    await select.trigger("keydown", { key: " " });
+    await row.trigger("click");
+
+    expect(wrapper.emitted("select")).toEqual([
+      [prompt],
+      [prompt],
+      [prompt],
+      [prompt],
+    ]);
     expect(wrapper.emitted("copy")).toEqual([[prompt]]);
     expect(wrapper.emitted("favorite")).toEqual([[prompt]]);
     expect(wrapper.emitted("pin")).toEqual([[prompt]]);
@@ -104,6 +124,32 @@ describe("PromptListPane", () => {
     const copied = wrapper.get("[data-test='list-copy']");
     expect(copied.attributes("disabled")).toBeUndefined();
     expect(copied.attributes("aria-label")).toBe("已复制");
+  });
+
+  it("keeps existing rows during background loading and exposes non-destructive errors", async () => {
+    const wrapper = mount(PromptListPane, {
+      props: {
+        prompts: [prompt],
+        selectedId: prompt.id,
+        total: 1,
+        loading: true,
+        error: "后台刷新失败",
+        copiedId: prompt.id,
+      },
+    });
+
+    const table = wrapper.get(".v3-prompt-list");
+    expect(table.attributes("aria-busy")).toBe("true");
+    expect(
+      wrapper.get("[data-test='list-copy']").attributes("aria-label"),
+    ).toBe("已复制");
+    expect(
+      wrapper.get("[data-test='list-refresh-error']").attributes("role"),
+    ).toBe("alert");
+    expect(wrapper.text()).toContain("后台刷新失败");
+
+    await wrapper.get("[data-test='list-refresh-retry']").trigger("click");
+    expect(wrapper.emitted("retry")).toEqual([[]]);
   });
 
   it("exposes category management, new prompt, and empty-state actions", async () => {

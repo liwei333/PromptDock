@@ -77,6 +77,7 @@ const updatedLabel = computed(() =>
         <span
           class="detail-pin"
           :class="{ active: prompt!.isPinned }"
+          role="img"
           :aria-label="prompt!.isPinned ? '已加入便签' : '未加入便签'"
           ><Pin v-if="prompt!.isPinned" aria-hidden="true" />
           <PinOff v-else aria-hidden="true"
