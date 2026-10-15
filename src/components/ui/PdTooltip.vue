@@ -18,6 +18,10 @@ withDefaults(
     skipDelayDuration: 300,
   },
 );
+
+defineEmits<{
+  escape: [event: KeyboardEvent];
+}>();
 </script>
 
 <template>
@@ -31,7 +35,11 @@ withDefaults(
         <slot />
       </TooltipTrigger>
       <TooltipPortal>
-        <TooltipContent class="pd-tooltip-content" :side-offset="6">
+        <TooltipContent
+          class="pd-tooltip-content"
+          :side-offset="6"
+          @escape-key-down="$emit('escape', $event)"
+        >
           {{ text }}
         </TooltipContent>
       </TooltipPortal>

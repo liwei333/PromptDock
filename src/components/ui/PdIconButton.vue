@@ -26,11 +26,12 @@ withDefaults(
 
 defineEmits<{
   click: [event: MouseEvent];
+  tooltipEscape: [event: KeyboardEvent];
 }>();
 </script>
 
 <template>
-  <PdTooltip :text="tooltip ?? label">
+  <PdTooltip :text="tooltip ?? label" @escape="$emit('tooltipEscape', $event)">
     <button
       v-bind="attrs"
       class="pd-icon-button"

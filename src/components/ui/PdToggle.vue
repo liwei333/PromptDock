@@ -2,11 +2,18 @@
 import { type Component } from "vue";
 import { Toggle } from "reka-ui";
 
-defineProps<{
-  pressed: boolean;
-  label: string;
-  icon?: Component;
-}>();
+withDefaults(
+  defineProps<{
+    pressed: boolean;
+    label: string;
+    icon?: Component;
+    disabled?: boolean;
+  }>(),
+  {
+    icon: undefined,
+    disabled: false,
+  },
+);
 
 defineEmits<{
   "update:pressed": [value: boolean];
@@ -18,6 +25,7 @@ defineEmits<{
     class="pd-toggle"
     type="button"
     :model-value="pressed"
+    :disabled="disabled"
     :aria-label="label"
     @update:model-value="$emit('update:pressed', $event)"
   >

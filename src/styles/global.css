@@ -173,7 +173,7 @@ select {
     border-color var(--pd-motion-fast) ease,
     background var(--pd-motion-fast) ease;
 }
-.pd-toggle:hover {
+.pd-toggle:hover:not(:disabled) {
   color: var(--pd-text);
   background: var(--pd-surface-hover);
 }

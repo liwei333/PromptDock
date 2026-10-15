@@ -20,8 +20,12 @@ import {
   SelectValue,
   SelectViewport,
 } from "reka-ui";
+import { computed, useAttrs } from "vue";
 
-withDefaults(
+defineOptions({ inheritAttrs: false });
+
+const attrs = useAttrs();
+const props = withDefaults(
   defineProps<{
     modelValue: string;
     label: string;
@@ -33,6 +37,9 @@ withDefaults(
     placeholder: "请选择",
     disabled: false,
   },
+);
+const validOptions = computed(() =>
+  props.options.filter((option) => option.value !== ""),
 );
 
 const emit = defineEmits<{
@@ -50,7 +57,12 @@ function updateValue(value: string): void {
     :disabled="disabled"
     @update:model-value="updateValue"
   >
-    <SelectTrigger class="pd-select-trigger" type="button" :aria-label="label">
+    <SelectTrigger
+      v-bind="attrs"
+      class="pd-select-trigger"
+      type="button"
+      :aria-label="label"
+    >
       <SelectValue :placeholder="placeholder" />
       <SelectIcon class="pd-select-trigger__icon">
         <ChevronDown aria-hidden="true" />
@@ -67,7 +79,7 @@ function updateValue(value: string): void {
       >
         <SelectViewport class="pd-select-viewport">
           <SelectItem
-            v-for="option in options"
+            v-for="option in validOptions"
             :key="option.value"
             class="pd-select-item"
             :value="option.value"

@@ -9,10 +9,13 @@ import {
   DialogRoot,
   DialogTitle,
 } from "reka-ui";
-import { computed, onBeforeUnmount, useSlots } from "vue";
+import { computed, onBeforeUnmount, useAttrs, useSlots, watch } from "vue";
 
 import PdIconButton from "@/components/ui/PdIconButton.vue";
 
+defineOptions({ inheritAttrs: false });
+
+const attrs = useAttrs();
 const props = withDefaults(
   defineProps<{
     open: boolean;
@@ -36,18 +39,33 @@ const slots = useSlots();
 const resolvedCloseLabel = computed(
   () => props.closeLabel ?? `关闭${props.title}`,
 );
-const contentAccessibilityAttrs = computed(() =>
-  props.description ? {} : { "aria-describedby": undefined },
-);
-const returnFocusTarget =
-  document.activeElement instanceof HTMLElement ? document.activeElement : null;
-let focusRestorationQueued = false;
+let returnFocusTarget: HTMLElement | null = null;
+let focusRestorationNeeded = false;
+let dismissRequested = false;
+
+function getContentAttrs(): Record<string, unknown> {
+  return {
+    ...attrs,
+    ...(props.description || attrs["aria-describedby"] !== undefined
+      ? {}
+      : { "aria-describedby": undefined }),
+  };
+}
+
+function captureFocusTarget(): void {
+  returnFocusTarget =
+    document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+  focusRestorationNeeded = true;
+}
 
 function queueFocusRestoration(): void {
-  if (focusRestorationQueued) return;
-  focusRestorationQueued = true;
+  if (!focusRestorationNeeded) return;
+  focusRestorationNeeded = false;
+  const target = returnFocusTarget;
   queueMicrotask(() => {
-    if (returnFocusTarget?.isConnected) returnFocusTarget.focus();
+    if (target?.isConnected) target.focus();
   });
 }
 
@@ -56,13 +74,35 @@ function restoreFocus(event: Event): void {
   queueFocusRestoration();
 }
 
+function requestDismiss(): void {
+  if (dismissRequested) return;
+  dismissRequested = true;
+  emit("dismiss");
+  queueMicrotask(() => {
+    dismissRequested = false;
+  });
+}
+
 function handleOpenChange(open: boolean): void {
-  if (!open && props.open) emit("dismiss");
+  if (!open && props.open) requestDismiss();
+}
+
+function handleTooltipEscape(): void {
+  requestDismiss();
 }
 
 function handlePointerDownOutside(event: Event): void {
   if (!props.closeOnOutside) event.preventDefault();
 }
+
+watch(
+  () => props.open,
+  (open, wasOpen) => {
+    if (open && !wasOpen) captureFocusTarget();
+    if (!open && wasOpen) queueFocusRestoration();
+  },
+  { immediate: true },
+);
 
 onBeforeUnmount(queueFocusRestoration);
 </script>
@@ -72,7 +112,7 @@ onBeforeUnmount(queueFocusRestoration);
     <DialogPortal>
       <DialogOverlay class="pd-dialog-overlay" />
       <DialogContent
-        v-bind="contentAccessibilityAttrs"
+        v-bind="getContentAttrs()"
         class="pd-dialog-content"
         @close-auto-focus="restoreFocus"
         @pointer-down-outside="handlePointerDownOutside"
@@ -99,6 +139,7 @@ onBeforeUnmount(queueFocusRestoration);
             class="pd-dialog-close"
             :label="resolvedCloseLabel"
             :icon="X"
+            @tooltip-escape="handleTooltipEscape"
           />
         </DialogClose>
       </DialogContent>
