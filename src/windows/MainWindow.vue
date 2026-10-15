@@ -127,13 +127,16 @@ async function copy(prompt: Prompt): Promise<void> {
   copyingId.value = prompt.id;
   try {
     const result = await copyPromptText({ id: prompt.id, text: prompt.body });
+    if (copyingId.value === prompt.id) {
+      copyingId.value = null;
+      markCopied(prompt.id);
+    }
     notify(
       result.status === "copied"
         ? "完整正文已复制"
         : "已复制，但使用次数暂未更新",
       result.status === "copied" ? "success" : "error",
     );
-    markCopied(prompt.id);
     await store.load();
   } catch (reason) {
     notify(
@@ -141,7 +144,7 @@ async function copy(prompt: Prompt): Promise<void> {
       "error",
     );
   } finally {
-    copyingId.value = null;
+    if (copyingId.value === prompt.id) copyingId.value = null;
   }
 }
 

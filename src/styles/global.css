@@ -1819,7 +1819,7 @@ kbd {
 }
 .v3-prompt-row.selected {
   background: var(--pd-surface-selected);
-  box-shadow: inset 3px 0 var(--pd-accent);
+  box-shadow: inset 2px 0 var(--pd-accent);
 }
 .prompt-kind {
   display: grid;

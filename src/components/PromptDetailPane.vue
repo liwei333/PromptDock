@@ -9,6 +9,7 @@ import {
   Pin,
   PinOff,
   Plus,
+  TriangleAlert,
 } from "lucide-vue-next";
 import { computed } from "vue";
 
@@ -88,6 +89,7 @@ const updatedLabel = computed(() =>
         v-if="template?.error"
         class="template-error"
         tone="danger"
+        :icon="TriangleAlert"
         :message="`${template.error.message}。复制时将保留原始占位符。`"
       />
       <section class="v3-body-preview">

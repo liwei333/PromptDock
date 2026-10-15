@@ -82,6 +82,7 @@ vi.mock("@/services/clipboard", () => ({ copyPromptText }));
 
 import MainWindow from "@/windows/MainWindow.vue";
 import DashboardStatCards from "@/components/DashboardStatCards.vue";
+import PromptListPane from "@/components/PromptListPane.vue";
 import WorkbenchIconRail from "@/components/WorkbenchIconRail.vue";
 
 const STICKY_ENTRY_SELECTOR = "[data-test='rail-sticky-mode']";
@@ -367,17 +368,22 @@ describe("MainWindow V3 workbench", () => {
     }
   });
 
-  it("keeps copy pending separate from copied success and clears success after 1.2 seconds", async () => {
+  it("starts the full copied interval before a slow prompt reload finishes", async () => {
     vi.useFakeTimers();
     promptApi.list.mockResolvedValue({
       items: [pinnedPrompt, secondPrompt],
       total: 2,
     });
     const pending = deferred<CopyResult>();
+    const reload = deferred<{
+      items: (typeof pinnedPrompt)[];
+      total: number;
+    }>();
     copyPromptText.mockReturnValueOnce(pending.promise);
     const wrapper = await mountMainWindow();
 
     try {
+      promptApi.list.mockReturnValueOnce(reload.promise);
       await wrapper.findAll("[data-test='list-copy']")[0].trigger("click");
       await wrapper.vm.$nextTick();
 
@@ -388,19 +394,21 @@ describe("MainWindow V3 workbench", () => {
       pending.resolve(successfulCopyResult());
       await flushPromises();
 
-      firstCopy = wrapper.findAll("[data-test='list-copy']")[0];
-      expect(firstCopy.attributes("disabled")).toBeUndefined();
-      expect(firstCopy.attributes("aria-label")).toBe("已复制");
+      const listPane = wrapper.findComponent(PromptListPane);
+      expect(listPane.props("copyingId")).toBeNull();
+      expect(listPane.props("copiedId")).toBe(pinnedPrompt.id);
       expect(wrapper.find(".toast svg").exists()).toBe(true);
       expect(wrapper.get(".toast").text()).not.toMatch(/[✓!]/u);
 
       await vi.advanceTimersByTimeAsync(1199);
-      expect(
-        wrapper.findAll("[data-test='list-copy']")[0].attributes("aria-label"),
-      ).toBe("已复制");
+      expect(listPane.props("copiedId")).toBe(pinnedPrompt.id);
       await vi.advanceTimersByTimeAsync(1);
+      expect(listPane.props("copiedId")).toBeNull();
+
+      reload.resolve({ items: [pinnedPrompt], total: 1 });
+      await flushPromises();
       expect(
-        wrapper.findAll("[data-test='list-copy']")[0].attributes("aria-label"),
+        wrapper.get("[data-test='list-copy']").attributes("aria-label"),
       ).toBe("复制提示词");
     } finally {
       wrapper.unmount();
@@ -506,6 +514,130 @@ describe("MainWindow V3 workbench", () => {
         wrapper.findAll("[data-test='list-copy']")[1].attributes("aria-label"),
       ).toBe("已复制");
       await vi.advanceTimersByTimeAsync(600);
+      expect(
+        wrapper.findAll("[data-test='list-copy']")[1].attributes("aria-label"),
+      ).toBe("复制提示词");
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
+  it("keeps the newer prompt pending when an older copy resolves", async () => {
+    vi.useFakeTimers();
+    promptApi.list.mockResolvedValue({
+      items: [pinnedPrompt, secondPrompt],
+      total: 2,
+    });
+    const olderCopy = deferred<CopyResult>();
+    const newerCopy = deferred<CopyResult>();
+    copyPromptText
+      .mockReturnValueOnce(olderCopy.promise)
+      .mockReturnValueOnce(newerCopy.promise);
+    const wrapper = await mountMainWindow();
+
+    try {
+      await wrapper.findAll("[data-test='list-copy']")[0].trigger("click");
+      await wrapper.findAll("[data-test='list-copy']")[1].trigger("click");
+
+      olderCopy.resolve(successfulCopyResult());
+      await flushPromises();
+
+      expect(
+        wrapper.findAll("[data-test='list-copy']")[0].attributes("aria-label"),
+      ).toBe("复制提示词");
+      expect(
+        wrapper.findAll("[data-test='list-copy']")[1].attributes("disabled"),
+      ).toBeDefined();
+      expect(
+        wrapper.findAll("[data-test='list-copy']")[1].attributes("aria-busy"),
+      ).toBe("true");
+
+      newerCopy.resolve(successfulCopyResult(2));
+      await flushPromises();
+      expect(
+        wrapper.findAll("[data-test='list-copy']")[1].attributes("aria-label"),
+      ).toBe("已复制");
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
+  it("keeps the newer prompt pending when an older copy rejects", async () => {
+    vi.useFakeTimers();
+    promptApi.list.mockResolvedValue({
+      items: [pinnedPrompt, secondPrompt],
+      total: 2,
+    });
+    const olderCopy = deferred<CopyResult>();
+    const newerCopy = deferred<CopyResult>();
+    copyPromptText
+      .mockReturnValueOnce(olderCopy.promise)
+      .mockReturnValueOnce(newerCopy.promise);
+    const wrapper = await mountMainWindow();
+
+    try {
+      await wrapper.findAll("[data-test='list-copy']")[0].trigger("click");
+      await wrapper.findAll("[data-test='list-copy']")[1].trigger("click");
+
+      olderCopy.reject(new Error("older clipboard failure"));
+      await flushPromises();
+
+      expect(
+        wrapper.findAll("[data-test='list-copy']")[1].attributes("disabled"),
+      ).toBeDefined();
+      expect(
+        wrapper.findAll("[data-test='list-copy']")[1].attributes("aria-busy"),
+      ).toBe("true");
+
+      newerCopy.resolve(successfulCopyResult(2));
+      await flushPromises();
+      expect(
+        wrapper.findAll("[data-test='list-copy']")[1].attributes("aria-label"),
+      ).toBe("已复制");
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
+  it("does not let an older reverse completion replace newer copied feedback", async () => {
+    vi.useFakeTimers();
+    promptApi.list.mockResolvedValue({
+      items: [pinnedPrompt, secondPrompt],
+      total: 2,
+    });
+    const olderCopy = deferred<CopyResult>();
+    const newerCopy = deferred<CopyResult>();
+    copyPromptText
+      .mockReturnValueOnce(olderCopy.promise)
+      .mockReturnValueOnce(newerCopy.promise);
+    const wrapper = await mountMainWindow();
+
+    try {
+      await wrapper.findAll("[data-test='list-copy']")[0].trigger("click");
+      await wrapper.findAll("[data-test='list-copy']")[1].trigger("click");
+
+      newerCopy.resolve(successfulCopyResult(2));
+      await flushPromises();
+      expect(
+        wrapper.findAll("[data-test='list-copy']")[1].attributes("aria-label"),
+      ).toBe("已复制");
+
+      await vi.advanceTimersByTimeAsync(400);
+      olderCopy.resolve(successfulCopyResult());
+      await flushPromises();
+
+      expect(
+        wrapper.findAll("[data-test='list-copy']")[0].attributes("aria-label"),
+      ).toBe("复制提示词");
+      expect(
+        wrapper.findAll("[data-test='list-copy']")[1].attributes("aria-label"),
+      ).toBe("已复制");
+
+      await vi.advanceTimersByTimeAsync(799);
+      expect(
+        wrapper.findAll("[data-test='list-copy']")[1].attributes("aria-label"),
+      ).toBe("已复制");
+      await vi.advanceTimersByTimeAsync(1);
       expect(
         wrapper.findAll("[data-test='list-copy']")[1].attributes("aria-label"),
       ).toBe("复制提示词");

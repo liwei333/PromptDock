@@ -260,6 +260,7 @@ describe("category and raw-copy regressions", () => {
     );
     expect(invalidFeedback.attributes("role")).toBe("alert");
     expect(invalidFeedback.text()).toContain("复制时将保留原始占位符");
+    expect(invalidFeedback.find("svg").exists()).toBe(true);
     const promptBody = wrapper.get(".v3-body-preview pre");
     expect(promptBody.text()).toBe(invalidTemplatePrompt.body);
     expect(promptBody.find("strong").exists()).toBe(false);

@@ -1,8 +1,15 @@
+// @ts-expect-error -- Vitest executes this test with Node, while the app tsconfig intentionally excludes Node globals.
+import { readFileSync } from "node:fs";
+// @ts-expect-error -- Vitest executes this test with Node, while the app tsconfig intentionally excludes Node globals.
+import { resolve } from "node:path";
+
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
 
 import PromptListPane from "@/components/PromptListPane.vue";
 import type { Prompt } from "@/types/prompt";
+
+const globalCss = readFileSync(resolve("src/styles/global.css"), "utf8");
 
 const prompt: Prompt = {
   id: "prompt-1",
@@ -22,6 +29,12 @@ const prompt: Prompt = {
 };
 
 describe("PromptListPane", () => {
+  it("uses the specified two-pixel selected-row indicator", () => {
+    expect(globalCss).toMatch(
+      /\.v3-prompt-row\.selected\s*\{[^}]*box-shadow:\s*inset 2px 0 var\(--pd-accent\)/s,
+    );
+  });
+
   it("uses listbox selection semantics and keeps row actions independent", async () => {
     const wrapper = mount(PromptListPane, {
       props: { prompts: [prompt], selectedId: prompt.id, total: 1 },
