@@ -90,9 +90,9 @@ defineEmits<{
 }
 
 .pd-button[data-variant="danger"] {
-  color: var(--pd-danger);
+  color: var(--pd-danger-foreground);
   border-color: color-mix(in srgb, var(--pd-danger) 28%, transparent);
-  background: color-mix(in srgb, var(--pd-danger) 8%, white);
+  background: var(--pd-danger-soft);
 }
 
 .pd-button[data-variant="danger"]:hover:not(:disabled) {

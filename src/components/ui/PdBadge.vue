@@ -17,30 +17,30 @@ withDefaults(
   align-items: center;
   min-height: 20px;
   padding: 2px 7px;
-  color: var(--pd-text-secondary);
+  color: var(--pd-neutral-foreground);
   border: 1px solid var(--pd-border);
   border-radius: 999px;
-  background: var(--pd-surface-hover);
+  background: var(--pd-neutral-soft);
   font-size: 10px;
   font-weight: 700;
   line-height: 1.2;
 }
 
 .pd-badge[data-tone="accent"] {
-  color: var(--pd-accent);
+  color: var(--pd-accent-foreground);
   border-color: color-mix(in srgb, var(--pd-accent) 18%, transparent);
   background: var(--pd-accent-soft);
 }
 
 .pd-badge[data-tone="success"] {
-  color: var(--pd-success);
+  color: var(--pd-success-foreground);
   border-color: color-mix(in srgb, var(--pd-success) 20%, transparent);
-  background: color-mix(in srgb, var(--pd-success) 9%, white);
+  background: var(--pd-success-soft);
 }
 
 .pd-badge[data-tone="warning"] {
-  color: var(--pd-warning);
+  color: var(--pd-warning-foreground);
   border-color: color-mix(in srgb, var(--pd-warning) 22%, transparent);
-  background: color-mix(in srgb, var(--pd-warning) 10%, white);
+  background: var(--pd-warning-soft);
 }
 </style>

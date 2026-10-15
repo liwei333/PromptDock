@@ -14,11 +14,15 @@ const props = withDefaults(
   },
 );
 
-const semanticRole = computed(() =>
-  props.tone === "danger" || props.live === "assertive" ? "alert" : "status",
-);
 const liveMode = computed(
-  () => props.live ?? (semanticRole.value === "alert" ? "assertive" : "polite"),
+  () => props.live ?? (props.tone === "danger" ? "assertive" : "polite"),
+);
+const semanticRole = computed(() =>
+  liveMode.value === "off"
+    ? undefined
+    : liveMode.value === "assertive"
+      ? "alert"
+      : "status",
 );
 </script>
 
@@ -50,19 +54,19 @@ const liveMode = computed(
 }
 
 .pd-status-message[data-tone="info"] {
-  color: var(--pd-accent);
+  color: var(--pd-accent-foreground);
 }
 
 .pd-status-message[data-tone="success"] {
-  color: var(--pd-success);
+  color: var(--pd-success-foreground);
 }
 
 .pd-status-message[data-tone="warning"] {
-  color: var(--pd-warning);
+  color: var(--pd-warning-foreground);
 }
 
 .pd-status-message[data-tone="danger"] {
-  color: var(--pd-danger);
+  color: var(--pd-danger-foreground);
 }
 
 .pd-status-message__icon {

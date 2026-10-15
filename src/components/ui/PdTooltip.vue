@@ -7,14 +7,26 @@ import {
   TooltipTrigger,
 } from "reka-ui";
 
-defineProps<{
-  text: string;
-}>();
+withDefaults(
+  defineProps<{
+    text: string;
+    delayDuration?: number;
+    skipDelayDuration?: number;
+  }>(),
+  {
+    delayDuration: 500,
+    skipDelayDuration: 300,
+  },
+);
 </script>
 
 <template>
-  <TooltipProvider :delay-duration="0" :skip-delay-duration="0">
-    <TooltipRoot :delay-duration="0">
+  <!-- Skip-delay scope is intentionally per wrapper; sharing a provider across feature windows requires a separately approved refactor. -->
+  <TooltipProvider
+    :delay-duration="delayDuration"
+    :skip-delay-duration="skipDelayDuration"
+  >
+    <TooltipRoot>
       <TooltipTrigger as-child>
         <slot />
       </TooltipTrigger>

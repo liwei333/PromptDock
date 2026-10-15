@@ -1,7 +1,11 @@
 <script setup lang="ts">
-import type { Component } from "vue";
+import { type ButtonHTMLAttributes, type Component, useAttrs } from "vue";
 
 import PdTooltip from "@/components/ui/PdTooltip.vue";
+
+defineOptions({ inheritAttrs: false });
+
+const attrs = useAttrs();
 
 withDefaults(
   defineProps<{
@@ -10,11 +14,13 @@ withDefaults(
     tooltip?: string;
     pressed?: boolean;
     disabled?: boolean;
+    type?: ButtonHTMLAttributes["type"];
   }>(),
   {
     tooltip: undefined,
     pressed: undefined,
     disabled: false,
+    type: "button",
   },
 );
 
@@ -26,8 +32,9 @@ defineEmits<{
 <template>
   <PdTooltip :text="tooltip ?? label">
     <button
+      v-bind="attrs"
       class="pd-icon-button"
-      type="button"
+      :type="type"
       :aria-label="label"
       :aria-pressed="pressed === undefined ? undefined : pressed"
       :disabled="disabled"
