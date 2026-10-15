@@ -21,10 +21,16 @@ import { copyPromptText } from "@/services/clipboard";
 import type { Prompt } from "@/types/prompt";
 import type { StickyDensity } from "@/types/runtime";
 
+type FeedbackTone = "success" | "warning" | "error";
+
 const prompts = ref<Prompt[]>([]);
 const alwaysOnTop = ref(true);
 const density = ref<StickyDensity>("comfortable");
-const feedback = ref<{ id: string; text: string; error: boolean } | null>(null);
+const feedback = ref<{
+  id: string;
+  text: string;
+  tone: FeedbackTone;
+} | null>(null);
 const loading = ref(true);
 const switchingMode = ref(false);
 const densityBusy = ref(false);
@@ -39,8 +45,8 @@ let disposed = false;
 const slots = computed(() =>
   Array.from({ length: 5 }, (_, index) => prompts.value[index] ?? null),
 );
-const statusIsError = computed(
-  () => Boolean(windowError.value) || Boolean(feedback.value?.error),
+const statusTone = computed<FeedbackTone | null>(() =>
+  windowError.value ? "error" : (feedback.value?.tone ?? null),
 );
 
 function identity(prompt: Prompt): string {
@@ -64,7 +70,7 @@ function clearFeedbackTimer(): void {
 
 function showFeedback(
   request: number,
-  value: { id: string; text: string; error: boolean },
+  value: { id: string; text: string; tone: FeedbackTone },
 ): void {
   clearFeedbackTimer();
   feedback.value = value;
@@ -84,6 +90,9 @@ async function load(): Promise<void> {
 
 async function activate(prompt: Prompt): Promise<void> {
   if (copyingId.value) return;
+  windowError.value = "";
+  clearFeedbackTimer();
+  feedback.value = null;
   const template = inspectTemplateVariables(prompt.body);
   if (!template.error && template.variables.length) {
     await windowApi.showQuick(prompt.id);
@@ -91,8 +100,6 @@ async function activate(prompt: Prompt): Promise<void> {
   }
   const request = ++copyRequest;
   const promptIdentity = identity(prompt);
-  clearFeedbackTimer();
-  feedback.value = null;
   copyingId.value = prompt.id;
   try {
     const result = await copyPromptText({ id: prompt.id, text: prompt.body });
@@ -103,14 +110,14 @@ async function activate(prompt: Prompt): Promise<void> {
         result.status === "copied-with-stats-error"
           ? "已复制，统计更新失败"
           : "已复制",
-      error: false,
+      tone: result.status === "copied-with-stats-error" ? "warning" : "success",
     });
   } catch (reason) {
     if (isCurrentCopy(request, promptIdentity)) {
       showFeedback(request, {
         id: prompt.id,
         text: reason instanceof Error ? reason.message : "复制失败",
-        error: true,
+        tone: "error",
       });
     }
   } finally {
@@ -262,7 +269,10 @@ onBeforeUnmount(() => {
           v-if="prompt"
           data-test="sticky-slot"
           class="sticky-row"
-          :class="{ copied: feedback?.id === prompt.id && !feedback.error }"
+          :class="{
+            copied: feedback?.id === prompt.id && feedback.tone !== 'error',
+            warning: feedback?.id === prompt.id && feedback.tone === 'warning',
+          }"
           :aria-label="promptAccessibleLabel(prompt)"
           :disabled="copyingId !== null"
           @click="activate(prompt)"
@@ -284,7 +294,7 @@ onBeforeUnmount(() => {
           </span>
           <span class="sticky-copy-action">
             <Check
-              v-if="feedback?.id === prompt.id && !feedback.error"
+              v-if="feedback?.id === prompt.id && feedback.tone !== 'error'"
               aria-hidden="true"
             />
             <Copy v-else aria-hidden="true" />
@@ -388,9 +398,12 @@ onBeforeUnmount(() => {
 
     <div
       class="sticky-window-status"
-      :class="{ error: statusIsError }"
-      :role="statusIsError ? 'alert' : 'status'"
-      :aria-live="statusIsError ? 'assertive' : 'polite'"
+      :class="{
+        error: statusTone === 'error',
+        warning: statusTone === 'warning',
+      }"
+      :role="statusTone === 'error' ? 'alert' : 'status'"
+      :aria-live="statusTone === 'error' ? 'assertive' : 'polite'"
     >
       {{ windowError || (feedback ? feedback.text : "") }}
     </div>

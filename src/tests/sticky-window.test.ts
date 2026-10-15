@@ -27,8 +27,9 @@ const pinnedPrompt: Prompt = {
   updatedAt: 1,
 };
 
-const { copyPromptText, promptApi, windowApi } = vi.hoisted(() => ({
+const { copyPromptText, listen, promptApi, windowApi } = vi.hoisted(() => ({
   copyPromptText: vi.fn(),
+  listen: vi.fn(),
   promptApi: { listSticky: vi.fn() },
   windowApi: {
     enterMainMode: vi.fn(),
@@ -39,6 +40,7 @@ const { copyPromptText, promptApi, windowApi } = vi.hoisted(() => ({
   },
 }));
 
+vi.mock("@tauri-apps/api/event", () => ({ listen }));
 vi.mock("@/api/commands", () => ({
   promptApi,
   windowApi,
@@ -50,6 +52,23 @@ import StickyWindow from "@/windows/StickyWindow.vue";
 const stickySource = readFileSync(
   resolve("src/windows/StickyWindow.vue"),
   "utf8",
+);
+const globalCss = readFileSync(resolve("src/styles/global.css"), "utf8");
+
+function pinnedPromptAt(index: number): Prompt {
+  return {
+    ...pinnedPrompt,
+    id: `pinned-${index}`,
+    title: `置顶提示词 ${index}`,
+    description: `第 ${index} 条说明`,
+    body: `第 ${index} 条正文`,
+    pinOrder: index,
+    updatedAt: index,
+  };
+}
+
+const fivePinnedPrompts = Array.from({ length: 5 }, (_, index) =>
+  pinnedPromptAt(index + 1),
 );
 
 function deferred<T>() {
@@ -72,6 +91,7 @@ function mountSticky() {
 describe("StickyWindow", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    listen.mockResolvedValue(() => undefined);
     promptApi.listSticky.mockResolvedValue([]);
     windowApi.enterMainMode.mockResolvedValue({ mode: "main" });
     windowApi.hideSticky.mockResolvedValue({ hidden: true });
@@ -102,6 +122,7 @@ describe("StickyWindow", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
   });
 
   it("removes simulated traffic lights and legacy Unicode control glyphs", () => {
@@ -179,6 +200,23 @@ describe("StickyWindow", () => {
     wrapper.unmount();
   });
 
+  it("keeps all five real pins in manual order with two-line descriptions in comfortable density", async () => {
+    promptApi.listSticky.mockResolvedValue(fivePinnedPrompts);
+    const wrapper = mount(StickyWindow);
+    await flushPromises();
+
+    expect(
+      wrapper.findAll(".sticky-row-title").map((row) => row.text()),
+    ).toEqual(fivePinnedPrompts.map((prompt) => prompt.title));
+    expect(
+      wrapper.findAll(".sticky-description").map((row) => row.text()),
+    ).toEqual(fivePinnedPrompts.map((prompt) => prompt.description));
+    expect(globalCss).toMatch(
+      /\.sticky-description\s*\{[\s\S]*?-webkit-line-clamp:\s*2;/,
+    );
+    wrapper.unmount();
+  });
+
   it("persists compact density and removes descriptions from compact rows", async () => {
     promptApi.listSticky.mockResolvedValue([pinnedPrompt]);
     windowApi.setStickySettings.mockResolvedValueOnce({
@@ -205,6 +243,36 @@ describe("StickyWindow", () => {
     expect(wrapper.get(".sticky-window").classes()).toContain("compact");
     expect(wrapper.find(".sticky-description").exists()).toBe(false);
     expect(wrapper.findAll("[data-test='sticky-slot']")).toHaveLength(5);
+    wrapper.unmount();
+  });
+
+  it("keeps five ordered title-only rows and the footer in compact density", async () => {
+    promptApi.listSticky.mockResolvedValue(fivePinnedPrompts);
+    windowApi.setStickySettings.mockResolvedValueOnce({
+      visible: true,
+      alwaysOnTop: true,
+      x: 120,
+      y: 80,
+      monitorName: "Built-in Retina Display",
+      scaleFactor: 2,
+      density: "compact",
+    });
+    const wrapper = mountSticky();
+    await flushPromises();
+
+    await wrapper.get("[data-test='sticky-menu']").trigger("click");
+    document.body
+      .querySelector<HTMLButtonElement>("[data-test='sticky-density-toggle']")!
+      .click();
+    await flushPromises();
+
+    expect(
+      wrapper.findAll(".sticky-row-title").map((row) => row.text()),
+    ).toEqual(fivePinnedPrompts.map((prompt) => prompt.title));
+    expect(wrapper.findAll(".sticky-description")).toHaveLength(0);
+    expect(wrapper.get(".sticky-footer").text()).toContain("管理");
+    expect(wrapper.get(".sticky-footer").text()).toContain("排序");
+    expect(wrapper.get(".sticky-footer").text()).toContain("始终置顶");
     wrapper.unmount();
   });
 
@@ -331,6 +399,160 @@ describe("StickyWindow", () => {
     wrapper.unmount();
     expect(vi.getTimerCount()).toBe(0);
   });
+
+  it("expires current copied feedback exactly at the 1600ms boundary", async () => {
+    vi.useFakeTimers();
+    promptApi.listSticky.mockResolvedValue([pinnedPrompt]);
+    const wrapper = mount(StickyWindow);
+    await flushPromises();
+
+    await wrapper.get("button[data-test='sticky-slot']").trigger("click");
+    await flushPromises();
+    expect(wrapper.get(".sticky-window-status").text()).toContain("已复制");
+    expect(wrapper.find(".lucide-check").exists()).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(1599);
+    await nextTick();
+    expect(wrapper.get(".sticky-window-status").text()).toContain("已复制");
+    expect(wrapper.find(".lucide-check").exists()).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await nextTick();
+    expect(wrapper.get(".sticky-window-status").text()).toBe("");
+    expect(wrapper.find(".lucide-check").exists()).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+    wrapper.unmount();
+  });
+
+  it("clears an old window error when a later copy succeeds", async () => {
+    promptApi.listSticky.mockResolvedValue([pinnedPrompt]);
+    windowApi.setStickySettings.mockRejectedValueOnce(
+      new Error("native failure"),
+    );
+    const wrapper = mount(StickyWindow);
+    await flushPromises();
+
+    await wrapper
+      .get("[role='switch'][aria-label='切换始终置顶']")
+      .trigger("click");
+    await flushPromises();
+    expect(wrapper.get("[role='alert']").text()).toContain(
+      "无法更新始终置顶设置",
+    );
+
+    await wrapper.get("button[data-test='sticky-slot']").trigger("click");
+    await flushPromises();
+
+    const status = wrapper.get(".sticky-window-status");
+    expect(status.text()).toBe("已复制");
+    expect(status.attributes("role")).toBe("status");
+    expect(status.attributes("aria-live")).toBe("polite");
+    expect(wrapper.find(".lucide-check").exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it("clears an old window error before routing a template to Quick", async () => {
+    const template = { ...pinnedPrompt, body: "处理 {{主题}}" };
+    promptApi.listSticky.mockResolvedValue([template]);
+    windowApi.hideSticky.mockRejectedValueOnce(new Error("native failure"));
+    const wrapper = mount(StickyWindow);
+    await flushPromises();
+
+    await wrapper.get("button[aria-label='收起便签']").trigger("click");
+    await flushPromises();
+    expect(wrapper.get("[role='alert']").text()).toContain("无法收起便签");
+
+    await wrapper.get("button[data-test='sticky-slot']").trigger("click");
+    await flushPromises();
+
+    expect(windowApi.showQuick).toHaveBeenCalledWith(template.id);
+    const status = wrapper.get(".sticky-window-status");
+    expect(status.text()).toBe("");
+    expect(status.attributes("role")).toBe("status");
+    expect(status.attributes("aria-live")).toBe("polite");
+    wrapper.unmount();
+  });
+
+  it("renders copied-with-stats-error as a polite amber warning with a Check", async () => {
+    promptApi.listSticky.mockResolvedValue([pinnedPrompt]);
+    copyPromptText.mockResolvedValueOnce({
+      status: "copied-with-stats-error",
+      error: new Error("database busy"),
+    });
+    const wrapper = mount(StickyWindow);
+    await flushPromises();
+
+    await wrapper.get("button[data-test='sticky-slot']").trigger("click");
+    await flushPromises();
+
+    const row = wrapper.get("button[data-test='sticky-slot']");
+    const status = wrapper.get(".sticky-window-status");
+    expect(row.classes()).toContain("copied");
+    expect(row.classes()).toContain("warning");
+    expect(wrapper.find(".lucide-check").exists()).toBe(true);
+    expect(status.text()).toContain("已复制，统计更新失败");
+    expect(status.classes()).toContain("warning");
+    expect(status.classes()).not.toContain("error");
+    expect(status.attributes("role")).toBe("status");
+    expect(status.attributes("aria-live")).toBe("polite");
+    wrapper.unmount();
+  });
+
+  it.each(["resolve", "reject"] as const)(
+    "ignores a stale %s after the same prompt id reloads with new content",
+    async (outcome) => {
+      vi.useFakeTimers();
+      const refreshedPrompt = {
+        ...pinnedPrompt,
+        title: "刷新后的提示词",
+        body: "刷新后的正文",
+        updatedAt: pinnedPrompt.updatedAt + 1,
+      };
+      const pending = deferred<{
+        status: "copied";
+        stats: { copyCount: number; lastCopiedAt: number };
+      }>();
+      let promptsChanged!: () => void;
+      listen.mockImplementation(async (_event, handler) => {
+        promptsChanged = handler as () => void;
+        return () => undefined;
+      });
+      promptApi.listSticky
+        .mockResolvedValueOnce([pinnedPrompt])
+        .mockResolvedValueOnce([refreshedPrompt]);
+      copyPromptText.mockReturnValueOnce(pending.promise);
+      Object.defineProperty(window, "__TAURI_INTERNALS__", {
+        configurable: true,
+        value: {},
+      });
+      const wrapper = mount(StickyWindow);
+      await flushPromises();
+
+      await wrapper.get("button[data-test='sticky-slot']").trigger("click");
+      promptsChanged();
+      await flushPromises();
+      expect(wrapper.get(".sticky-row-title").text()).toBe(
+        refreshedPrompt.title,
+      );
+
+      if (outcome === "resolve") {
+        pending.resolve({
+          status: "copied",
+          stats: { copyCount: 13, lastCopiedAt: 3 },
+        });
+      } else {
+        pending.reject(new Error("stale clipboard failure"));
+      }
+      await flushPromises();
+
+      const row = wrapper.get("button[data-test='sticky-slot']");
+      expect(row.attributes("disabled")).toBeUndefined();
+      expect(wrapper.find(".lucide-check").exists()).toBe(false);
+      expect(wrapper.get(".sticky-window-status").text()).toBe("");
+      expect(vi.getTimerCount()).toBe(0);
+      wrapper.unmount();
+    },
+  );
 
   it("reports clipboard failures as alerts and restores the copy action", async () => {
     promptApi.listSticky.mockResolvedValue([pinnedPrompt]);

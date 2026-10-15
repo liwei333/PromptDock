@@ -2542,6 +2542,17 @@ button.sticky-row:disabled {
 .sticky-row.copied .sticky-copy-action {
   color: var(--pd-success-foreground);
 }
+.sticky-row.warning {
+  border-color: color-mix(
+    in srgb,
+    var(--pd-warning) 48%,
+    var(--pd-paper-border)
+  );
+  background: color-mix(in srgb, var(--pd-warning-soft) 78%, var(--pd-paper));
+}
+.sticky-row.warning .sticky-copy-action {
+  color: var(--pd-warning-foreground);
+}
 .sticky-copy-action small {
   font-size: 9px;
   white-space: nowrap;
@@ -2667,6 +2678,11 @@ button.sticky-row:disabled {
 .sticky-window-status.error {
   color: #fff;
   background: #a13d36;
+  font-weight: 750;
+}
+.sticky-window-status.warning:not(:empty) {
+  color: #fff;
+  background: var(--pd-warning-foreground);
   font-weight: 750;
 }
 
