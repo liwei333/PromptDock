@@ -4,18 +4,18 @@
 > （Apple Silicon / Intel）与 Windows 10/11 x64。共享 Vue、Rust、SQLite 与 Tauri
 > command 实现；平台专用原生代码必须使用条件编译隔离，并由各自原生 runner 构建验证。
 
-> 日期：2026-10-13 ｜ 适用范围：**仅 macOS 本地版** ｜ 对应 `PRD.md`、`UI_DESIGN_SPEC.md`、`UI_PROTOTYPE.html`
+> 日期：2026-10-13 ｜ 适用范围：**仅 macOS 本地版** ｜ 对应 `PRD.md`、`UI_DESIGN_SPEC.md`；`UI_PROTOTYPE.html` 仅作历史视觉参考
 >
-> **开发目标不是把 HTML 页面打包成窗口**，而是以已认可的原型为前端基线，交付真实的桌面剪贴板、数据库、跨进程快捷键和本地备份能力。
+> **开发目标不是把 HTML 页面打包成窗口**。HTML 原型只提供配色、CSS Token 和轻量 macOS 视觉语言；当前主窗口布局、导航、按钮位置和交互以 `PRD.md`、`UI_DESIGN_SPEC.md` 第 3–4 节及当前组件合同为准，并交付真实的桌面剪贴板、数据库、跨进程快捷键和本地备份能力。
 
 ## 1. 架构决策（ADR-001）
 
 | 层级 | 方案 | 为什么 |
 |---|---|---|
-| 客户端运行时 | **Tauri 2** | 小型 macOS 桌面程序，Rust 原生能力，独立主窗与快捷窗 |
-| 前端 | **Vue 3 + TypeScript + Vite** | 复用 HTML 视觉和前端技术能力，便于拆分组件 |
+| 客户端运行时 | **Tauri 2** | 小型 macOS 桌面程序，Rust 原生能力，独立主窗、快捷窗与便签窗 |
+| 前端 | **Vue 3 + TypeScript + Vite** | 实现当前组件合同，并沿用历史 HTML 的配色、CSS Token 和轻量 macOS 视觉语言 |
 | 状态管理 | **Pinia** | 页面筛选、选中条目、弹窗状态、请求状态；不充当数据库 |
-| 样式 | 现有原型 CSS Token + scoped CSS | 保留已确认 UI；首版不引入重型 UI 框架 |
+| 样式 | 历史原型配色/CSS Token + scoped CSS | 沿用已确认的轻量 macOS 视觉语言；首版不引入重型 UI 框架 |
 | 后端桥接 | **Tauri `invoke` + Rust `#[tauri::command]`** | 暴露受控、可测试、经过参数校验的业务 API |
 | 业务数据库 | **SQLite + Rust `sqlx`** | 无需服务器、离线持久化、数据库迁移和事务 |
 | 剪贴板 | `@tauri-apps/plugin-clipboard-manager` | 使用系统剪贴板 API，而非 WebView 兼容兜底 |
@@ -34,32 +34,30 @@
 
 ```text
 ┌────────────────────────────────── macOS ───────────────────────────────────┐
-│                                                                          │
-│  ┌────────────────────┐        ┌────────────────────┐                     │
-│  │ main（主工作台）    │        │ quick（悬浮面板）    │                     │
-│  │ Vue3 + Pinia       │        │ Vue3 + 快速搜索    │                     │
-│  │ 搜索/列表/编辑/复制 │        │ Option+Space 唤起  │                     │
-│  └─────────┬──────────┘        └─────────┬──────────┘                     │
-│            │ typed Tauri invoke          │                              │
-│            └─────────────┬───────────────┘                              │
-│                          ▼                                              │
-│             ┌──────────────────────────────┐                             │
-│             │ Rust Commands / Services     │                             │
-│             │ 输入校验/搜索/事务/导入导出  │                             │
-│             ├──────────────────────────────┤                             │
-│             │ SQLite Repository (sqlx)     │                             │
-│             └───────────────┬──────────────┘                             │
-│                             ▼                                            │
-│                 app_data_dir/promptdock.sqlite3                          │
-│                                                                          │
-│  OS Clipboard ◄── writeText   Global Shortcut ──► show/focus quick       │
-│  本地 JSON   ◄── 文件保存/读取 ──► 导入/导出业务服务                    │
-└──────────────────────────────────────────────────────────────────────────┘
+│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐          │
+│  │ main（主工作台）  │  │ quick（快捷搜索） │  │ sticky（五槽便签）│          │
+│  │ 搜索/列表/编辑/复制│  │ Option+Space/复制 │  │ 双密度/排序/复制   │          │
+│  └────────┬─────────┘  └────────┬─────────┘  └────────┬─────────┘          │
+│           └─────────────────────┼─────────────────────┘                    │
+│                 typed Tauri invoke / 共享复制服务                         │
+│                                 ▼                                         │
+│              ┌──────────────────────────────────┐                         │
+│              │ Rust Commands / Services         │                         │
+│              │ 输入校验/搜索/事务/窗口/导入导出  │                         │
+│              ├──────────────────────────────────┤                         │
+│              │ SQLite Repository (sqlx)         │                         │
+│              └────────────────┬─────────────────┘                         │
+│                               ▼                                           │
+│                   app_data_dir/promptdock.sqlite3                         │
+│                                                                           │
+│  main / quick / sticky ── clipboard-manager writeText ──► OS Clipboard    │
+│  Global Shortcut ──► show/focus quick    本地 JSON ◄──► 导入/导出服务     │
+└───────────────────────────────────────────────────────────────────────────┘
 
                   不包含 HTTP / 云端 / 远程遥测 / AI 模型接口
 ```
 
-主窗口、快捷窗口和新增便签窗口共享**一个 Rust 应用进程内 SqlitePool**，但各自维护 Vue 界面状态。每次主窗口和快捷窗口切换/显示均重新读取查询结果或收到 `prompts-changed` 内部事件，以保证编辑后数据一致。不要让不同窗口都维护持久化快照，避免陈旧覆盖。
+主窗口、快捷窗口和便签窗口共享**同一套 Rust IPC、复制服务与一个应用进程内 `SqlitePool`**，但各自维护 Vue 界面状态。当前 `main` 与 `sticky` 监听 `prompts-changed` 并重新查询；独立 `quick` 在组件挂载、搜索词变化及指定 `quick-select-prompt` 流程中读取，尚未监听通用 `prompts-changed` 或在每次重新显示/获得焦点时重载。因此，如产品验收要求 quick 立即反映其他窗口的变更，这仍是既有实现差距；各窗口不得为此维护独立持久化快照。
 
 ## 3. 工程目录约定
 
@@ -73,45 +71,58 @@ promptdock/
 ├── vite.config.ts
 ├── tsconfig.json
 ├── src/
-│   ├── main.ts                       # Vue 初始化，识别主窗/快捷窗入口
-│   ├── App.vue
-│   ├── styles/tokens.css             # 与 UI_DESIGN_SPEC 一致
-│   ├── types/prompt.ts               # 前端领域类型、严格映射
-│   ├── api/commands.ts               # invoke 统一封装 / 错误归一化
+│   ├── main.ts                       # main/quick/sticky 共用的 Vue bootstrap
+│   ├── App.vue                       # 按 window target 分发三个窗口组件
+│   ├── styles/
+│   │   ├── global.css
+│   │   └── tokens.css                # 与 UI_DESIGN_SPEC 一致
+│   ├── types/
+│   │   ├── prompt.ts                 # 提示词领域类型
+│   │   ├── backup.ts                 # 导入导出类型
+│   │   └── runtime.ts                # 本机运行信息类型
+│   ├── api/commands.ts               # typed invoke 统一封装 / 错误归一化
 │   ├── services/clipboard.ts         # Tauri 系统剪贴板
-│   ├── services/shortcuts.ts         # 主窗局部 ⌘K / ⌘N
 │   ├── stores/promptStore.ts
-│   ├── stores/uiStore.ts
-│   ├── composables/usePromptSearch.ts
 │   ├── composables/useTemplateVariables.ts
+│   ├── ui/platform.ts                # 平台键位与显示差异
 │   ├── components/
-│   │   ├── AppSidebar.vue
-│   │   ├── AppToolbar.vue
-│   │   ├── PromptSearchBar.vue
-│   │   ├── PinnedQuickPanel.vue
-│   │   ├── PromptCard.vue
-│   │   ├── PromptDetailDrawer.vue
+│   │   ├── WorkbenchIconRail.vue
+│   │   ├── WorkbenchFilters.vue
+│   │   ├── DashboardStatCards.vue
+│   │   ├── PromptListPane.vue
+│   │   ├── PromptDetailPane.vue
 │   │   ├── PromptEditorDialog.vue
+│   │   ├── CategoryManagerDialog.vue
 │   │   ├── CategoryCreateDialog.vue
-│   │   ├── ConfirmDeleteDialog.vue
+│   │   ├── CategoryDeleteDialog.vue
 │   │   ├── ImportPreviewDialog.vue
 │   │   ├── QuickPalette.vue
-│   │   └── AppToast.vue
+│   │   ├── StickyManagerDialog.vue
+│   │   ├── RuntimeInfoDialog.vue
+│   │   ├── TemplateVariablesPanel.vue
+│   │   └── ui/                       # PdButton/PdDialog/PdSwitch 等基础组件
 │   ├── windows/
 │   │   ├── MainWindow.vue
-│   │   └── QuickWindow.vue
-│   └── tests/
-│       ├── template-variables.test.ts
-│       ├── prompt-store.test.ts
-│       └── clipboard.test.ts
+│   │   ├── QuickWindow.vue
+│   │   └── StickyWindow.vue
+│   └── tests/                         # Vitest 前端行为与回归测试
 ├── src-tauri/
 │   ├── Cargo.toml
 │   ├── Cargo.lock
 │   ├── tauri.conf.json
-│   ├── capabilities/default.json
-│   ├── migrations/0001_init.sql
+│   ├── capabilities/
+│   │   ├── default.json
+│   │   └── auxiliary.json
+│   ├── migrations/
+│   │   ├── 0001_init.sql
+│   │   ├── 0002_sticky_mode.sql
+│   │   └── 0003_daily_copy_stats.sql
 │   └── src/
-│       ├── lib.rs                     # 启动、注册插件与命令
+│       ├── main.rs                    # Rust 程序入口
+│       ├── lib.rs                     # 启动、插件、窗口事件与命令注册
+│       ├── menu.rs                    # 原生应用菜单
+│       ├── state.rs                   # 共享进程状态与 intent 槽位
+│       ├── window_mode.rs             # main/sticky 窗口模式与原生配置
 │       ├── commands/
 │       │   ├── prompts.rs
 │       │   ├── categories.rs
@@ -120,16 +131,14 @@ promptdock/
 │       ├── db/mod.rs                  # 数据库路径、连接池、迁移
 │       ├── repositories/
 │       │   ├── prompt_repo.rs
-│       │   └── category_repo.rs
+│       │   ├── category_repo.rs
+│       │   └── settings_repo.rs       # app_settings 受控读写
 │       ├── domain/
 │       │   ├── models.rs
 │       │   ├── validation.rs
-│       │   ├── template.rs
 │       │   └── errors.rs
-│       ├── services/
-│       │   ├── backup_service.rs
-│       │   └── quick_window.rs
-│       └── tests/                     # DB/迁移/导入等集成测试
+│       ├── services/backup_service.rs
+│       └── tests/                     # DB/迁移/窗口/平台集成测试
 └── docs/product/                      # 复制本套开发资料
 ```
 
@@ -160,7 +169,7 @@ promptdock/
 - 时间统一 UTC epoch **milliseconds**，UI 在本地时区格式化。
 - `tags_json` 是 `JSON.stringify(string[])`；后端每次读写校验，避免伪造字段或乱码污染。
 - 收藏与置顶是独立字段，不取代分类。
-- 正文以 TEXT 原样存储，保留换行。UI 卡片可以摘要截断，数据库绝不能截断正文。
+- 正文以 TEXT 原样存储，保留换行。主列表行可以摘要截断，数据库绝不能截断正文。
 - SQL 注入防护：所有动态字符串都用 `.bind()` 参数化 SQL；搜索 `%`、`_` 要按明确规则作为普通文本处理。
 - `foreign_keys = ON` 必须在**每个连接**启用；开启 WAL 和合理 busy timeout；单实例运行，连接池可保守设为 `max_connections=1`。
 - migration 必须可检测且不会在每次运行时丢失现有数据；禁止 `DROP TABLE` 重建用户数据。
@@ -172,7 +181,7 @@ promptdock/
 3. 事务内检查是否存在分类；**当分类表为空时**插入 6 个默认分类；提示词表保持空。
 4. 初始化 Repository/Service 并注入共享 State；仅数据库准备成功后才允许主窗口写操作。
 5. 注册 `Option + Space` 全局热键；若被占用/注册失败，记录可读错误，应用仍可启动和从主窗口打开快捷面板。
-6. 主窗口加载数据库结果；快速窗口预创建并隐藏，供系统热键调用。
+6. `main.ts` 为 `main`、`quick`、`sticky` 提供共用 Vue bootstrap，`App.vue` 按 URL window target 分发对应组件；主窗口加载数据库结果，快捷窗口预创建并隐藏供系统热键调用，便签窗口预创建后应用已持久化的密度/置顶/位置设置并协调恢复显示模式。三者复用同一共享 State 与数据库连接池。
 
 数据库连接失败：保留错误和现有文件，提供「打开数据目录/导出诊断说明」等只读退路；**不可**静默重新生成空数据库覆盖用户内容。
 
@@ -266,7 +275,7 @@ export const promptApi = {
 
 ## 7. 一键复制服务及失败策略
 
-推荐写成独立 TS 服务，所有入口（快捷区、卡片、详情、快捷窗口）**调用同一个流程**：
+推荐写成独立 TS 服务，所有入口（主列表行、常驻详情面板、快捷窗口、便签窗口）**调用同一个流程**：
 
 ```ts
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
@@ -315,18 +324,20 @@ LIMIT :limit OFFSET :offset;
 - 传入前先对用户字符串转义 `\`、`%`、`_`，再包装成 `%escaped%`；使用 `.bind`，不要直接拼接 SQL 条件。
 - SQL 示例中 `:search_empty` 仅为语义展示；落地可用 SQLx 支持的 SQLite 占位符形式 `?`/绑定，多条件分支应有单元/集成测试。
 - 组合收藏/置顶/最近使用/分类过滤，分别构建预定义 SQL 条件/QueryBuilder，只从安全的枚举选择 ORDER BY；别把用户传入的 `sort` 当原始 SQL。
-- 列表分页默认 100 条，可在前端追加加载；顶部 3 条置顶、浮窗 12 条独立查询。
+- 主列表分页默认 100 条，可在前端追加加载；`quick` 最多 12 条和 `sticky` 最多 5 条分别使用受控独立查询。主工作台不存在单独的前三条置顶面板。
 - 中国语料无法仅依赖 SQLite FTS5 unicode61 实现自然中文分词；**V1 采用子串匹配**，数据量大时再考虑分词或 FTS 索引。标签的 `tags_json` 搜索可能匹配 JSON 转义文本，首版可接受，但测试中必须覆盖中文。
 
-## 9. 主窗口与快捷搜索窗口、快捷键和单实例
+## 9. 主窗口、快捷搜索窗口与便签窗口、快捷键和单实例
 
 ### 9.1 窗口划分
 
 **`main`**：正常装饰桌面窗口，初始 1360×860，最小 1024×700，渲染主工作台。
 
-**`quick`**：Tauri 预创建、初始隐藏、约 680×520 的轻量窗口，渲染 `QuickWindow.vue`。对主/快捷窗口采用明确路由（如 `/#/quick`）或 URL 查询参数标识，不复制一套应用与数据库。quick 只需查询、模板变量、复制与关闭能力。
+**`quick`**：Tauri 预创建、初始隐藏、约 680×520 的轻量窗口，渲染 `QuickWindow.vue`。对 `main` / `quick` / `sticky` 采用明确路由或 URL 查询参数标识，不复制应用与数据库。quick 只需查询、模板变量、复制与关闭能力。
 
-快捷窗出场：Rust shortcut handler 收到 `Option+Space` → `quick.show()` → `quick.set_focus()` → 向 quick 发 `quick-opened` 事件 → Vue 清空搜索、重置候选、聚焦输入框。若平台要求前台激活，则依照 Tauri 当前 macOS API 实测并采用最少的原生调整；**不得未经验证假定失焦背景时 set_focus 必然成功**。
+**`sticky`**：Tauri 预创建、初始隐藏的五槽位独立窗口，渲染 `StickyWindow.vue`。默认舒适模式为 420×695 逻辑像素，精简模式为 340×270 逻辑像素；只允许在两档间切换，`resizable=false`，不接受任意缩放。它与 `main`、`quick` 共享 Rust IPC 和同一个 `SqlitePool`，详细契约见第 17 章。
+
+快捷窗出场：Rust shortcut handler 收到 `Option+Space` 后显示并聚焦已有 `quick` 窗口；携带 prompt ID 的显示请求可发送 `quick-select-prompt` 让 Vue 读取指定提示词。当前没有通用 reopen/focus 重载监听，也不应把重新显示误记为已完成全量刷新。若平台要求前台激活，则依照 Tauri 当前 macOS API 实测并采用最少的原生调整；**不得未经验证假定失焦背景时 set_focus 必然成功**。
 
 快捷窗离场：普通复制成功后 `quick.hide()`；模板编辑中 Esc 先退出编辑，再 Esc 隐藏面板；点击面板外是否隐藏留到 P1，避免焦点事件不稳定引发误关闭。
 
@@ -401,7 +412,7 @@ native open dialog → 读取 max 10MiB → 判断正式格式/旧浏览器格�
 
 ## 11. 安全与权限最小化
 
-- Tauri `capabilities` 仅授予主窗/快捷窗所需权限：剪贴板 `writeText`、窗口显示/隐藏/聚焦、主窗对话框、事件监听；不允许不必要的通配全部文件读写和 shell 执行。
+- Tauri `capabilities` 仅授予主窗/快捷窗/便签窗各自所需权限：剪贴板 `writeText`、窗口显示/隐藏/聚焦、主窗对话框、事件监听；不允许不必要的通配全部文件读写和 shell 执行。
 - 业务 Rust commands 只暴露明确的 prompt/category/backup 入口，**禁止**通用 `execute_sql(sql)` 或 `read_file(any_path)` 命令。
 - 数据、日志和异常信息默认仅在本机，不包含第三方分析、在线字体、CDN 图片、外部脚本、自动更新机制。
 - 若集成可点击外部超链接，必须经过显式白名单或确认；V1 可直接不做外链。
@@ -454,7 +465,7 @@ pnpm tauri build
 ### 13.1 前端测试
 
 - `useTemplateVariables`：多个变量、重复变量、空值、Unicode、花括号、`$&`、反斜杠、字面值替换。
-- `PromptCard`：复制按钮 `stopPropagation`，主卡片点击详情、收藏独立状态。
+- `PromptListPane` / `PromptDetailPane`：行选择与行内收藏/置顶/普通复制事件隔离，普通复制保持当前详情，模板复制进入变量表单。
 - `QuickPalette`：中文搜索、12 条截断、上下箭头切换、Enter 和 Esc。
 - `PromptEditorDialog`：空标题、超长正文、编辑未保存退出确认。
 - `clipboard service`：writeText 成功/失败；成功才调用复制计数。
@@ -486,7 +497,7 @@ pnpm tauri build
 |---|---|---|
 | **0. 基础准备** | 新 repo/独立分支、环境核验、Tauri+Vue+TS 空壳、lint/test | macOS 原生窗口能启动 |
 | **1. 数据真实落盘** | SQL migration、Rust Repository、CRUD、种子分类 | 重启/断网能保存，DB 真实可查 |
-| **2. 高频工作流** | 系统剪贴板、UI 迁移、主窗搜索/筛选/收藏/置顶 | 一键复制跨应用粘贴、组件与原型一致 |
+| **2. 高频工作流** | 系统剪贴板、UI 迁移、主窗搜索/筛选/收藏/置顶 | 一键复制跨应用粘贴，主窗组件与当前 PRD、UI_DESIGN_SPEC 第 3–4 节及组件合同一致 |
 | **3. 快捷浮窗/模板** | Rust global shortcut、独立 quick window、模板变量、键盘导航 | 其他 App 前台真实唤起、Enter 复制 |
 | **4. 恢复与稳定性** | JSON 备份导入导出、冲突策略、异常处理、测试、打包 | AT-01~AT-16 逐条实测，`.app` 可用 |
 
@@ -497,7 +508,7 @@ pnpm tauri build
 1. 原型的 `localStorage` 和假数据不能带入正式 App。
 2. **不要将 SQLite DB 放在安装目录 / 用户的 iCloud 同步目录**。
 3. SQLite 有 WAL 时不能只复制 `.sqlite3` 文件当备份。
-4. 主窗和快捷窗必须共享一套 SQLite 数据，而不是各存一份 Pinia/LocalStorage。
+4. 主窗、快捷窗和便签窗必须共享一套 SQLite 数据，而不是各存一份 Pinia/LocalStorage。
 5. 不要把业务 SQL 暴露为通用 Rust IPC 命令。
 6. 从导入 JSON 读取的正文/标题一律当纯文本显示，不用 `v-html`。
 7. 检查 `Option+Space` 快捷键抢占失败时的降级，不让启动崩溃。
@@ -530,18 +541,20 @@ pnpm tauri build
 ```text
 main (普通管理窗口，1360×860) ──────────────┐
 quick (全局快捷搜索，680×520，默认隐藏) ──┼── Rust IPC ── 单例 SqlitePool ── promptdock.sqlite3
-sticky (五条便签，340×270，默认隐藏) ──────┘
+sticky (五槽位便签，舒适 420×695 / 精简 340×270，默认隐藏) ──┘
                    │
                    └─ copy service ── macOS Clipboard
 ```
 
-`sticky` 的 Tauri 配置要点（仅配置意图，实际字段须以项目锁定版本的 Tauri 2 API/Schema 校验）：`label='sticky'`、width=340、height=270、visible=false、resizable=false、decorations=false、background=#FFF3AC、alwaysOnTop=true；设置独立路由 `/#/sticky` 或同等清晰的 window label 分发。不要创建第二套数据库与临时前端演示数组。
+`sticky` 的 Tauri 配置要点（仅配置意图，实际字段须以项目锁定版本的 Tauri 2 API/Schema 校验）：`label='sticky'`、默认 width=420、height=695、minWidth=340、minHeight=270、maxWidth=420、maxHeight=695、visible=false、resizable=false、decorations=false、alwaysOnTop=true；设置独立路由 `/#/sticky` 或同等清晰的 window label 分发，并由页面渲染 `#FFF3AC` 背景。运行时只能由类型化密度设置把窗口改为舒适 420×695 或精简 340×270 两个精确逻辑尺寸，不能组合出第三种尺寸。不要创建第二套数据库与临时前端演示数组。
 
 应用生命周期：`sticky` 点击 × 只执行 `hide()`；应用菜单或 Dock 菜单提供「打开/隐藏便签」「打开主窗口」「退出」。主窗口关闭但便签还显示时，不能使进程终止。首次运行便签隐藏，后续恢复用户明确选择的可见状态；异常启动应有可靠的主窗口入口。
 
-**按钮/拖动**：窗口顶部不含按钮的区域使用 Tauri 官方 `data-tauri-drag-region` 或 `getCurrentWindow().startDragging()`，依项目权限控制，不能用 HTML 模拟拖动当成 native。`getCurrentWindow().setAlwaysOnTop(boolean)` 控制真实系统窗口层级；建议通过 Rust IPC 验证调用来源窗口标签、统一处理错误。确保 `sticky` 仅拥有必要的 window/clipboard/IPC 权限，不开放文件系统或任意 SQL 权限。
+**按钮/拖动**：窗口顶部不含按钮的区域使用 Tauri 官方 `data-tauri-drag-region` 或 `getCurrentWindow().startDragging()`，依项目权限控制，不能用 HTML 模拟拖动当成 native。标题栏操作固定为密度直接切换、通用完整窗口动作、收起；底部固定为「排序」和「始终置顶」，不实现通用底部管理入口或便签设置齿轮/对话框。始终置顶通过受控 Rust IPC 调用原生窗口能力。确保 `sticky` 仅拥有必要的 window/clipboard/IPC 权限，不开放文件系统或任意 SQL 权限。
 
-**位置记忆**：监听窗口移动（Tauri `onMoved`）并节流持久化到 `app_settings`，存坐标及显示器/缩放信息；实际移动结束再写，避免高频落库。启动恢复基于当前 monitor/workArea 夹紧坐标，显示器移除后回到主显示器安全位置（不要盖住菜单栏）。也可以评估官方 Window State 插件，但需要按窗口区分状态，绝不能让它自动显示原本应隐藏的 `quick`。本方案优先复用 app_settings 简化依赖。
+**位置契约与实现状态（截至 2026-10-15）**：PRD 的目标契约是在拖动结束（或经合理节流）持久化逻辑坐标与显示器/缩放信息，恢复时按显示器工作区 `workArea` 夹紧，原显示器被移除时显式回退到主显示器的安全位置，不遮挡菜单栏或 Dock。
+
+当前实现仍有一项本 UI 控件任务未交付的既有 P1 差距：Rust handler 在每个 `WindowEvent::Moved` 上都启动一次持久化，没有节流或移动结束判定；采集的是 `outer_position()` 物理坐标。configure/restore 路径优先匹配已保存显示器，否则使用 `current_monitor()`，没有显式主显示器回退；夹紧基于 monitor 的完整 `position()` / `size()` 边界，而非 `workArea`。`get_sticky_settings` 只返回已持久化并反序列化的原始坐标、密度与置顶字段，不夹紧、移动或改写窗口状态。因此 AT-23 的位置恢复/多屏原生行为必须标为 `UNVERIFIED_MACOS_RUNTIME`，不得记为 PASS。
 
 ### 17.2 SQLite migration 002 — 顺序在库内，而不是使用次数
 
@@ -564,18 +577,28 @@ Rust 不允许从 UI 直接执行字符串形式 SQL；实现 transaction `BEGIN
 
 | 命令 | 参数 | 返回 | 规则 |
 |---|---|---|---|
-| `list_sticky_prompts` | 无 | `PromptSummary[]` | SQL `WHERE is_pinned=1 AND pin_order BETWEEN 1 AND 5 ORDER BY pin_order ASC`，含 id/title/isTemplate；实际复制前根据 ID 重新取全文 |
-| `pin_prompt_to_sticky` | `{id}` | `Prompt` | 单事务验证 <5 位空余，分配下一个有序位置；满五条返回 `PIN_LIMIT_REACHED`，不丢编辑态 |
-| `unpin_prompt_from_sticky` | `{id}` | `Prompt` | 清空 pin_order/is_pinned，紧凑重新编号，正文不变 |
-| `reorder_sticky_prompts` | `{orderedIds:string[]}` | `PromptSummary[]` | 验证与当前置顶 ID 集合完全一致，无重复且 0..5 个；单事务重编 1..N |
-| `get_sticky_settings` | 无 | `{visible,alwaysOnTop,position?}` | 位置值按当前显示器校正 |
-| `set_sticky_settings` | `{...}` | 设置 | 只允许白名单键和范围，不传任意 SQL |
-| `show_sticky_window` | 无 | `{shown:true}` | 存在则显示并置于适当层级，不重复创建窗口 |
+| `list_sticky_prompts` | 无 | `Prompt[]` | SQL `WHERE is_pinned=1 AND pin_order BETWEEN 1 AND 5 ORDER BY pin_order ASC`；返回完整提示词，最多五条 |
+| `set_pinned` | `{id,value:boolean}` | `Prompt` | 与第 6 章共用同一命令；置顶时单事务验证 <5 位空余并分配有序位置，取消时清空并紧凑编号 |
+| `reorder_sticky_prompts` | `{orderedIds:string[]}` | `Prompt[]` | 验证与当前置顶 ID 集合完全一致，无重复且 0..5 个；单事务重编 1..N |
+| `get_sticky_settings` | 无 | `{visible,alwaysOnTop,density,x,y,monitorName,scaleFactor}` | 返回持久化后反序列化的原始位置、密度与置顶字段；`density` 为 `"comfortable" \| "compact"`，旧设置缺失时默认 `"comfortable"`；getter 不移动窗口或夹紧坐标 |
+| `set_sticky_settings` | `{settings:{alwaysOnTop?,density?}}` | `StickySettings` | 只接受白名单字段；`density` 仅允许 `"comfortable"` / `"compact"`，原生尺寸应用成功后持久化 |
+| `enter_sticky_mode` | 无 | `{mode:"sticky"}` | 配置并显示既有 `sticky` 窗口，不重复创建 |
+| `enter_main_mode` | `{intent?:"manage-sticky"}` | `{mode:"main"}` | 无 intent 时仅执行通用完整窗口切换；排序入口携带类型化 intent |
+| `peek_main_intent` | 无 | `{id:number,intent:"manage-sticky"} \| null` | 非破坏性读取，读取或 IPC 响应失败不清除 |
+| `ack_main_intent` | `{id:number}` | `{acknowledged:boolean}` | 只清除 ID 与当前槽位匹配的 intent；旧 ID 不得清除新请求 |
 | `hide_sticky_window` | 无 | `{hidden:true}` | 仅收起，无退出进程 |
 
-可以按既有 `set_pinned` 命令扩充其事务逻辑，但需保持向后兼容（以前无 `pin_order` 的调用不能出现两个不同真值源）。不要两边分别维护一套 pin 状态 API。管理排序、取消置顶、编辑删除后，Rust 发轻量 `prompts-changed` 事件通知 `sticky`/`main`/`quick` **重新查询 SQLite**；事件只传变更类型和 ID，不广播正文。
+`density` 与 `alwaysOnTop`、位置、可见状态一起存入 `app_settings` 的受控便签设置；它不是前端 `localStorage` 状态。前端必须等初次设置读取完成后才能提交密度或始终置顶变更，避免默认值覆盖已持久化偏好。
 
-主界面顶部 3 条统一使用 `list_sticky_prompts().slice(0,3)`；便签窗口展示 `slice(0,5)`。不以 `copy_count` 对五条重新排序。
+排序意图采用**进程内单槽位、两阶段投递**：`pending_main_intent: AsyncMutex<MainIntentSlot>` 保存至多一个 `{id,intent}` 信封。携带 intent 的 `enter_main_mode` 先写槽位，再执行窗口转换；跨锁路径的固定顺序为 `pending_main_intent -> mode_transition`。窗口转换失败时仅回滚刚写入且 ID 仍匹配的信封；转换成功后，槽位保持到 `peek_main_intent` 返回、主窗口安全打开或排队既有 `StickyManagerDialog`，再由匹配 ID 的 `ack_main_intent` 清除，除此之外不主动清空。`peek` 本身不清除，所以 `peek_main_intent` 的 IPC 响应丢失或前端处理失败不会吞掉请求；迟到的旧 ack 也不能清除更新的请求。该槽位只为当前 Rust 进程内的瞬时导航协调，不写 SQLite、`app_settings` 或 `localStorage`，重启后不恢复导航意图。
+
+`ack_main_intent` 存在响应丢失的正常歧义：Rust 端可能已经按匹配 ID 清空槽位，但 renderer 没有收到或拒绝了成功响应。前端保留已经打开或排队的对话框状态，并在下一次 focus 再次 `peek`：若返回同一个 `{id,intent}`，就幂等地打开/排队并对该精确 ID 重新 ack；若返回 `null`，说明先前 ack 已经生效；若返回更新的信封，则处理新 intent，而任何迟到的旧 ID ack 都不能清除它。
+
+`MainWindow` 在 mount 与每次 focus 时都先发起 intent 检查，不等待提示词 store 加载；检查采用 single-flight 加一次排队重查，避免并发 focus 丢失请求。收到 `manage-sticky` 后，若无冲突就幂等打开既有 `StickyManagerDialog`；若已有编辑、快捷面板、运行信息、分类管理、导入文件选择/预览等工作，则保留现有界面并排队，在阻塞界面关闭后打开。对话框已经打开时重复意图不叠加第二层；对话框须能接收稍后完成的置顶提示词 hydration。该机制不宣称或实现持久化导航状态。
+
+既有 `set_pinned` 命令负责置顶/取消置顶并保持向后兼容（以前无 `pin_order` 的调用不能出现两个不同真值源）。不要两边分别维护一套 pin 状态 API。管理排序、取消置顶、编辑删除后，Rust 发轻量 `prompts-changed` 事件；`main` 和 `sticky` 当前监听它并重新查询 SQLite，事件只传变更类型和 ID，不广播正文。`quick` 目前未监听该事件，也没有通用 reopen/focus 刷新；如验收要求跨窗口变更立即出现在 quick，这是既有实现差距。
+
+`sticky` 直接按 `list_sticky_prompts` 的 `pin_order` 顺序展示最多五条。主工作台不额外截取或展示“前三条”置顶面板，复制次数不会改变五条手工顺序。
 
 ### 17.4 复制与模板复用
 
@@ -594,9 +617,9 @@ sticky row click(id)
 
 ### 17.5 测试与发布门槛
 
-- Rust：0/1/5 置顶、添加第 6 条、重复置顶、删除中间位置、重排并发、rollback、migration 001→002、旧版 >5 条迁移保留正文。
-- Vue：5 行固定、少于 5 个空位、超长标题截断、模板入口、成功/失败 Toast、焦点按钮、读屏名称。
-- macOS 原生：窗口独立于 main、关闭 main 不杀 sticky、置顶开关、拖动位置跨重启恢复、多屏断开、Safari/VS Code 粘贴验证。
+- Rust：0/1/5 置顶、添加第 6 条、重复置顶、删除中间位置、重排并发、rollback、migration 001→002、旧版 >5 条迁移保留正文；密度默认值/白名单/原生尺寸回滚；intent 的非破坏 peek、匹配/过期 ack、转换失败回滚与固定锁顺序。
+- Vue：两档都固定五槽位、舒适/精简行内容差异、目标态按钮文案/图标、设置就绪保护、少于 5 个空位、超长标题截断、模板入口、成功/失败 Toast、读屏名称；排序 intent 在主窗口直接打开或模态安全排队，并兼容置顶数据稍后加载；ack 响应丢失后在下一次 focus 重试 peek，覆盖同一信封幂等重开/重 ack 与槽位已空两种结果。
+- macOS 原生：窗口独立于 main、关闭 main 不杀 sticky、420×695 / 340×270 精确切换且不可任意缩放、密度跨重启恢复、置顶开关、Safari/VS Code 粘贴验证。AT-23 的逻辑坐标、`workArea` 夹紧、显式主屏回退与多屏断开恢复当前为 P1 实现差距，原生验收记为 `UNVERIFIED_MACOS_RUNTIME`，不得 PASS。
 - 录制/截图可遮挡个人提示词正文。HTML 原型只能证明视觉与 JS 模拟，不能代替上述系统级验收。
 
 参考官方 API（访问/版本核验日期以实施当天为准）：
