@@ -1,7 +1,7 @@
 # PromptDock 便签窗口控件精简设计
 
 **日期：** 2026-10-15  
-**状态：** 用户已确认交互方向，待复审
+**状态：** 用户已确认交互方向，待用户复核
 **范围：** `sticky` 独立便签窗口及其进入主窗口管理场景的定向导航；不改变快捷搜索窗口、SQLite 数据结构或主窗口管理能力
 
 ## 1. 背景与目标
@@ -94,7 +94,9 @@
 - 底部“排序”调用 `enterMainMode("manage-sticky")`；Rust 在切窗前保存一次性 `pendingMainIntent`，主窗口通过 `take_main_intent` 原子读取并清除后打开现有 `StickyManagerDialog`；
 - 转换进行中沿用现有防重复、失败提示和卸载安全机制；
 - 两个入口共享同一切窗忙碌锁，连续点击或交叉点击只允许一个请求；
-- 带 intent 的命令在待处理 intent 已保存且主窗口切换成功后返回“导航已接受”；若切窗失败，清除本次尚未消费的 intent，并沿用便签中的可见切窗错误；
+- `pendingMainIntent` 使用 `tokio::sync::Mutex<Option<MainIntent>>`。带 intent 的命令先获取 pending-intent 锁，写入 intent，并在仍持有该锁时完成整个 `transition_to(..., Main).await`；切窗成功后保留 intent、释放锁并返回“导航已接受”，切窗失败则先清除 intent、再释放锁并沿用便签中的可见切窗错误；
+- `take_main_intent` 获取同一把 pending-intent 锁；若主窗口在切窗事务完成前获得焦点，消费请求必须等待。切窗成功后它只返回并消费一次 `manage-sticky`，切窗失败后只返回 `None`，不得打开或排队管理弹窗；
+- 锁顺序固定为：带 intent 的路径先获取 pending-intent 锁，再由 `transition_to` 获取 `mode_transition` 锁；任何代码不得以相反顺序同时获取两把锁。普通无 intent 的 `enterMainMode()` 不创建、消费或清除已有的待重试 intent；
 - 主窗口必须在任何 `await store.load()` 之前同步注册浏览器 `focus` 监听，并立即调用一次 intent 消费；这样无论 focus 发生在组件挂载前还是后，持久于 Rust 进程内的 intent 都不会因一次事件丢失；
 - 主窗口的 intent 消费使用单飞忙碌锁；挂载与 focus 同时触发时不并发执行两个 `take_main_intent` 请求；
 - `take_main_intent` 失败时不清除 Rust 中的 intent，主窗口显示可访问错误“无法打开置顶排序，请重试”，并在下次获得焦点时重试；
@@ -180,11 +182,13 @@
 7. 组件卸载：迟到的初始化、密度成功或失败响应不再更新状态或错误；
 8. DOM 中不存在旧设置齿轮、设置 dialog、遮罩、底部“管理”和弹窗“打开完整窗口”；相关专用 CSS 选择器也已删除；
 9. 标题栏完整模式调用无 intent 的普通切窗；“排序”调用 `manage-sticky` intent；二者共享防重复锁；
-10. Rust 普通切窗不创建 intent；`manage-sticky` 在切窗前保存一次性 intent，切窗失败清除本次 intent，`take_main_intent` 成功后只消费一次、失败时保留；
+10. Rust 普通切窗不创建或误清除 intent；`manage-sticky` 在持有 pending-intent 锁期间完成切窗，成功后 `take_main_intent` 只消费一次，失败时清除后让并发 take 返回 `None`；intent 读取命令自身失败时保留待处理值；
 11. `store.load()` 延迟或 focus 早于组件挂载时，主窗口仍能在挂载/获得焦点的双触发中消费 intent 并打开 `StickyManagerDialog`；两个触发重叠时由单飞锁合并；
 12. 主窗口 intent 读取失败时在可见主窗口显示错误并保留重试机会；组件卸载后不响应 focus，也不更新界面；
 13. 已有编辑、导入、分类管理、运行信息或快捷面板时只排队一个排序 intent，关闭当前界面后才打开管理弹窗；管理弹窗已经打开时不重复挂载；
-14. 原生 `.app` 手工验证：420×695 与 340×270 下三个标题栏按钮、底栏、焦点、tooltip 和错误提示均无裁切，并验证双向切换及重启持久化。不得用 jsdom 布局断言替代该项。
+14. Rust 成功竞态：暂停窗口切换并并发调用 `take_main_intent`，take 在切窗结束前保持等待，成功后只返回一次 `manage-sticky`；
+15. Rust 失败竞态：暂停窗口切换并先发起 take，再让切窗失败；take 最终返回 `None`，主窗口不打开也不排队管理弹窗；
+16. 原生 `.app` 手工验证：420×695 与 340×270 下三个标题栏按钮、底栏、焦点、tooltip 和错误提示均无裁切，并验证双向切换及重启持久化。不得用 jsdom 布局断言替代该项。
 
 ## 9. 备选方案与决策
 
