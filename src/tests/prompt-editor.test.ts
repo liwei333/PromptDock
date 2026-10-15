@@ -56,6 +56,28 @@ const prompt: Prompt = {
   updatedAt: 1,
 };
 
+const secondPrompt: Prompt = {
+  ...prompt,
+  id: "prompt-b",
+  title: "商业分析",
+  description: "分析说明",
+  body: "分析 {{公司}}",
+  categoryId: "category-b",
+  categoryName: "商业分析",
+  tags: ["商业", "分析"],
+  updatedAt: 2,
+};
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, reject, resolve };
+}
+
 const wrappers: VueWrapper[] = [];
 
 function track<T extends VueWrapper>(wrapper: T): T {
@@ -241,6 +263,89 @@ describe("PromptEditorDialog", () => {
     expect(wrapper.emitted("save")?.[0]?.[0]).toEqual(
       expect.objectContaining({ tags: ["开发", "审查", "稳定性"] }),
     );
+  });
+
+  it("atomically resets form, tags, dirty baseline, and save target when the prompt target changes", async () => {
+    const wrapper = track(
+      mount(PromptEditorDialog, {
+        attachTo: document.body,
+        props: { prompt, categories },
+        global: { stubs: { Teleport: false } },
+      }),
+    );
+    await settle();
+
+    const title = () =>
+      document.body.querySelector<HTMLInputElement>(
+        "[data-test='prompt-title']",
+      )!;
+    const tags = () =>
+      document.body.querySelector<HTMLInputElement>(
+        "[data-test='prompt-tags']",
+      )!;
+    title().value = "旧目标脏数据";
+    title().dispatchEvent(new Event("input", { bubbles: true }));
+
+    await wrapper.setProps({ prompt: null });
+    await settle();
+    expect(title().value).toBe("");
+    expect(tags().value).toBe("");
+    expect(confirmDialog).not.toHaveBeenCalled();
+    title().value = "新建标题";
+    title().dispatchEvent(new Event("input", { bubbles: true }));
+    const body = document.body.querySelector<HTMLTextAreaElement>(
+      ".editor-form textarea",
+    )!;
+    body.value = "新建正文";
+    body.dispatchEvent(new Event("input", { bubbles: true }));
+    document.body
+      .querySelector<HTMLButtonElement>("[data-test='save-prompt']")!
+      .click();
+    const newPromptSaves = wrapper.emitted("save") ?? [];
+    expect(newPromptSaves[newPromptSaves.length - 1]?.[1]).toBeUndefined();
+
+    await wrapper.setProps({ prompt: secondPrompt });
+    await settle();
+    expect(title().value).toBe("商业分析");
+    expect(tags().value).toBe("商业，分析");
+    document.body
+      .querySelector<HTMLButtonElement>("[data-test='save-prompt']")!
+      .click();
+    const existingPromptSaves = wrapper.emitted("save") ?? [];
+    expect(existingPromptSaves[existingPromptSaves.length - 1]?.[1]).toBe(
+      "prompt-b",
+    );
+
+    document.body
+      .querySelector<HTMLButtonElement>("[data-test='cancel-prompt-edit']")!
+      .click();
+    await settle();
+    expect(confirmDialog).not.toHaveBeenCalled();
+    expect(wrapper.emitted("close")).toHaveLength(1);
+  });
+
+  it("ignores a stale dirty confirmation after the editor target changes", async () => {
+    const pending = deferred<boolean>();
+    confirmDialog.mockReturnValueOnce(pending.promise);
+    const wrapper = await dirtyEditor();
+
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    );
+    await settle();
+    expect(confirmDialog).toHaveBeenCalledTimes(1);
+
+    await wrapper.setProps({ prompt: secondPrompt });
+    await settle();
+    pending.resolve(true);
+    await settle();
+
+    expect(wrapper.emitted("close")).toBeUndefined();
+    expect(
+      document.body.querySelector<HTMLInputElement>(
+        "[data-test='prompt-title']",
+      )?.value,
+    ).toBe("商业分析");
   });
 
   it("keeps a dirty editor open after rejected Escape, then emits close without save after confirmation", async () => {

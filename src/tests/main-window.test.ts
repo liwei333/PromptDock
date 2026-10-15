@@ -86,6 +86,7 @@ vi.mock("@/services/clipboard", () => ({ copyPromptText }));
 
 import MainWindow from "@/windows/MainWindow.vue";
 import DashboardStatCards from "@/components/DashboardStatCards.vue";
+import PromptEditorDialog from "@/components/PromptEditorDialog.vue";
 import PromptListPane from "@/components/PromptListPane.vue";
 import WorkbenchIconRail from "@/components/WorkbenchIconRail.vue";
 
@@ -352,6 +353,54 @@ describe("MainWindow V3 workbench", () => {
 
     expect(wrapper.find(".palette-overlay").exists()).toBe(true);
     wrapper.unmount();
+  });
+
+  it("does not retarget an open editor with Cmd/Ctrl+N, then opens new after close", async () => {
+    promptApi.list.mockResolvedValue({ items: [pinnedPrompt], total: 1 });
+    const wrapper = await mountMainWindow(true);
+
+    try {
+      await wrapper.get("[data-test='detail-edit']").trigger("click");
+      await flushPromises();
+      const editor = wrapper.findComponent(PromptEditorDialog);
+      expect(editor.exists()).toBe(true);
+      expect(editor.props("prompt")).toEqual(
+        expect.objectContaining({ id: "pinned-1" }),
+      );
+
+      const focusedButton = wrapper.get<HTMLButtonElement>(
+        "[data-test='detail-edit']",
+      );
+      focusedButton.element.focus();
+      focusedButton.element.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "n",
+          ctrlKey: true,
+          bubbles: true,
+        }),
+      );
+      await flushPromises();
+      expect(wrapper.findComponent(PromptEditorDialog).props("prompt")).toEqual(
+        expect.objectContaining({ id: "pinned-1" }),
+      );
+
+      editor.vm.$emit("close");
+      await flushPromises();
+      expect(wrapper.findComponent(PromptEditorDialog).exists()).toBe(false);
+      focusedButton.element.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "n",
+          metaKey: true,
+          bubbles: true,
+        }),
+      );
+      await flushPromises();
+      const newEditor = wrapper.findComponent(PromptEditorDialog);
+      expect(newEditor.exists()).toBe(true);
+      expect(newEditor.props("prompt")).toBeNull();
+    } finally {
+      wrapper.unmount();
+    }
   });
 
   it("opens category management from rail, list, and category filter", async () => {

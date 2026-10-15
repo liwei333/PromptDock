@@ -1,4 +1,4 @@
-import { flushPromises, mount } from "@vue/test-utils";
+import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { runtimeInfo } = vi.hoisted(() => ({ runtimeInfo: vi.fn() }));
@@ -9,8 +9,38 @@ vi.mock("@/api/commands", () => ({
 
 import RuntimeInfoDialog from "@/components/RuntimeInfoDialog.vue";
 
+const wrappers: VueWrapper[] = [];
+
+function track<T extends VueWrapper>(wrapper: T): T {
+  wrappers.push(wrapper);
+  return wrapper;
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, reject, resolve };
+}
+
+function runtimeState(wrapper: VueWrapper) {
+  return (
+    wrapper.vm.$ as unknown as {
+      setupState: { error: string; info: unknown };
+    }
+  ).setupState;
+}
+
 describe("RuntimeInfoDialog", () => {
-  afterEach(() => document.body.replaceChildren());
+  afterEach(() => {
+    for (const wrapper of wrappers.splice(0)) {
+      if (wrapper.exists()) wrapper.unmount();
+    }
+    document.body.replaceChildren();
+  });
 
   beforeEach(() => {
     runtimeInfo.mockReset();
@@ -27,10 +57,12 @@ describe("RuntimeInfoDialog", () => {
   });
 
   it("describes local storage without claiming the device is a Mac", async () => {
-    mount(RuntimeInfoDialog, {
-      attachTo: document.body,
-      global: { stubs: { Teleport: false } },
-    });
+    track(
+      mount(RuntimeInfoDialog, {
+        attachTo: document.body,
+        global: { stubs: { Teleport: false } },
+      }),
+    );
     await flushPromises();
 
     const dialog = document.body.querySelector<HTMLElement>('[role="dialog"]')!;
@@ -48,14 +80,51 @@ describe("RuntimeInfoDialog", () => {
 
   it("announces runtime loading failures as blocking errors", async () => {
     runtimeInfo.mockRejectedValue(new Error("无法读取运行信息"));
-    mount(RuntimeInfoDialog, {
-      attachTo: document.body,
-      global: { stubs: { Teleport: false } },
-    });
+    track(
+      mount(RuntimeInfoDialog, {
+        attachTo: document.body,
+        global: { stubs: { Teleport: false } },
+      }),
+    );
     await flushPromises();
 
     expect(
       document.body.querySelector('[role="alert"]')?.textContent,
     ).toContain("无法读取运行信息");
   });
+
+  it.each(["resolve", "reject"] as const)(
+    "does not write %s state after unmount",
+    async (outcome) => {
+      const pending = deferred<Awaited<ReturnType<typeof runtimeInfo>>>();
+      runtimeInfo.mockReturnValueOnce(pending.promise);
+      const wrapper = track(
+        mount(RuntimeInfoDialog, {
+          attachTo: document.body,
+          global: { stubs: { Teleport: false } },
+        }),
+      );
+      expect(runtimeState(wrapper).info).toBeNull();
+      expect(runtimeState(wrapper).error).toBe("");
+      wrapper.unmount();
+
+      if (outcome === "resolve") {
+        pending.resolve({
+          dbPath: "/tmp/promptdock.sqlite3",
+          version: "1.1.1",
+          shortcut: {
+            accelerator: "Option+Space",
+            registered: true,
+            error: null,
+          },
+        });
+      } else {
+        pending.reject(new Error("late failure"));
+      }
+      await flushPromises();
+
+      expect(runtimeState(wrapper).info).toBeNull();
+      expect(runtimeState(wrapper).error).toBe("");
+    },
+  );
 });

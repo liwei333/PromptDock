@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { onBeforeUnmount, onMounted, ref } from "vue";
 
 import { windowApi } from "@/api/commands";
 import PdButton from "@/components/ui/PdButton.vue";
@@ -10,13 +10,21 @@ import type { RuntimeInfo } from "@/types/runtime";
 const emit = defineEmits<{ close: [] }>();
 const info = ref<RuntimeInfo | null>(null);
 const error = ref("");
+let disposed = false;
 
 onMounted(async () => {
   try {
-    info.value = await windowApi.runtimeInfo();
+    const runtimeInfo = await windowApi.runtimeInfo();
+    if (!disposed) info.value = runtimeInfo;
   } catch (reason) {
-    error.value = reason instanceof Error ? reason.message : String(reason);
+    if (!disposed) {
+      error.value = reason instanceof Error ? reason.message : String(reason);
+    }
   }
+});
+
+onBeforeUnmount(() => {
+  disposed = true;
 });
 </script>
 

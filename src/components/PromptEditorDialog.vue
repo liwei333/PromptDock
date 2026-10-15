@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { confirm } from "@tauri-apps/plugin-dialog";
-import { computed, reactive, ref } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 
 import PdButton from "@/components/ui/PdButton.vue";
 import PdDialog from "@/components/ui/PdDialog.vue";
@@ -19,21 +19,30 @@ const emit = defineEmits<{
   close: [];
   delete: [prompt: Prompt];
 }>();
-const general =
-  props.categories.find((item) => item.name === "通用效率")?.id ??
-  props.categories[0]?.id ??
-  "";
-const form = reactive<PromptInput>({
-  title: props.prompt?.title ?? "",
-  description: props.prompt?.description ?? "",
-  body: props.prompt?.body ?? "",
-  categoryId: props.prompt?.categoryId ?? general,
-  tags: [...(props.prompt?.tags ?? [])],
-  isFavorite: props.prompt?.isFavorite ?? false,
-  isPinned: props.prompt?.isPinned ?? false,
-});
-const initial = JSON.stringify(form);
+function createForm(
+  prompt: Prompt | null | undefined,
+  categories: Category[],
+): PromptInput {
+  const defaultCategory =
+    categories.find((item) => item.name === "通用效率")?.id ??
+    categories[0]?.id ??
+    "";
+  return {
+    title: prompt?.title ?? "",
+    description: prompt?.description ?? "",
+    body: prompt?.body ?? "",
+    categoryId: prompt?.categoryId ?? defaultCategory,
+    tags: [...(prompt?.tags ?? [])],
+    isFavorite: prompt?.isFavorite ?? false,
+    isPinned: prompt?.isPinned ?? false,
+  };
+}
+
+const form = reactive<PromptInput>(createForm(props.prompt, props.categories));
+let initial = JSON.stringify(form);
 const confirmingClose = ref(false);
+let targetRevision = 0;
+let closeRequest = 0;
 const categoryOptions = computed<PdSelectOption[]>(() =>
   props.categories.map((category) => ({
     value: category.id,
@@ -55,6 +64,22 @@ const dialogTitle = computed(() =>
 );
 const dialogDescription = computed(() =>
   props.prompt ? props.prompt.title : "把常用工作流保存到本机",
+);
+
+function resetTarget(): void {
+  targetRevision += 1;
+  closeRequest += 1;
+  confirmingClose.value = false;
+  const next = createForm(props.prompt, props.categories);
+  Object.assign(form, next);
+  tagsText.value = next.tags.join("，");
+  initial = JSON.stringify(next);
+}
+
+watch(
+  () => `${props.prompt?.id ?? "new"}\u0000${props.prompt?.updatedAt ?? ""}`,
+  resetTarget,
+  { flush: "sync" },
 );
 
 function updateTextField(
@@ -98,15 +123,18 @@ function updateBoolean(field: "isFavorite" | "isPinned", event: Event): void {
 async function requestClose(): Promise<void> {
   if (props.saving || confirmingClose.value) return;
   if (JSON.stringify(form) !== initial) {
+    const revision = targetRevision;
+    const request = ++closeRequest;
     confirmingClose.value = true;
     try {
       const shouldClose = await confirm("当前修改尚未保存，确定放弃吗？", {
         title: "放弃未保存修改？",
         kind: "warning",
       });
+      if (request !== closeRequest || revision !== targetRevision) return;
       if (!shouldClose) return;
     } finally {
-      confirmingClose.value = false;
+      if (request === closeRequest) confirmingClose.value = false;
     }
   }
   emit("close");

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { X } from "lucide-vue-next";
-import { computed, reactive, ref, useId } from "vue";
+import { computed, onBeforeUnmount, reactive, ref, useId, watch } from "vue";
 
 import PdButton from "@/components/ui/PdButton.vue";
 import PdIconButton from "@/components/ui/PdIconButton.vue";
@@ -21,29 +21,62 @@ const values = reactive<Record<string, string>>({});
 const error = ref("");
 const copying = ref(false);
 const titleId = useId();
+const promptIdentity = computed(
+  () =>
+    `${props.prompt.id}\u0000${props.prompt.body}\u0000${props.prompt.updatedAt}`,
+);
+let copyRequest = 0;
+let disposed = false;
 const preview = computed(() =>
   template.value.error
     ? props.prompt.body
     : renderTemplatePreview(props.prompt.body, values),
 );
 
+function resetForPrompt(): void {
+  copyRequest += 1;
+  for (const name of Object.keys(values)) delete values[name];
+  error.value = "";
+  copying.value = false;
+}
+
+watch(promptIdentity, resetForPrompt, { flush: "sync" });
+
+function isCurrentRequest(request: number, identity: string): boolean {
+  return (
+    !disposed && request === copyRequest && identity === promptIdentity.value
+  );
+}
+
 async function copy(): Promise<void> {
   if (copying.value) return;
+  const request = ++copyRequest;
+  const identity = promptIdentity.value;
+  const promptId = props.prompt.id;
+  const body = props.prompt.body;
+  const valueSnapshot = { ...values };
   error.value = "";
   try {
     copying.value = true;
     const text = template.value.error
-      ? props.prompt.body
-      : renderTemplate(props.prompt.body, values);
-    await copyPromptText({ id: props.prompt.id, text });
-    emit("copied");
+      ? body
+      : renderTemplate(body, valueSnapshot);
+    await copyPromptText({ id: promptId, text });
+    if (isCurrentRequest(request, identity)) emit("copied");
   } catch (reason) {
-    error.value =
-      reason instanceof Error ? reason.message : "复制失败，请检查变量后重试";
+    if (isCurrentRequest(request, identity)) {
+      error.value =
+        reason instanceof Error ? reason.message : "复制失败，请检查变量后重试";
+    }
   } finally {
-    copying.value = false;
+    if (isCurrentRequest(request, identity)) copying.value = false;
   }
 }
+
+onBeforeUnmount(() => {
+  disposed = true;
+  copyRequest += 1;
+});
 </script>
 
 <template>

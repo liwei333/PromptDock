@@ -352,7 +352,8 @@ function keydown(event: KeyboardEvent): void {
   } else if (
     commandModifier &&
     event.key.toLowerCase() === "n" &&
-    !editingText
+    !editingText &&
+    editing.value === undefined
   ) {
     event.preventDefault();
     editing.value = null;
@@ -484,6 +485,7 @@ onBeforeUnmount(() => {
 
     <PromptEditorDialog
       v-if="editing !== undefined"
+      :key="editing ? `editor:${editing.id}` : 'editor:new'"
       :prompt="editing"
       :categories="store.categories"
       :saving="saving"

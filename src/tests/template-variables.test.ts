@@ -1,4 +1,4 @@
-import { flushPromises, mount } from "@vue/test-utils";
+import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const { copyPromptText } = vi.hoisted(() => ({ copyPromptText: vi.fn() }));
@@ -12,9 +12,57 @@ import {
   renderTemplate,
   TemplateVariableError,
 } from "@/composables/useTemplateVariables";
+import type { Prompt } from "@/types/prompt";
+
+const wrappers: VueWrapper[] = [];
+
+function track<T extends VueWrapper>(wrapper: T): T {
+  wrappers.push(wrapper);
+  return wrapper;
+}
+
+function makePrompt(id: string, body: string, updatedAt = 1): Prompt {
+  return {
+    id,
+    title: `模板 ${id}`,
+    description: "",
+    body,
+    categoryId: "category-a",
+    categoryName: "通用效率",
+    tags: [],
+    isFavorite: false,
+    isPinned: false,
+    pinOrder: null,
+    copyCount: 0,
+    lastCopiedAt: null,
+    createdAt: 1,
+    updatedAt,
+  };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, reject, resolve };
+}
+
+function templateState(wrapper: VueWrapper) {
+  return (
+    wrapper.vm.$ as unknown as {
+      setupState: { copying: boolean };
+    }
+  ).setupState;
+}
 
 describe("template variables", () => {
   afterEach(() => {
+    for (const wrapper of wrappers.splice(0)) {
+      if (wrapper.exists()) wrapper.unmount();
+    }
     document.body.replaceChildren();
     copyPromptText.mockReset();
   });
@@ -58,27 +106,29 @@ describe("template variables", () => {
   });
 
   it("keeps the presentation accessible and blocks copying incomplete fields", async () => {
-    const wrapper = mount(TemplateVariablesPanel, {
-      attachTo: document.body,
-      props: {
-        prompt: {
-          id: "prompt-a",
-          title: "变量模板",
-          description: "",
-          body: "你好 {{姓名}}，路径 {{路径}}",
-          categoryId: "category-a",
-          categoryName: "通用效率",
-          tags: [],
-          isFavorite: false,
-          isPinned: false,
-          pinOrder: null,
-          copyCount: 0,
-          lastCopiedAt: null,
-          createdAt: 1,
-          updatedAt: 1,
+    const wrapper = track(
+      mount(TemplateVariablesPanel, {
+        attachTo: document.body,
+        props: {
+          prompt: {
+            id: "prompt-a",
+            title: "变量模板",
+            description: "",
+            body: "你好 {{姓名}}，路径 {{路径}}",
+            categoryId: "category-a",
+            categoryName: "通用效率",
+            tags: [],
+            isFavorite: false,
+            isPinned: false,
+            pinOrder: null,
+            copyCount: 0,
+            lastCopiedAt: null,
+            createdAt: 1,
+            updatedAt: 1,
+          },
         },
-      },
-    });
+      }),
+    );
 
     await wrapper.get("[data-test='copy-template']").trigger("click");
     await flushPromises();
@@ -106,14 +156,16 @@ describe("template variables", () => {
       createdAt: 1,
       updatedAt: 1,
     };
-    const wrapper = mount({
-      components: { TemplateVariablesPanel },
-      setup: () => ({ prompt }),
-      template: `
+    const wrapper = track(
+      mount({
+        components: { TemplateVariablesPanel },
+        setup: () => ({ prompt }),
+        template: `
         <TemplateVariablesPanel :prompt="prompt" />
         <TemplateVariablesPanel :prompt="prompt" />
       `,
-    });
+      }),
+    );
 
     const panels = wrapper.findAll(".variable-panel");
     const ids = panels.map((panel) => panel.attributes("aria-labelledby"));
@@ -123,5 +175,104 @@ describe("template variables", () => {
       expect(id).toBeDefined();
       expect(panel.find(`#${CSS.escape(id!)}`).text()).toBe("变量模板");
     }
+  });
+
+  it("clears values and preview state when the prompt identity changes", async () => {
+    const wrapper = track(
+      mount(TemplateVariablesPanel, {
+        props: { prompt: makePrompt("a", "A {{姓名}}") },
+      }),
+    );
+    await wrapper.get('input[placeholder="填写姓名"]').setValue("旧值");
+    expect(wrapper.get(".preview-block pre").text()).toContain("A 旧值");
+
+    await wrapper.setProps({
+      prompt: makePrompt("b", "B {{姓名}}", 2),
+    });
+    await flushPromises();
+
+    expect(
+      wrapper.get<HTMLInputElement>('input[placeholder="填写姓名"]').element
+        .value,
+    ).toBe("");
+    expect(wrapper.get(".preview-block pre").text()).toBe("B {{姓名}}");
+    expect(wrapper.text()).not.toContain("旧值");
+  });
+
+  it.each(["resolve", "reject"] as const)(
+    "ignores a stale copy %s after switching prompts",
+    async (outcome) => {
+      const pending = deferred<unknown>();
+      copyPromptText.mockReturnValueOnce(pending.promise);
+      const wrapper = track(
+        mount(TemplateVariablesPanel, {
+          props: { prompt: makePrompt("a", "A {{姓名}}") },
+        }),
+      );
+      await wrapper.get('input[placeholder="填写姓名"]').setValue("旧值");
+      await wrapper.get("[data-test='copy-template']").trigger("click");
+
+      await wrapper.setProps({
+        prompt: makePrompt("b", "B {{姓名}}", 2),
+      });
+      await flushPromises();
+      expect(
+        wrapper.get("[data-test='copy-template']").attributes("aria-busy"),
+      ).toBeUndefined();
+
+      if (outcome === "resolve") pending.resolve(undefined);
+      else pending.reject(new Error("旧请求失败"));
+      await flushPromises();
+
+      expect(wrapper.emitted("copied")).toBeUndefined();
+      expect(wrapper.text()).not.toContain("旧请求失败");
+      expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+    },
+  );
+
+  it("allows the new prompt to copy while the old prompt request is pending", async () => {
+    const pending = deferred<unknown>();
+    copyPromptText
+      .mockReturnValueOnce(pending.promise)
+      .mockResolvedValueOnce(undefined);
+    const wrapper = track(
+      mount(TemplateVariablesPanel, {
+        props: { prompt: makePrompt("a", "A {{姓名}}") },
+      }),
+    );
+    await wrapper.get('input[placeholder="填写姓名"]').setValue("旧值");
+    await wrapper.get("[data-test='copy-template']").trigger("click");
+    await wrapper.setProps({ prompt: makePrompt("b", "B {{姓名}}", 2) });
+    await wrapper.get('input[placeholder="填写姓名"]').setValue("新值");
+    await wrapper.get("[data-test='copy-template']").trigger("click");
+    await flushPromises();
+
+    expect(copyPromptText).toHaveBeenLastCalledWith({
+      id: "b",
+      text: "B 新值",
+    });
+    expect(wrapper.emitted("copied")).toHaveLength(1);
+    pending.resolve(undefined);
+    await flushPromises();
+    expect(wrapper.emitted("copied")).toHaveLength(1);
+  });
+
+  it("does not emit after a pending copy resolves following unmount", async () => {
+    const pending = deferred<unknown>();
+    copyPromptText.mockReturnValueOnce(pending.promise);
+    const wrapper = track(
+      mount(TemplateVariablesPanel, {
+        props: { prompt: makePrompt("a", "A {{姓名}}") },
+      }),
+    );
+    await wrapper.get('input[placeholder="填写姓名"]').setValue("旧值");
+    await wrapper.get("[data-test='copy-template']").trigger("click");
+    expect(templateState(wrapper).copying).toBe(true);
+    wrapper.unmount();
+    pending.resolve(undefined);
+    await flushPromises();
+
+    expect(wrapper.emitted("copied")).toBeUndefined();
+    expect(templateState(wrapper).copying).toBe(true);
   });
 });
