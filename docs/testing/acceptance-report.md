@@ -8,9 +8,9 @@ Environment: macOS 26.4.1 (25E253), Apple Silicon arm64, Node 25.6.0, pnpm 10.34
 
 ## Native UI polish delivered scope
 
-- The application now uses repository-locked `reka-ui@2.11.0` interaction primitives and `lucide-vue-next@1.0.0` icons through PromptDock-owned wrappers. It does not load a UI framework, icon set, font, or other asset from a CDN at runtime.
+- The application now consumes repository-locked `reka-ui@2.11.0` interaction primitives through PromptDock-owned `Pd*` wrappers. `lucide-vue-next@1.0.0` icons are statically and directly imported into PromptDock components and included in the local bundle. It does not load a UI framework, icon set, font, or other asset from a CDN at runtime.
 - Main, Quick, Sticky, editor, import preview, variable input, category management, shared dialogs/selects/tooltips/status feedback, and retained prompt card/detail components use one restrained macOS-oriented visual language. Simulated traffic lights and production Unicode action glyphs were removed; genuine keyboard hints and the `340 × 270` size label remain text.
-- The Main workbench's compact CSS contract keeps all search/filter controls visible on one row at the 1024×700 design target by reducing widths, gaps, and padding without replacing the desktop workflow or hiding filters. The configured 1360×860 native view was observed; the exact 1024×700 native resize boundary is recorded separately as unverified.
+- The Main workbench's compact CSS contract keeps all search/filter controls visible on one row at the 1024×700 design target by reducing widths, gaps, and padding without replacing the desktop workflow or hiding filters. A 1360×860 size was requested for native inspection, but the captured full window measured 1360×812 points, likely because of the test machine's available work area; both exact target-size boundaries are recorded separately as unverified.
 - Existing SQLite, clipboard, copy-statistics, template, category-safety, five-pin, native-window, density, and latest-intent behavior remain the product contract. This pass adds no account, network, cloud, telemetry, updater, model, or automatic-paste behavior.
 
 ## Native UI polish automated gates
@@ -36,30 +36,30 @@ Environment: macOS 26.4.1 (25E253), Apple Silicon arm64, Node 25.6.0, pnpm 10.34
 
 ## Native UI polish database and offline evidence
 
-- Read-only inspection of `/Users/qianduoduo/Library/Application Support/com.promptdock.local/promptdock.sqlite3` returned `categories=6`, `prompts=4`, `daily_copy_stats=0`, `migrations=3`, `pinned=4`, and `favorites=3`. Category prompt counts remained `0, 1, 0, 0, 0, 3` in their stored order. The aggregate lifetime `copy_count` remained 8 before and after the native interaction pass, and final Sticky settings reported `density="comfortable"` and `visible=false`.
+- Read-only inspection of `/Users/qianduoduo/Library/Application Support/com.promptdock.local/promptdock.sqlite3` returned `categories=6`, `prompts=4`, `daily_copy_stats=0`, `migrations=3`, `pinned=4`, and `favorites=3`. Category prompt counts remained `0, 1, 0, 0, 0, 3` in their stored order. The aggregate lifetime `copy_count` remained 8 before and after the native interaction pass. At the final read-only review, Sticky settings reported `density="comfortable"` and `visible=false`.
 - The packaged executable was observed running from the repository bundle path. `lsof -a -p <packaged-process-pid> -i -n -P` returned no network descriptors. Production source inspection found no `fetch`, `XMLHttpRequest`, `WebSocket`, remote font/import, or HTTP URL in application TypeScript, Vue, CSS, or Rust sources; release CSP limits connections to Tauri IPC.
 - No real prompt was copied and no prompt or category create, edit, delete, transfer, import, or export action was performed for this verification. The allowed Sticky density/window checks may update only local `sticky_window` settings.
 
 ## Native UI polish packaged macOS observations
 
-- The exact repository bundle opened to the configured 1360×860-point Main window. Its Retina content capture measured 2720×1624 pixels after the 48-pixel native titlebar area. Real macOS close/minimize/zoom traffic lights were visible and no duplicate simulated lights appeared.
-- At that size, the search and all filter controls remained on one row. All four live statistics (`total=4`, `todayCopies=0`, `favorites=3`, `pinned=4/5`), four prompt rows, and the selected prompt detail were visible without a replacement mobile workflow.
+- The exact repository bundle was asked to open Main at 1360×860 points. The resulting full native-window screenshot, including its titlebar and window boundaries, measured 2720×1624 Retina pixels, or 1360×812 points; the test machine's available work area may have constrained the requested height. Exact 1360×860 observation is therefore not claimed. Real macOS close/minimize/zoom traffic lights were visible and no duplicate simulated lights appeared.
+- At the actually observed 1360×812-point size, the search and all filter controls remained on one row. All four live statistics (`total=4`, `todayCopies=0`, `favorites=3`, `pinned=4/5`), four prompt rows, and the selected prompt detail were visible without a replacement mobile workflow.
 - `⌘K` opened the packaged Quick palette. Its accessibility tree exposed the search input, Escape hint, and direction-key hint; Escape closed it. No result was copied.
 - The category Select was exercised from the keyboard: Shift+Tab and Return opened it, arrow-key selection applied the empty `技术研发` filter, and Return/Home/Return restored `全部分类`; a subsequent open/Escape closed without committing another choice. Main finished with all temporary filters cleared.
 - Category management opened with focus on `新增分类`, displayed the safety explanation and all six real category rows with counts `0, 1, 0, 0, 0, 3`, and closed with Escape. No category or prompt was changed.
-- Main → Sticky comfortable → compact → comfortable → Main completed in the packaged app. Retina captures measured 840×1390 pixels (420×695 points) for comfortable and 680×540 pixels (340×270 points) for compact. The accessibility tree exposed four pinned prompts plus empty slot 5 at both densities. Density was restored to `comfortable`; no prompt was copied.
+- Main → Sticky comfortable → compact → comfortable → Main completed in the packaged app. Retina captures measured 840×1390 pixels (420×695 points) for comfortable and 680×540 pixels (340×270 points) for compact. The accessibility tree exposed four pinned prompts plus empty slot 5 at both densities. Density was restored through the UI; the final read-only review reported `density="comfortable"` and `visible=false`. No prompt was copied.
 - Runtime information displayed PromptDock 1.1.1, `Option+Space · 已注册`, and the exact application-data database path. This proves the Rust registration path reported success; foreground focus from another application was not exercised and remains unverified below.
 - Shared icon-button focus treatment was visible during keyboard navigation. A hover Tooltip could not be observed reliably through the computer-use surface, so Tooltip runtime behavior is not promoted to PASS.
 - Exact 1024×700 native resize could not be completed through the available native-window controls. Task 8 tests and static width budgeting remain supporting evidence, not a substitute for that native viewport check.
 
 ## Explicit verification boundaries
 
-- `UNVERIFIED_MACOS_RUNTIME` — exact 1024×700 packaged-window layout, mouse-hover Tooltip display, actual Option+Space focus from another application, VoiceOver spoken output, real cross-application clipboard comparison, variable-template native copy, real drag-position restoration, multi-display clamping/Spaces, always-on-top against another app, live cross-window refresh after a real mutation, and destructive category transfer. Deterministic tests and implementation inspection are supporting evidence only for these scenarios.
+- `UNVERIFIED_MACOS_RUNTIME` — exact 1360×860 and exact 1024×700 packaged-window layouts, mouse-hover Tooltip display, actual Option+Space focus from another application, VoiceOver spoken output, real cross-application clipboard comparison, variable-template native copy, real drag-position restoration, multi-display clamping/Spaces, always-on-top against another app, live cross-window refresh after a real mutation, and destructive category transfer. Deterministic tests and implementation inspection are supporting evidence only for these scenarios.
 - `UNVERIFIED_WINDOWS_RUNTIME` — Windows 10/11 x64 build and window frame, `Ctrl+K`, `Ctrl+Alt+Space`, display scaling, native clipboard, Narrator, Quick, and Sticky. No Windows runner was used.
 
 ## Native UI polish conclusion
 
-Automated checks, the release build, strict post-repair signature verification, offline/read-only safety checks, the configured 1360×860 native Main view, keyboard Quick/Select/Dialog flows, and both Sticky densities passed. No P0/P1 failure was found. Final release status is **conditional pass** because the exact 1024×700 native viewport, hover Tooltip, Windows, accessibility, and other explicitly listed physical/system scenarios remain unverified.
+Automated checks, the release build, strict post-repair signature verification, offline/read-only safety checks, the actually observed 1360×812-point native Main view, keyboard Quick/Select/Dialog flows, and both Sticky densities passed. No P0/P1 failure was found. Final release status is **conditional pass** because the exact 1360×860 and 1024×700 native viewports, hover Tooltip, Windows, accessibility, and other explicitly listed physical/system scenarios remain unverified.
 
 ---
 
