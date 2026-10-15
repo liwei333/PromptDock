@@ -88,7 +88,13 @@ async function load(): Promise<void> {
   }
 }
 
+function invalidateNativeSelection(): void {
+  selectRequest += 1;
+  error.value = "";
+}
+
 watch(search, () => {
+  invalidateNativeSelection();
   activeIndex.value = 0;
   void load();
 });
@@ -148,8 +154,9 @@ function move(delta: number): void {
 async function activate(
   prompt = results.value[activeIndex.value],
 ): Promise<void> {
-  if (!prompt || copyingId.value) return;
-  error.value = "";
+  if (!prompt) return;
+  invalidateNativeSelection();
+  if (copyingId.value) return;
   clearCopySuccess();
   const sequence = ++activationSequence;
   const template = inspectTemplateVariables(prompt.body);
@@ -202,7 +209,7 @@ function actionIcon(prompt: Prompt) {
 async function templateCopied(): Promise<void> {
   const prompt = templatePrompt.value;
   if (!prompt) return;
-  error.value = "";
+  invalidateNativeSelection();
   clearCopySuccess();
   const sequence = ++activationSequence;
   templatePrompt.value = null;
@@ -221,7 +228,13 @@ async function templateCopied(): Promise<void> {
   }
 }
 
+function cancelTemplate(): void {
+  invalidateNativeSelection();
+  templatePrompt.value = null;
+}
+
 function close(): void {
+  invalidateNativeSelection();
   invalidateActivation();
   if (templatePrompt.value) templatePrompt.value = null;
   else emit("close");
@@ -256,9 +269,9 @@ async function startSelectListener(): Promise<void> {
       "quick-select-prompt",
       async (event) => {
         if (disposed) return;
-        const request = ++selectRequest;
         invalidateActivation();
         error.value = "";
+        const request = ++selectRequest;
         try {
           const prompt = await promptApi.get(event.payload);
           if (!disposed && request === selectRequest) {
@@ -302,7 +315,7 @@ onBeforeUnmount(() => {
     <TemplateVariablesPanel
       v-if="templatePrompt"
       :prompt="templatePrompt"
-      @cancel="templatePrompt = null"
+      @cancel="cancelTemplate"
       @copied="templateCopied"
     />
     <template v-else>

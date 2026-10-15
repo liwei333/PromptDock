@@ -310,6 +310,209 @@ describe("QuickPalette", () => {
     wrapper.unmount();
   });
 
+  it.each(["resolve", "reject"] as const)(
+    "ignores a native selection that %ss after Escape closes the native palette",
+    async (outcome) => {
+      enableTauri();
+      const pendingSelection = deferred<Prompt>();
+      const staleTemplate = { ...item(8), body: "旧 {{主题}}" };
+      let selectPrompt!: (event: { payload: string }) => Promise<void>;
+      promptApi.get.mockReturnValueOnce(pendingSelection.promise);
+      listen.mockImplementationOnce(async (_name, handler) => {
+        selectPrompt = handler as (event: { payload: string }) => Promise<void>;
+        return () => undefined;
+      });
+      const wrapper = mount(QuickPalette, {
+        props: {
+          initialPrompts: [item(1)],
+          onClose: () => void windowApi.hideQuick(),
+        },
+      });
+      await flushPromises();
+
+      const selection = selectPrompt({ payload: staleTemplate.id });
+      await wrapper.get("input").trigger("keydown", { key: "Escape" });
+      await flushPromises();
+      expect(windowApi.hideQuick).toHaveBeenCalledOnce();
+
+      if (outcome === "resolve") pendingSelection.resolve(staleTemplate);
+      else pendingSelection.reject(new Error("stale native selection error"));
+      await selection;
+      await flushPromises();
+
+      expect(wrapper.find(".variable-panel").exists()).toBe(false);
+      expect(wrapper.find("[role='alert']").exists()).toBe(false);
+      expect(wrapper.find("input[aria-label='搜索提示词']").exists()).toBe(
+        true,
+      );
+      expect(wrapper.get("[data-test='quick-result']").text()).toContain(
+        item(1).title,
+      );
+      expect(windowApi.hideQuick).toHaveBeenCalledOnce();
+      wrapper.unmount();
+    },
+  );
+
+  it("keeps a local direct-copy outcome when an older native selection resolves", async () => {
+    enableTauri();
+    const pendingSelection = deferred<Prompt>();
+    const localPrompt = item(1);
+    const staleTemplate = { ...item(9), body: "旧 {{主题}}" };
+    let selectPrompt!: (event: { payload: string }) => Promise<void>;
+    promptApi.get.mockReturnValueOnce(pendingSelection.promise);
+    listen.mockImplementationOnce(async (_name, handler) => {
+      selectPrompt = handler as (event: { payload: string }) => Promise<void>;
+      return () => undefined;
+    });
+    const wrapper = mount(QuickPalette, {
+      props: { initialPrompts: [localPrompt] },
+    });
+    await flushPromises();
+
+    const selection = selectPrompt({ payload: staleTemplate.id });
+    await wrapper.get("[data-test='quick-result']").trigger("click");
+    await flushPromises();
+    expect(windowApi.hideQuick).toHaveBeenCalledOnce();
+    expect(wrapper.emitted("copied")).toEqual([[localPrompt]]);
+
+    pendingSelection.resolve(staleTemplate);
+    await selection;
+    await flushPromises();
+
+    expect(wrapper.find(".variable-panel").exists()).toBe(false);
+    expect(wrapper.get("[data-test='quick-result']").text()).toContain(
+      localPrompt.title,
+    );
+    expect(windowApi.hideQuick).toHaveBeenCalledOnce();
+    wrapper.unmount();
+  });
+
+  it("keeps local search intent when an older native selection resolves", async () => {
+    enableTauri();
+    const pendingSelection = deferred<Prompt>();
+    const staleTemplate = { ...item(9), body: "旧 {{主题}}" };
+    let selectPrompt!: (event: { payload: string }) => Promise<void>;
+    promptApi.get.mockReturnValueOnce(pendingSelection.promise);
+    listen.mockImplementationOnce(async (_name, handler) => {
+      selectPrompt = handler as (event: { payload: string }) => Promise<void>;
+      return () => undefined;
+    });
+    const wrapper = mount(QuickPalette, {
+      props: { initialPrompts: [item(1)] },
+    });
+    await flushPromises();
+
+    const selection = selectPrompt({ payload: staleTemplate.id });
+    await wrapper.get("input").setValue("提示词 1");
+    pendingSelection.resolve(staleTemplate);
+    await selection;
+    await flushPromises();
+
+    expect(wrapper.find(".variable-panel").exists()).toBe(false);
+    expect(wrapper.get("input").element).toHaveProperty("value", "提示词 1");
+    expect(wrapper.get("[data-test='quick-result']").text()).toContain(
+      item(1).title,
+    );
+    wrapper.unmount();
+  });
+
+  it("keeps a local template open when an older native selection resolves", async () => {
+    enableTauri();
+    const pendingSelection = deferred<Prompt>();
+    const localTemplate = { ...item(1), body: "本地 {{项目}}" };
+    const staleTemplate = { ...item(9), body: "旧 {{主题}}" };
+    let selectPrompt!: (event: { payload: string }) => Promise<void>;
+    promptApi.get.mockReturnValueOnce(pendingSelection.promise);
+    listen.mockImplementationOnce(async (_name, handler) => {
+      selectPrompt = handler as (event: { payload: string }) => Promise<void>;
+      return () => undefined;
+    });
+    const wrapper = mount(QuickPalette, {
+      props: { initialPrompts: [localTemplate] },
+    });
+    await flushPromises();
+
+    const selection = selectPrompt({ payload: staleTemplate.id });
+    await wrapper.get("[data-test='quick-result']").trigger("click");
+    expect(wrapper.get(".variable-panel").text()).toContain(
+      localTemplate.title,
+    );
+
+    pendingSelection.resolve(staleTemplate);
+    await selection;
+    await flushPromises();
+
+    expect(wrapper.get(".variable-panel").text()).toContain(
+      localTemplate.title,
+    );
+    expect(wrapper.text()).not.toContain(staleTemplate.title);
+    wrapper.unmount();
+  });
+
+  it("keeps template cancellation after a newer pending native selection settles", async () => {
+    enableTauri();
+    const pendingSelection = deferred<Prompt>();
+    const localTemplate = { ...item(1), body: "本地 {{项目}}" };
+    const staleTemplate = { ...item(9), body: "旧 {{主题}}" };
+    let selectPrompt!: (event: { payload: string }) => Promise<void>;
+    promptApi.get.mockReturnValueOnce(pendingSelection.promise);
+    listen.mockImplementationOnce(async (_name, handler) => {
+      selectPrompt = handler as (event: { payload: string }) => Promise<void>;
+      return () => undefined;
+    });
+    const wrapper = mount(QuickPalette, {
+      props: { initialPrompts: [localTemplate] },
+    });
+    await flushPromises();
+
+    await wrapper.get("[data-test='quick-result']").trigger("click");
+    const selection = selectPrompt({ payload: staleTemplate.id });
+    await wrapper.get("button[aria-label='关闭变量填写']").trigger("click");
+    expect(wrapper.find(".variable-panel").exists()).toBe(false);
+
+    pendingSelection.resolve(staleTemplate);
+    await selection;
+    await flushPromises();
+
+    expect(wrapper.find(".variable-panel").exists()).toBe(false);
+    expect(wrapper.find("[role='alert']").exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("keeps template-copy completion after a newer pending native selection settles", async () => {
+    enableTauri();
+    const pendingSelection = deferred<Prompt>();
+    const localTemplate = { ...item(1), body: "本地 {{项目}}" };
+    const staleTemplate = { ...item(9), body: "旧 {{主题}}" };
+    let selectPrompt!: (event: { payload: string }) => Promise<void>;
+    promptApi.get.mockReturnValueOnce(pendingSelection.promise);
+    listen.mockImplementationOnce(async (_name, handler) => {
+      selectPrompt = handler as (event: { payload: string }) => Promise<void>;
+      return () => undefined;
+    });
+    const wrapper = mount(QuickPalette, {
+      props: { initialPrompts: [localTemplate] },
+    });
+    await flushPromises();
+
+    await wrapper.get("[data-test='quick-result']").trigger("click");
+    const selection = selectPrompt({ payload: staleTemplate.id });
+    await wrapper.get("input[placeholder='填写项目']").setValue("PromptDock");
+    await wrapper.get("[data-test='copy-template']").trigger("click");
+    await flushPromises();
+    expect(windowApi.hideQuick).toHaveBeenCalledOnce();
+    expect(wrapper.emitted("copied")).toEqual([[localTemplate]]);
+
+    pendingSelection.resolve(staleTemplate);
+    await selection;
+    await flushPromises();
+
+    expect(wrapper.find(".variable-panel").exists()).toBe(false);
+    expect(wrapper.find("[role='alert']").exists()).toBe(false);
+    expect(windowApi.hideQuick).toHaveBeenCalledOnce();
+    wrapper.unmount();
+  });
+
   it("invalidates a pending direct copy when native selection opens a template", async () => {
     enableTauri();
     const pendingCopy = deferred<{
