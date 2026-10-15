@@ -1,5 +1,5 @@
 import { createPinia } from "pinia";
-import { flushPromises, mount } from "@vue/test-utils";
+import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Category, Prompt } from "@/types/prompt";
@@ -64,8 +64,31 @@ vi.mock("@/api/commands", () => ({
 
 import MainWindow from "@/windows/MainWindow.vue";
 import StickyWindow from "@/windows/StickyWindow.vue";
-import WorkbenchFilters from "@/components/WorkbenchFilters.vue";
-import PdSelect from "@/components/ui/PdSelect.vue";
+
+async function settleSelectInteraction(): Promise<void> {
+  await flushPromises();
+  await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+  await flushPromises();
+}
+
+async function chooseCategoryOption(
+  wrapper: VueWrapper,
+  optionLabel: string,
+): Promise<void> {
+  await wrapper
+    .get('button[role="combobox"][aria-label="分类筛选"]')
+    .trigger("keydown", { key: "Enter", code: "Enter" });
+  await settleSelectInteraction();
+
+  const option = Array.from(
+    document.body.querySelectorAll<HTMLElement>('[role="option"]'),
+  ).find((candidate) => candidate.textContent?.trim() === optionLabel);
+  expect(option, `Expected category option named ${optionLabel}`).toBeDefined();
+  option!.dispatchEvent(
+    new MouseEvent("pointerup", { bubbles: true, button: 0 }),
+  );
+  await settleSelectInteraction();
+}
 
 const categories: Category[] = [
   {
@@ -162,29 +185,33 @@ describe("category and raw-copy regressions", () => {
   });
 
   it("combines favorite and category filters in the V3 workbench", async () => {
-    const wrapper = mount(MainWindow, { global: { plugins: [createPinia()] } });
-    await flushPromises();
+    const wrapper = mount(MainWindow, {
+      attachTo: document.body,
+      global: {
+        plugins: [createPinia()],
+        stubs: { Teleport: false },
+      },
+    });
 
-    await wrapper.get("[data-test='rail-favorites']").trigger("click");
-    await flushPromises();
-    const filters = wrapper.getComponent(WorkbenchFilters);
-    const [categorySelect] = filters.findAllComponents(PdSelect);
-    categorySelect.vm.$emit(
-      "update:modelValue",
-      "10000000-0000-4000-8000-000000000002",
-    );
-    await flushPromises();
+    try {
+      await flushPromises();
+      await wrapper.get("[data-test='rail-favorites']").trigger("click");
+      await flushPromises();
+      await chooseCategoryOption(wrapper, "投资研究");
 
-    expect(promptApi.list).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        categoryId: "10000000-0000-4000-8000-000000000002",
-        favoriteOnly: true,
-        search: undefined,
-        tab: "all",
-        view: "all",
-      }),
-    );
-    wrapper.unmount();
+      expect(promptApi.list).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          categoryId: "10000000-0000-4000-8000-000000000002",
+          favoriteOnly: true,
+          search: undefined,
+          tab: "all",
+          view: "all",
+        }),
+      );
+    } finally {
+      wrapper.unmount();
+      document.body.replaceChildren();
+    }
   });
 
   it("deletes a category only after choosing a transfer target", async () => {

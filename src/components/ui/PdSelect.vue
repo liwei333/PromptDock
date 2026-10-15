@@ -20,7 +20,7 @@ import {
   SelectValue,
   SelectViewport,
 } from "reka-ui";
-import { computed, useAttrs } from "vue";
+import { computed, useAttrs, useId } from "vue";
 
 defineOptions({ inheritAttrs: false });
 
@@ -31,6 +31,7 @@ const props = withDefaults(
     label: string;
     options: PdSelectOption[];
     placeholder?: string;
+    clearLabel?: string;
     disabled?: boolean;
   }>(),
   {
@@ -41,13 +42,28 @@ const props = withDefaults(
 const validOptions = computed(() =>
   props.options.filter((option) => option.value !== ""),
 );
+const selectedLabel = computed(
+  () =>
+    validOptions.value.find((option) => option.value === props.modelValue)
+      ?.label ?? props.placeholder,
+);
+const selectId = useId();
+const clearValue = computed(() => {
+  const externalValues = new Set([
+    props.modelValue,
+    ...props.options.map((option) => option.value),
+  ]);
+  let value = `__pd-select-clear-${selectId}__`;
+  while (externalValues.has(value)) value += "_";
+  return value;
+});
 
 const emit = defineEmits<{
   "update:modelValue": [value: string];
 }>();
 
 function updateValue(value: string): void {
-  emit("update:modelValue", value);
+  emit("update:modelValue", value === clearValue.value ? "" : value);
 }
 </script>
 
@@ -63,7 +79,9 @@ function updateValue(value: string): void {
       type="button"
       :aria-label="label"
     >
-      <SelectValue :placeholder="placeholder" />
+      <SelectValue class="pd-select-value" :placeholder="placeholder">
+        {{ selectedLabel }}
+      </SelectValue>
       <SelectIcon class="pd-select-trigger__icon">
         <ChevronDown aria-hidden="true" />
       </SelectIcon>
@@ -78,6 +96,17 @@ function updateValue(value: string): void {
         :body-lock="false"
       >
         <SelectViewport class="pd-select-viewport">
+          <SelectItem
+            v-if="clearLabel"
+            class="pd-select-item"
+            :value="clearValue"
+            :text-value="clearLabel"
+          >
+            <SelectItemText>{{ clearLabel }}</SelectItemText>
+            <SelectItemIndicator class="pd-select-item__indicator">
+              <Check aria-hidden="true" />
+            </SelectItemIndicator>
+          </SelectItem>
           <SelectItem
             v-for="option in validOptions"
             :key="option.value"

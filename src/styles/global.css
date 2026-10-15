@@ -74,6 +74,7 @@ select {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  overflow: hidden;
   min-width: 112px;
   height: var(--pd-control-md);
   padding: 0 10px 0 11px;
@@ -87,6 +88,13 @@ select {
     border-color var(--pd-motion-fast) ease,
     background var(--pd-motion-fast) ease;
 }
+.pd-select-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .pd-select-trigger:hover:not(:disabled),
 .pd-select-trigger[data-state="open"] {
   border-color: var(--pd-border-strong);
@@ -94,6 +102,7 @@ select {
 }
 .pd-select-trigger__icon {
   display: inline-flex;
+  flex: 0 0 auto;
   color: var(--pd-text-tertiary);
 }
 .pd-select-trigger__icon svg {
@@ -1517,8 +1526,8 @@ kbd {
     background var(--pd-motion-fast) ease,
     transform var(--pd-motion-fast) ease;
 }
-.workbench-rail nav button:hover,
-.rail-settings:hover {
+.workbench-rail nav button:hover:not(:disabled),
+.rail-settings:hover:not(:disabled) {
   color: var(--pd-accent);
   border-color: color-mix(in srgb, var(--pd-accent) 18%, transparent);
   background: var(--pd-accent-soft);

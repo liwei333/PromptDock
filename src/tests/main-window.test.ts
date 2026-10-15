@@ -1,5 +1,5 @@
 import { createPinia } from "pinia";
-import { flushPromises, mount } from "@vue/test-utils";
+import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { categoryApi, pinnedPrompt, promptApi, windowApi } = vi.hoisted(() => {
@@ -59,14 +59,13 @@ vi.mock("@/api/commands", () => ({
 
 import MainWindow from "@/windows/MainWindow.vue";
 import DashboardStatCards from "@/components/DashboardStatCards.vue";
-import WorkbenchFilters from "@/components/WorkbenchFilters.vue";
 import WorkbenchIconRail from "@/components/WorkbenchIconRail.vue";
-import PdSelect from "@/components/ui/PdSelect.vue";
 
 const STICKY_ENTRY_SELECTOR = "[data-test='rail-sticky-mode']";
 
-async function mountMainWindow() {
+async function mountMainWindow(attachToBody = false) {
   const wrapper = mount(MainWindow, {
+    ...(attachToBody ? { attachTo: document.body } : {}),
     global: {
       plugins: [createPinia()],
       stubs: {
@@ -78,11 +77,33 @@ async function mountMainWindow() {
         QuickPalette: true,
         RuntimeInfoDialog: true,
         StickyManagerDialog: true,
+        Teleport: false,
       },
     },
   });
   await flushPromises();
   return wrapper;
+}
+
+async function chooseCategoryOption(
+  wrapper: VueWrapper,
+  optionLabel: string,
+): Promise<void> {
+  await wrapper
+    .get('button[role="combobox"][aria-label="分类筛选"]')
+    .trigger("keydown", { key: "Enter", code: "Enter" });
+  await flushPromises();
+  await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+  await flushPromises();
+
+  const option = Array.from(
+    document.body.querySelectorAll<HTMLElement>('[role="option"]'),
+  ).find((candidate) => candidate.textContent?.trim() === optionLabel);
+  expect(option, `Expected category option named ${optionLabel}`).toBeDefined();
+  option!.dispatchEvent(
+    new MouseEvent("pointerup", { bubbles: true, button: 0 }),
+  );
+  await flushPromises();
 }
 
 describe("MainWindow V3 workbench", () => {
@@ -280,22 +301,23 @@ describe("MainWindow V3 workbench", () => {
   });
 
   it("opens category management from rail, list, and category filter", async () => {
-    const wrapper = await mountMainWindow();
+    const wrapper = await mountMainWindow(true);
 
-    for (const selector of [
-      "[data-test='rail-categories']",
-      "[data-test='list-manage-categories']",
-    ]) {
-      await wrapper.get(selector).trigger("click");
+    try {
+      for (const selector of [
+        "[data-test='rail-categories']",
+        "[data-test='list-manage-categories']",
+      ]) {
+        await wrapper.get(selector).trigger("click");
+        expect(wrapper.find(".category-manager-dialog").exists()).toBe(true);
+        await wrapper.get("[aria-label='关闭分类管理']").trigger("click");
+        await flushPromises();
+      }
+
+      await chooseCategoryOption(wrapper, "管理分类…");
       expect(wrapper.find(".category-manager-dialog").exists()).toBe(true);
-      await wrapper.get("[aria-label='关闭分类管理']").trigger("click");
+    } finally {
+      wrapper.unmount();
     }
-
-    const filters = wrapper.getComponent(WorkbenchFilters);
-    const [categorySelect] = filters.findAllComponents(PdSelect);
-    categorySelect.vm.$emit("update:modelValue", "__manage__");
-    await wrapper.vm.$nextTick();
-    expect(wrapper.find(".category-manager-dialog").exists()).toBe(true);
-    wrapper.unmount();
   });
 });

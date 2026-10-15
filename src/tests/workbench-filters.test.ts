@@ -1,5 +1,6 @@
 import { mount, type VueWrapper } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
+import { nextTick } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { categoryApi, promptApi } = vi.hoisted(() => ({
@@ -27,7 +28,6 @@ vi.mock("@/ui/platform", () => ({
 }));
 
 import WorkbenchFilters from "@/components/WorkbenchFilters.vue";
-import PdSelect from "@/components/ui/PdSelect.vue";
 import { usePromptStore } from "@/stores/promptStore";
 import type { Category, PromptQuery } from "@/types/prompt";
 
@@ -51,14 +51,41 @@ function mountFilters(
     tab: "all",
     sort: "recent",
   },
+  tags: string[] = ["Alpha", "共享"],
 ) {
   const wrapper = mount(WorkbenchFilters, {
     attachTo: document.body,
-    props: { query, categories, tags: ["Alpha", "共享"] },
+    props: { query, categories, tags },
     global: { stubs: { Teleport: false } },
   });
   mountedFilters.push(wrapper);
   return wrapper;
+}
+
+async function settleInteraction(): Promise<void> {
+  await nextTick();
+  await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+  await nextTick();
+}
+
+async function chooseFilterOption(
+  wrapper: VueWrapper,
+  label: string,
+  optionLabel: string,
+): Promise<void> {
+  await wrapper
+    .get(`button[role="combobox"][aria-label="${label}"]`)
+    .trigger("keydown", { key: "Enter", code: "Enter" });
+  await settleInteraction();
+
+  const option = Array.from(
+    document.body.querySelectorAll<HTMLElement>('[role="option"]'),
+  ).find((candidate) => candidate.textContent?.trim() === optionLabel);
+  expect(option, `Expected option named ${optionLabel}`).toBeDefined();
+  option!.dispatchEvent(
+    new MouseEvent("pointerup", { bubbles: true, button: 0 }),
+  );
+  await settleInteraction();
 }
 
 describe("V3 workbench filter store", () => {
@@ -217,6 +244,11 @@ describe("V3 workbench filter presentation", () => {
     const wrapper = mountFilters();
     expect(wrapper.find('[data-test="clear-filters"]').exists()).toBe(false);
 
+    await wrapper.setProps({
+      query: { view: "all", tab: "all", sort: "popular" },
+    });
+    expect(wrapper.find('[data-test="clear-filters"]').exists()).toBe(false);
+
     const nondefaultQueries: PromptQuery[] = [
       { search: "代码" },
       { categoryId: "category-1" },
@@ -225,7 +257,8 @@ describe("V3 workbench filter presentation", () => {
       { pinnedOnly: true },
       { recentOnly: true },
       { templateOnly: true },
-      { sort: "popular" },
+      { view: "favorite" },
+      { tab: "template" },
     ];
     for (const query of nondefaultQueries) {
       await wrapper.setProps({
@@ -234,22 +267,73 @@ describe("V3 workbench filter presentation", () => {
       expect(wrapper.find('[data-test="clear-filters"]').exists()).toBe(true);
     }
 
+    await wrapper.setProps({
+      query: {
+        view: "all",
+        tab: "all",
+        sort: "popular",
+        search: "代码",
+      },
+    });
     await wrapper.get('[data-test="clear-filters"]').trigger("click");
     expect(wrapper.emitted("clear")).toHaveLength(1);
   });
 
+  it("selects and explicitly clears category and tag filters through their menus", async () => {
+    const wrapper = mountFilters();
+
+    await chooseFilterOption(wrapper, "分类筛选", "通用效率");
+    await wrapper.setProps({
+      query: {
+        view: "all",
+        tab: "all",
+        sort: "recent",
+        categoryId: "category-1",
+      },
+    });
+    await chooseFilterOption(wrapper, "分类筛选", "全部分类");
+
+    await chooseFilterOption(wrapper, "标签筛选", "Alpha");
+    await wrapper.setProps({
+      query: {
+        view: "all",
+        tab: "all",
+        sort: "recent",
+        tag: "Alpha",
+      },
+    });
+    await chooseFilterOption(wrapper, "标签筛选", "全部标签");
+
+    expect(wrapper.emitted("change")).toEqual([
+      [{ categoryId: "category-1" }],
+      [{ categoryId: undefined }],
+      [{ tag: "Alpha" }],
+      [{ tag: undefined }],
+    ]);
+  });
+
+  it("disables the tag combobox when no tags exist", async () => {
+    const wrapper = mountFilters(undefined, []);
+    const tagTrigger = wrapper.get(
+      'button[role="combobox"][aria-label="标签筛选"]',
+    );
+
+    expect(tagTrigger.attributes()).toHaveProperty("disabled");
+    await tagTrigger.trigger("keydown", { key: "Enter", code: "Enter" });
+    await settleInteraction();
+    expect(tagTrigger.attributes("aria-expanded")).toBe("false");
+    expect(document.body.querySelector('[role="listbox"]')).toBeNull();
+  });
+
   it("opens category management without leaking its sentinel into query patches", async () => {
     const wrapper = mountFilters();
-    const [categorySelect] = wrapper.findAllComponents(PdSelect);
 
-    categorySelect.vm.$emit("update:modelValue", "__manage__");
-    await wrapper.vm.$nextTick();
+    await chooseFilterOption(wrapper, "分类筛选", "管理分类…");
 
     expect(wrapper.emitted("manageCategories")).toHaveLength(1);
     expect(wrapper.emitted("change")).toBeUndefined();
 
-    categorySelect.vm.$emit("update:modelValue", "category-1");
-    await wrapper.vm.$nextTick();
+    await chooseFilterOption(wrapper, "分类筛选", "通用效率");
     expect(wrapper.emitted("change")).toEqual([[{ categoryId: "category-1" }]]);
     expect(
       JSON.stringify(wrapper.emitted("change") ?? []).includes("__manage__"),

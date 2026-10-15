@@ -58,9 +58,9 @@ function getRole(role: string, name?: string): HTMLElement {
   return match!;
 }
 
-function openSelect(wrapper: VueWrapper): Promise<void> {
+function openSelect(wrapper: VueWrapper, label = "排序"): Promise<void> {
   return wrapper
-    .get('button[role="combobox"][aria-label="排序"]')
+    .get(`button[role="combobox"][aria-label="${label}"]`)
     .trigger("keydown", { key: "Enter", code: "Enter" })
     .then(settleInteraction);
 }
@@ -556,6 +556,80 @@ describe("PromptDock interaction wrappers", () => {
     );
     await settleInteraction();
     expect(select.emitted("update:modelValue")).toEqual([["popular"]]);
+  });
+
+  it("renders and selects an explicit clear option without using an empty item value", async () => {
+    const select = trackWrapper(
+      mount(PdSelect, {
+        attachTo: document.body,
+        props: {
+          modelValue: "popular",
+          label: "排序",
+          options,
+          clearLabel: "全部排序",
+        },
+        global: { stubs: { Teleport: false } },
+      }),
+    );
+
+    await openSelect(select);
+    const clearOption = getRole("option", "全部排序");
+    expect(clearOption.getAttribute("data-value")).not.toBe("");
+
+    clearOption.dispatchEvent(
+      new MouseEvent("pointerup", { bubbles: true, button: 0 }),
+    );
+    await settleInteraction();
+
+    expect(select.emitted("update:modelValue")).toEqual([[""]]);
+  });
+
+  it.each([
+    ["分类筛选", "分类".repeat(9)],
+    ["标签筛选", "标签".repeat(15)],
+  ])(
+    "constrains the selected %s value while keeping its chevron separate",
+    async (label, longLabel) => {
+      const value = `${label}-value`;
+      const select = trackWrapper(
+        mount(PdSelect, {
+          attachTo: document.body,
+          props: {
+            modelValue: "",
+            label,
+            options: [{ value, label: longLabel }],
+          },
+          global: { stubs: { Teleport: false } },
+        }),
+      );
+
+      await openSelect(select, label);
+      getRole("option", longLabel).dispatchEvent(
+        new MouseEvent("pointerup", { bubbles: true, button: 0 }),
+      );
+      await settleInteraction();
+      expect(select.emitted("update:modelValue")).toEqual([[value]]);
+
+      await select.setProps({ modelValue: value });
+      const trigger = select.get('button[role="combobox"]');
+      const selectedValue = trigger.get(".pd-select-value");
+      const icon = trigger.get(".pd-select-trigger__icon");
+      expect(selectedValue.text()).toBe(longLabel);
+      expect(selectedValue.element).not.toBe(icon.element);
+      expect(icon.get("svg").attributes("aria-hidden")).toBe("true");
+    },
+  );
+
+  it("defines the select truncation and disabled rail hover CSS contracts", () => {
+    expect(globalCss).toMatch(
+      /\.pd-select-value\s*\{[^}]*flex:\s*1 1 auto;[^}]*min-width:\s*0;[^}]*overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap;/s,
+    );
+    expect(globalCss).toMatch(
+      /\.pd-select-trigger__icon\s*\{[^}]*flex:\s*0 0 auto;/s,
+    );
+    expect(globalCss).toContain(
+      ".workbench-rail nav button:hover:not(:disabled),\n.rail-settings:hover:not(:disabled)",
+    );
   });
 
   it("keeps disabled select, toggle, and switch controls inert", async () => {

@@ -61,8 +61,7 @@ const hasActiveFilters = computed(
       props.query.templateOnly,
     ) ||
     (props.query.view !== undefined && props.query.view !== "all") ||
-    (props.query.tab !== undefined && props.query.tab !== "all") ||
-    (props.query.sort !== undefined && props.query.sort !== "recent"),
+    (props.query.tab !== undefined && props.query.tab !== "all"),
 );
 </script>
 
@@ -82,6 +81,7 @@ const hasActiveFilters = computed(
       data-test="filter-category"
       label="分类筛选"
       placeholder="全部分类"
+      clear-label="全部分类"
       :model-value="query.categoryId ?? ''"
       :options="categoryOptions"
       @update:model-value="changeCategory"
@@ -90,8 +90,10 @@ const hasActiveFilters = computed(
       data-test="filter-tag"
       label="标签筛选"
       placeholder="全部标签"
+      clear-label="全部标签"
       :model-value="query.tag ?? ''"
       :options="tagOptions"
+      :disabled="tags.length === 0"
       @update:model-value="$emit('change', { tag: optional($event) })"
     />
     <PdToggle
