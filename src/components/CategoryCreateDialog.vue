@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from "vue";
 
+import PdButton from "@/components/ui/PdButton.vue";
+import PdDialog from "@/components/ui/PdDialog.vue";
+import PdStatusMessage from "@/components/ui/PdStatusMessage.vue";
+
 const emit = defineEmits<{ create: [name: string]; close: [] }>();
 const name = ref("");
 const input = ref<HTMLInputElement | null>(null);
@@ -22,46 +26,32 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="modal-backdrop" @mousedown.self="emit('close')">
-    <form
-      class="category-dialog"
-      @submit.prevent="submit"
-      @keydown.esc.prevent="emit('close')"
-    >
-      <header>
-        <div>
-          <span class="eyebrow">分类管理</span>
-          <h2>新建分类</h2>
-        </div>
-        <button
-          type="button"
-          class="icon-button"
-          aria-label="关闭分类编辑"
-          @click="emit('close')"
-        >
-          ×
-        </button>
-      </header>
-      <label
-        ><span>分类名称</span
-        ><input
+  <PdDialog
+    :open="true"
+    class="category-dialog"
+    title="新建分类"
+    description="创建一个仅保存在本机的新分类"
+    close-label="关闭分类编辑"
+    @dismiss="emit('close')"
+  >
+    <form class="category-create-form" @submit.prevent="submit">
+      <label>
+        <span>分类名称</span>
+        <input
           ref="input"
           v-model="name"
           maxlength="18"
           placeholder="例如：行业研究"
-      /></label>
-      <p v-if="error" class="form-error">{{ error }}</p>
-      <footer>
-        <span class="spacer" /><button
-          type="button"
-          class="ghost-button"
-          @click="emit('close')"
-        >
-          取消</button
-        ><button class="primary-button" :disabled="Boolean(error)">
-          创建分类
-        </button>
-      </footer>
+        />
+      </label>
+      <PdStatusMessage v-if="error" tone="danger" live="off" :message="error" />
     </form>
-  </div>
+
+    <template #footer>
+      <PdButton variant="ghost" @click="emit('close')">取消</PdButton>
+      <PdButton variant="primary" :disabled="Boolean(error)" @click="submit">
+        创建分类
+      </PdButton>
+    </template>
+  </PdDialog>
 </template>

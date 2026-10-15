@@ -363,13 +363,19 @@ describe("MainWindow V3 workbench", () => {
         "[data-test='list-manage-categories']",
       ]) {
         await wrapper.get(selector).trigger("click");
-        expect(wrapper.find(".category-manager-dialog").exists()).toBe(true);
-        await wrapper.get("[aria-label='关闭分类管理']").trigger("click");
+        expect(
+          document.body.querySelector(".category-manager-dialog"),
+        ).not.toBeNull();
+        document.body
+          .querySelector<HTMLButtonElement>("[aria-label='关闭分类管理']")!
+          .click();
         await flushPromises();
       }
 
       await chooseCategoryOption(wrapper, "管理分类…");
-      expect(wrapper.find(".category-manager-dialog").exists()).toBe(true);
+      expect(
+        document.body.querySelector(".category-manager-dialog"),
+      ).not.toBeNull();
     } finally {
       wrapper.unmount();
     }

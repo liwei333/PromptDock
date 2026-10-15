@@ -1,6 +1,10 @@
 <script setup lang="ts">
+import { X } from "lucide-vue-next";
 import { computed, reactive, ref } from "vue";
 
+import PdButton from "@/components/ui/PdButton.vue";
+import PdIconButton from "@/components/ui/PdIconButton.vue";
+import PdStatusMessage from "@/components/ui/PdStatusMessage.vue";
 import {
   inspectTemplateVariables,
   renderTemplatePreview,
@@ -23,6 +27,7 @@ const preview = computed(() =>
 );
 
 async function copy(): Promise<void> {
+  if (copying.value) return;
   error.value = "";
   try {
     copying.value = true;
@@ -41,42 +46,40 @@ async function copy(): Promise<void> {
 </script>
 
 <template>
-  <section class="variable-panel">
+  <section class="variable-panel" aria-labelledby="variable-panel-title">
     <header>
       <div>
         <span class="eyebrow">变量模板</span>
-        <h3>{{ prompt.title }}</h3>
+        <h3 id="variable-panel-title">{{ prompt.title }}</h3>
       </div>
-      <button
-        class="icon-button"
-        aria-label="关闭变量填写"
-        @click="emit('cancel')"
-      >
-        ×
-      </button>
+      <PdIconButton label="关闭变量填写" :icon="X" @click="emit('cancel')" />
     </header>
     <div class="variable-fields">
       <label v-for="name in names" :key="name">
         <span>{{ name }}</span>
-        <input v-model="values[name]" :placeholder="`填写${name}`" />
+        <input v-model="values[name]" :placeholder="'填写' + name" />
       </label>
     </div>
-    <p
+    <PdStatusMessage
       v-if="template.error"
-      class="form-error"
+      class="template-error"
       data-test="template-error"
-      role="alert"
-    >
-      {{ template.error.message }}。将按原始正文复制。
-    </p>
+      tone="danger"
+      :message="template.error.message + '。将按原始正文复制。'"
+    />
     <div class="preview-block">
       <span>结果预览</span>
       <pre>{{ preview }}</pre>
     </div>
-    <p v-if="error" class="form-error" role="alert">{{ error }}</p>
+    <PdStatusMessage v-if="error" tone="danger" :message="error" />
     <footer>
-      <button class="ghost-button" @click="emit('cancel')">返回</button>
-      <button class="primary-button" :disabled="copying" @click="copy">
+      <PdButton variant="ghost" @click="emit('cancel')">返回</PdButton>
+      <PdButton
+        data-test="copy-template"
+        variant="primary"
+        :loading="copying"
+        @click="copy"
+      >
         {{
           copying
             ? "正在复制…"
@@ -84,7 +87,7 @@ async function copy(): Promise<void> {
               ? "复制原始正文"
               : "复制替换后的全文"
         }}
-      </button>
+      </PdButton>
     </footer>
   </section>
 </template>

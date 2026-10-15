@@ -1,6 +1,7 @@
-import { mount } from "@vue/test-utils";
-import { describe, expect, it } from "vitest";
+import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
+import { afterEach, describe, expect, it } from "vitest";
 
+import CategoryCreateDialog from "@/components/CategoryCreateDialog.vue";
 import CategoryDeleteDialog from "@/components/CategoryDeleteDialog.vue";
 import CategoryManagerDialog from "@/components/CategoryManagerDialog.vue";
 import type { Category } from "@/types/prompt";
@@ -28,88 +29,245 @@ const categories: Category[] = [
   },
 ];
 
+const wrappers: VueWrapper[] = [];
+
+function track<T extends VueWrapper>(wrapper: T): T {
+  wrappers.push(wrapper);
+  return wrapper;
+}
+
+afterEach(() => {
+  for (const wrapper of wrappers.splice(0)) wrapper.unmount();
+  document.body.replaceChildren();
+});
+
+async function settle(): Promise<void> {
+  await flushPromises();
+  await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+  await flushPromises();
+}
+
+function getDialog(name: string): HTMLElement {
+  const dialogs = Array.from(
+    document.body.querySelectorAll<HTMLElement>('[role="dialog"]'),
+  );
+  const dialog = dialogs.find((candidate) => {
+    const titleId = candidate.getAttribute("aria-labelledby");
+    return titleId && document.getElementById(titleId)?.textContent === name;
+  });
+  expect(dialog, `Expected dialog named ${name}`).toBeDefined();
+  return dialog!;
+}
+
+async function chooseOption(label: string, optionName: string): Promise<void> {
+  const trigger = document.body.querySelector<HTMLButtonElement>(
+    `button[role="combobox"][aria-label="${label}"]`,
+  );
+  expect(trigger).not.toBeNull();
+  trigger!.dispatchEvent(
+    new KeyboardEvent("keydown", {
+      key: "Enter",
+      code: "Enter",
+      bubbles: true,
+    }),
+  );
+  await settle();
+  const option = Array.from(
+    document.body.querySelectorAll<HTMLElement>('[role="option"]'),
+  ).find((candidate) => candidate.textContent?.trim() === optionName);
+  expect(option, `Expected option named ${optionName}`).toBeDefined();
+  option!.dispatchEvent(
+    new MouseEvent("pointerup", { bubbles: true, button: 0 }),
+  );
+  await settle();
+}
+
 describe("CategoryDeleteDialog", () => {
-  it("requires a different destination and emits a confirmed transfer", async () => {
-    const wrapper = mount(CategoryDeleteDialog, {
-      props: { source: categories[0], categories },
-    });
+  it("uses a named modal and real shared select for a different destination", async () => {
+    const wrapper = track(
+      mount(CategoryDeleteDialog, {
+        attachTo: document.body,
+        props: { source: categories[0], categories },
+        global: { stubs: { Teleport: false } },
+      }),
+    );
+    await settle();
 
-    expect(wrapper.text()).toContain("3 条提示词");
-    expect(wrapper.find(`option[value="category-a"]`).exists()).toBe(false);
+    expect(getDialog("删除分类 · 安全迁移").textContent).toContain(
+      "3 条提示词",
+    );
+    expect(wrapper.find("select").exists()).toBe(false);
     expect(
-      wrapper
-        .get("[data-test='confirm-category-delete']")
-        .attributes("disabled"),
-    ).toBeDefined();
+      document.body
+        .querySelector<HTMLButtonElement>(
+          "[data-test='confirm-category-delete']",
+        )
+        ?.hasAttribute("disabled"),
+    ).toBe(true);
 
-    await wrapper
-      .get("[data-test='category-transfer-target']")
-      .setValue("category-b");
-    await wrapper.get("[data-test='confirm-category-delete']").trigger("click");
+    await chooseOption("提示词转移至", "商业分析");
+    document.body
+      .querySelector<HTMLButtonElement>(
+        "[data-test='confirm-category-delete']",
+      )!
+      .click();
+    await settle();
 
     expect(wrapper.emitted("confirm")).toEqual([["category-a", "category-b"]]);
   });
 
-  it("closes without emitting a transfer when cancelled", async () => {
-    const wrapper = mount(CategoryDeleteDialog, {
-      props: { source: categories[0], categories },
-    });
+  it("blocks every accidental dismissal while a transfer is busy", async () => {
+    const wrapper = track(
+      mount(CategoryDeleteDialog, {
+        attachTo: document.body,
+        props: { source: categories[0], categories, busy: true },
+        global: { stubs: { Teleport: false } },
+      }),
+    );
+    await settle();
 
-    await wrapper.get("[data-test='cancel-category-delete']").trigger("click");
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    );
+    await settle();
+    document.body
+      .querySelector<HTMLButtonElement>('button[aria-label="取消删除"]')!
+      .click();
+    await settle();
 
-    expect(wrapper.emitted("cancel")).toHaveLength(1);
-    expect(wrapper.emitted("confirm")).toBeUndefined();
+    expect(wrapper.emitted("cancel")).toBeUndefined();
+    expect(getDialog("删除分类 · 安全迁移")).toBeDefined();
   });
 });
 
 describe("CategoryManagerDialog", () => {
-  it("lists counts and validates create and rename actions", async () => {
-    const wrapper = mount(CategoryManagerDialog, { props: { categories } });
+  it("lists counts and validates unchanged create and rename outcomes", async () => {
+    const wrapper = track(
+      mount(CategoryManagerDialog, {
+        attachTo: document.body,
+        props: { categories },
+        global: { stubs: { Teleport: false } },
+      }),
+    );
+    await settle();
 
-    expect(wrapper.findAll("[data-test='category-row']")).toHaveLength(2);
-    expect(wrapper.text()).toContain("3 条提示词");
+    const dialog = getDialog("分类管理");
+    expect(dialog.querySelectorAll("[data-test='category-row']")).toHaveLength(
+      2,
+    );
+    expect(dialog.textContent).toContain("3 条提示词");
+    expect(
+      dialog.querySelector('button[aria-label="关闭分类管理"] svg'),
+    ).not.toBeNull();
+    expect(
+      Array.from(dialog.querySelectorAll("button")).some(
+        (button) => button.textContent?.trim() === "×",
+      ),
+    ).toBe(false);
 
-    await wrapper.get("[data-test='open-category-create']").trigger("click");
-    await wrapper.get("[data-test='submit-category-create']").trigger("click");
-    expect(wrapper.text()).toContain("请输入分类名称");
-    await wrapper
-      .get("[data-test='category-create-input']")
-      .setValue("  新分类  ");
-    await wrapper.get("[data-test='submit-category-create']").trigger("click");
+    dialog
+      .querySelector<HTMLButtonElement>("[data-test='open-category-create']")!
+      .click();
+    await settle();
+    dialog
+      .querySelector<HTMLButtonElement>("[data-test='submit-category-create']")!
+      .click();
+    await settle();
+    expect(dialog.textContent).toContain("请输入分类名称");
+    const createInput = dialog.querySelector<HTMLInputElement>(
+      "[data-test='category-create-input']",
+    )!;
+    createInput.value = "  新分类  ";
+    createInput.dispatchEvent(new Event("input", { bubbles: true }));
+    dialog
+      .querySelector<HTMLButtonElement>("[data-test='submit-category-create']")!
+      .click();
+    await settle();
     expect(wrapper.emitted("create")).toEqual([["新分类"]]);
 
-    await wrapper
-      .get("[data-test='rename-category-category-a']")
-      .trigger("click");
-    await wrapper
-      .get("[data-test='category-rename-input']")
-      .setValue("  工程研发  ");
-    await wrapper.get("[data-test='submit-category-rename']").trigger("click");
+    dialog
+      .querySelector<HTMLButtonElement>(
+        "[data-test='rename-category-category-a']",
+      )!
+      .click();
+    await settle();
+    const renameInput = dialog.querySelector<HTMLInputElement>(
+      "[data-test='category-rename-input']",
+    )!;
+    renameInput.value = "  工程研发  ";
+    renameInput.dispatchEvent(new Event("input", { bubbles: true }));
+    dialog
+      .querySelector<HTMLButtonElement>("[data-test='submit-category-rename']")!
+      .click();
+    await settle();
     expect(wrapper.emitted("rename")).toEqual([["category-a", "工程研发"]]);
   });
 
-  it("opens safe deletion and disables deleting the final category", async () => {
-    const wrapper = mount(CategoryManagerDialog, { props: { categories } });
-    await wrapper
-      .get("[data-test='delete-category-category-a']")
-      .trigger("click");
-    expect(wrapper.findComponent(CategoryDeleteDialog).exists()).toBe(true);
+  it("returns focus to the delete invoker after cancelling the nested dialog", async () => {
+    track(
+      mount(CategoryManagerDialog, {
+        attachTo: document.body,
+        props: { categories },
+        global: { stubs: { Teleport: false } },
+      }),
+    );
+    await settle();
 
-    const only = mount(CategoryManagerDialog, {
-      props: { categories: [categories[0]] },
-    });
-    expect(
-      only
-        .get("[data-test='delete-category-category-a']")
-        .attributes("disabled"),
-    ).toBeDefined();
+    const deleteButton = document.body.querySelector<HTMLButtonElement>(
+      "[data-test='delete-category-category-a']",
+    )!;
+    deleteButton.focus();
+    deleteButton.click();
+    await settle();
+    expect(getDialog("删除分类 · 安全迁移")).toBeDefined();
+
+    document.body
+      .querySelector<HTMLButtonElement>("[data-test='cancel-category-delete']")!
+      .click();
+    await settle();
+
+    expect(document.body.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+    expect(document.activeElement).toBe(deleteButton);
   });
 
-  it("keeps the dialog open and shows a server error", () => {
-    const wrapper = mount(CategoryManagerDialog, {
-      props: { categories, error: "分类名称已经存在" },
-    });
-    expect(wrapper.get("[role='alert']").text()).toContain("分类名称已经存在");
-    expect(wrapper.find("[role='dialog']").exists()).toBe(true);
+  it("disables deleting the final category and keeps server errors in the dialog", async () => {
+    const wrapper = track(
+      mount(CategoryManagerDialog, {
+        attachTo: document.body,
+        props: {
+          categories: [categories[0]],
+          error: "分类名称已经存在",
+        },
+        global: { stubs: { Teleport: false } },
+      }),
+    );
+    await settle();
+
+    expect(
+      document.body
+        .querySelector<HTMLButtonElement>(
+          "[data-test='delete-category-category-a']",
+        )
+        ?.hasAttribute("disabled"),
+    ).toBe(true);
+    expect(
+      getDialog("分类管理").querySelector('[role="alert"]')?.textContent,
+    ).toContain("分类名称已经存在");
+    expect(wrapper.emitted("close")).toBeUndefined();
+  });
+
+  it("uses the shared dialog shell for the standalone create flow", async () => {
+    track(
+      mount(CategoryCreateDialog, {
+        attachTo: document.body,
+        global: { stubs: { Teleport: false } },
+      }),
+    );
+    await settle();
+
+    expect(getDialog("新建分类")).toBeDefined();
+    expect(
+      document.body.querySelector('button[aria-label="关闭分类编辑"] svg'),
+    ).not.toBeNull();
   });
 });

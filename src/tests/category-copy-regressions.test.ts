@@ -1,6 +1,6 @@
 import { createPinia } from "pinia";
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Category, Prompt } from "@/types/prompt";
 import PromptDetailPane from "@/components/PromptDetailPane.vue";
@@ -142,6 +142,10 @@ const invalidTemplatePrompt: Prompt = {
 };
 
 describe("category and raw-copy regressions", () => {
+  afterEach(() => {
+    document.body.replaceChildren();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     promptApi.list.mockResolvedValue({ items: [], total: 0 });
@@ -216,24 +220,57 @@ describe("category and raw-copy regressions", () => {
   });
 
   it("deletes a category only after choosing a transfer target", async () => {
-    const wrapper = mount(MainWindow, { global: { plugins: [createPinia()] } });
-    await flushPromises();
+    const wrapper = mount(MainWindow, {
+      attachTo: document.body,
+      global: {
+        plugins: [createPinia()],
+        stubs: { Teleport: false },
+      },
+    });
+    try {
+      await flushPromises();
 
-    await wrapper.get("[data-test='rail-categories']").trigger("click");
-    await wrapper
-      .get(`[data-test="delete-category-${CUSTOM_CATEGORY_ID}"]`)
-      .trigger("click");
-    await wrapper
-      .get("[data-test='category-transfer-target']")
-      .setValue(GENERAL_CATEGORY_ID);
-    await wrapper.get("[data-test='confirm-category-delete']").trigger("click");
-    await flushPromises();
+      await wrapper.get("[data-test='rail-categories']").trigger("click");
+      document.body
+        .querySelector<HTMLButtonElement>(
+          `[data-test="delete-category-${CUSTOM_CATEGORY_ID}"]`,
+        )!
+        .click();
+      await settleSelectInteraction();
 
-    expect(categoryApi.delete).toHaveBeenCalledWith(
-      CUSTOM_CATEGORY_ID,
-      GENERAL_CATEGORY_ID,
-    );
-    wrapper.unmount();
+      const transfer = document.body.querySelector<HTMLButtonElement>(
+        '[data-test="category-transfer-target"]',
+      )!;
+      transfer.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Enter",
+          code: "Enter",
+          bubbles: true,
+        }),
+      );
+      await settleSelectInteraction();
+      const target = Array.from(
+        document.body.querySelectorAll<HTMLElement>('[role="option"]'),
+      ).find((option) => option.textContent?.trim() === "通用效率");
+      expect(target).toBeDefined();
+      target!.dispatchEvent(
+        new MouseEvent("pointerup", { bubbles: true, button: 0 }),
+      );
+      await settleSelectInteraction();
+      document.body
+        .querySelector<HTMLButtonElement>(
+          "[data-test='confirm-category-delete']",
+        )!
+        .click();
+      await flushPromises();
+
+      expect(categoryApi.delete).toHaveBeenCalledWith(
+        CUSTOM_CATEGORY_ID,
+        GENERAL_CATEGORY_ID,
+      );
+    } finally {
+      wrapper.unmount();
+    }
   });
 
   it("keeps an invalid template visible and copies its original body", async () => {

@@ -1,7 +1,12 @@
 <script setup lang="ts">
+import { Folder, Pencil, Plus, Trash2 } from "lucide-vue-next";
 import { ref, watch } from "vue";
 
 import CategoryDeleteDialog from "@/components/CategoryDeleteDialog.vue";
+import PdButton from "@/components/ui/PdButton.vue";
+import PdDialog from "@/components/ui/PdDialog.vue";
+import PdIconButton from "@/components/ui/PdIconButton.vue";
+import PdStatusMessage from "@/components/ui/PdStatusMessage.vue";
 import type { Category } from "@/types/prompt";
 
 const props = defineProps<{
@@ -48,6 +53,10 @@ watch(
   },
 );
 
+function requestClose(): void {
+  if (!props.busy && !deleteSource.value) emit("close");
+}
+
 function submitCreate(): void {
   const name = newName.value.trim();
   if (!name) {
@@ -76,167 +85,153 @@ function submitRename(): void {
 </script>
 
 <template>
-  <div class="modal-backdrop" @mousedown.self="emit('close')">
-    <section
-      class="category-manager-dialog"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="category-manager-title"
-    >
-      <header>
-        <div>
-          <h2 id="category-manager-title">分类管理</h2>
-          <p>新增 · 重命名 · 删除 · 安全迁移提示词</p>
-        </div>
-        <button
-          type="button"
-          class="icon-button"
-          aria-label="关闭分类管理"
-          @click="emit('close')"
-        >
-          ×
-        </button>
-      </header>
-
-      <div class="category-manager-intro">
-        <span aria-hidden="true">▢</span>
-        <p>
-          <strong>分类只是组织提示词的方式。</strong>
-          删除分类前必须选择新的归属分类，提示词不会被删除。
-        </p>
-      </div>
-
-      <div class="category-manager-toolbar">
-        <strong
-          >全部分类 <small>({{ categories.length }})</small></strong
-        >
-        <button
-          type="button"
-          class="primary-button"
-          data-test="open-category-create"
-          @click="
-            creating = true;
-            localError = '';
-          "
-        >
-          ＋ 新增分类
-        </button>
-      </div>
-
-      <form
-        v-if="creating"
-        class="category-inline-form"
-        @submit.prevent="submitCreate"
-      >
-        <input
-          v-model="newName"
-          data-test="category-create-input"
-          maxlength="18"
-          autofocus
-          placeholder="分类名称"
-        />
-        <button type="button" class="ghost-button" @click="creating = false">
-          取消
-        </button>
-        <button
-          type="button"
-          class="primary-button"
-          data-test="submit-category-create"
-          :disabled="busy"
-          @click="submitCreate"
-        >
-          创建
-        </button>
-      </form>
-
-      <div class="category-manager-list">
-        <div
-          v-for="category in categories"
-          :key="category.id"
-          class="category-manager-row"
-          data-test="category-row"
-        >
-          <template v-if="editingId === category.id">
-            <input
-              v-model="editingName"
-              data-test="category-rename-input"
-              maxlength="18"
-              @keydown.esc="editingId = null"
-              @keydown.enter.prevent="submitRename"
-            />
-            <button
-              type="button"
-              class="ghost-button"
-              @click="editingId = null"
-            >
-              取消
-            </button>
-            <button
-              type="button"
-              class="primary-button"
-              data-test="submit-category-rename"
-              :disabled="busy"
-              @click="submitRename"
-            >
-              保存
-            </button>
-          </template>
-          <template v-else>
-            <span
-              class="category-color"
-              :style="{ background: category.color }"
-              aria-hidden="true"
-              >▢</span
-            >
-            <span class="category-manager-name">
-              <strong>{{ category.name }}</strong>
-              <small>{{ category.promptCount }} 条提示词</small>
-            </span>
-            <button
-              type="button"
-              class="ghost-button"
-              :data-test="`rename-category-${category.id}`"
-              :disabled="busy"
-              @click="startRename(category)"
-            >
-              重命名
-            </button>
-            <button
-              type="button"
-              class="danger-button"
-              :data-test="`delete-category-${category.id}`"
-              :disabled="busy || categories.length <= 1"
-              :title="
-                categories.length <= 1
-                  ? '不能删除最后一个分类'
-                  : `删除 ${category.name}`
-              "
-              @click="deleteSource = category"
-            >
-              删除
-            </button>
-          </template>
-        </div>
-      </div>
-
-      <p v-if="localError || error" class="form-error" role="alert">
-        {{ localError || error }}
+  <PdDialog
+    :open="true"
+    class="category-manager-dialog"
+    title="分类管理"
+    description="新增、重命名、删除与安全迁移提示词"
+    close-label="关闭分类管理"
+    :close-on-outside="!busy && !deleteSource"
+    @dismiss="requestClose"
+  >
+    <div class="category-manager-intro">
+      <Folder aria-hidden="true" />
+      <p>
+        <strong>分类只是组织提示词的方式。</strong>
+        删除分类前必须选择新的归属分类，提示词不会被删除。
       </p>
-      <footer>
-        <button type="button" class="ghost-button" @click="emit('close')">
-          完成
-        </button>
-      </footer>
+    </div>
 
-      <CategoryDeleteDialog
-        v-if="deleteSource"
-        :source="deleteSource"
-        :categories="categories"
-        :busy="busy"
-        :error="error"
-        @cancel="deleteSource = null"
-        @confirm="(sourceId, targetId) => emit('delete', sourceId, targetId)"
+    <div class="category-manager-toolbar">
+      <strong
+        >全部分类 <small>({{ categories.length }})</small></strong
+      >
+      <PdButton
+        variant="primary"
+        size="sm"
+        data-test="open-category-create"
+        :disabled="busy"
+        @click="
+          creating = true;
+          localError = '';
+        "
+      >
+        <template #leading><Plus aria-hidden="true" /></template>
+        新增分类
+      </PdButton>
+    </div>
+
+    <form
+      v-if="creating"
+      class="category-inline-form"
+      @submit.prevent="submitCreate"
+    >
+      <input
+        v-model="newName"
+        data-test="category-create-input"
+        maxlength="18"
+        autofocus
+        placeholder="分类名称"
       />
-    </section>
-  </div>
+      <PdButton variant="ghost" size="sm" @click="creating = false">
+        取消
+      </PdButton>
+      <PdButton
+        variant="primary"
+        size="sm"
+        data-test="submit-category-create"
+        :loading="busy"
+        @click="submitCreate"
+      >
+        创建
+      </PdButton>
+    </form>
+
+    <div class="category-manager-list">
+      <div
+        v-for="category in categories"
+        :key="category.id"
+        class="category-manager-row"
+        data-test="category-row"
+      >
+        <template v-if="editingId === category.id">
+          <input
+            v-model="editingName"
+            data-test="category-rename-input"
+            maxlength="18"
+            @keydown.esc="editingId = null"
+            @keydown.enter.prevent="submitRename"
+          />
+          <PdButton variant="ghost" size="sm" @click="editingId = null">
+            取消
+          </PdButton>
+          <PdButton
+            variant="primary"
+            size="sm"
+            data-test="submit-category-rename"
+            :loading="busy"
+            @click="submitRename"
+          >
+            保存
+          </PdButton>
+        </template>
+        <template v-else>
+          <span
+            class="category-color"
+            :style="{ background: category.color }"
+            aria-hidden="true"
+          >
+            <Folder />
+          </span>
+          <span class="category-manager-name">
+            <strong>{{ category.name }}</strong>
+            <small>{{ category.promptCount }} 条提示词</small>
+          </span>
+          <PdIconButton
+            :data-test="`rename-category-${category.id}`"
+            :label="`重命名 ${category.name}`"
+            :tooltip="`重命名 ${category.name}`"
+            :icon="Pencil"
+            :disabled="busy"
+            @click="startRename(category)"
+          />
+          <PdIconButton
+            :data-test="`delete-category-${category.id}`"
+            :label="`删除 ${category.name}`"
+            :tooltip="
+              categories.length <= 1
+                ? '不能删除最后一个分类'
+                : `删除 ${category.name}`
+            "
+            :icon="Trash2"
+            :disabled="busy || categories.length <= 1"
+            @click="deleteSource = category"
+          />
+        </template>
+      </div>
+    </div>
+
+    <PdStatusMessage
+      v-if="localError || error"
+      class="category-dialog-status"
+      tone="danger"
+      :message="localError || error || ''"
+    />
+
+    <template #footer>
+      <PdButton variant="secondary" :disabled="busy" @click="requestClose">
+        完成
+      </PdButton>
+    </template>
+
+    <CategoryDeleteDialog
+      v-if="deleteSource"
+      :source="deleteSource"
+      :categories="categories"
+      :busy="busy"
+      :error="error"
+      @cancel="deleteSource = null"
+      @confirm="(sourceId, targetId) => emit('delete', sourceId, targetId)"
+    />
+  </PdDialog>
 </template>

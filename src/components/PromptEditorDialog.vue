@@ -1,7 +1,11 @@
 <script setup lang="ts">
-import { computed, reactive } from "vue";
 import { confirm } from "@tauri-apps/plugin-dialog";
+import { computed, reactive, ref } from "vue";
 
+import PdButton from "@/components/ui/PdButton.vue";
+import PdDialog from "@/components/ui/PdDialog.vue";
+import PdSelect, { type PdSelectOption } from "@/components/ui/PdSelect.vue";
+import PdStatusMessage from "@/components/ui/PdStatusMessage.vue";
 import type { Category, Prompt, PromptInput } from "@/types/prompt";
 
 const props = defineProps<{
@@ -29,6 +33,13 @@ const form = reactive<PromptInput>({
   isPinned: props.prompt?.isPinned ?? false,
 });
 const initial = JSON.stringify(form);
+const confirmingClose = ref(false);
+const categoryOptions = computed<PdSelectOption[]>(() =>
+  props.categories.map((category) => ({
+    value: category.id,
+    label: category.name,
+  })),
+);
 const tagsText = computed({
   get: () => form.tags.join("，"),
   set: (value: string) => {
@@ -47,22 +58,32 @@ const validation = computed(() => {
   if (!form.categoryId) return "请选择分类";
   return "";
 });
+const dialogTitle = computed(() =>
+  props.prompt ? "编辑提示词" : "新建提示词",
+);
+const dialogDescription = computed(() =>
+  props.prompt ? props.prompt.title : "把常用工作流保存到本机",
+);
 
-async function close(): Promise<void> {
-  if (
-    JSON.stringify(form) !== initial &&
-    !(await confirm("当前修改尚未保存，确定放弃吗？", {
-      title: "放弃未保存修改？",
-      kind: "warning",
-    }))
-  ) {
-    return;
+async function requestClose(): Promise<void> {
+  if (props.saving || confirmingClose.value) return;
+  if (JSON.stringify(form) !== initial) {
+    confirmingClose.value = true;
+    try {
+      const shouldClose = await confirm("当前修改尚未保存，确定放弃吗？", {
+        title: "放弃未保存修改？",
+        kind: "warning",
+      });
+      if (!shouldClose) return;
+    } finally {
+      confirmingClose.value = false;
+    }
   }
   emit("close");
 }
 
 function save(): void {
-  if (validation.value) return;
+  if (validation.value || props.saving) return;
   emit(
     "save",
     {
@@ -77,33 +98,22 @@ function save(): void {
 </script>
 
 <template>
-  <div class="modal-backdrop" @mousedown.self="close">
-    <form
-      class="editor-dialog"
-      @submit.prevent="save"
-      @keydown.esc.prevent="close"
-    >
-      <header>
-        <div>
-          <span class="eyebrow">{{
-            prompt ? "编辑提示词" : "新建提示词"
-          }}</span>
-          <h2>{{ prompt ? prompt.title : "把常用工作流保存到本机" }}</h2>
-        </div>
-        <button
-          type="button"
-          class="icon-button"
-          aria-label="关闭编辑器"
-          @click="close"
-        >
-          ×
-        </button>
-      </header>
+  <PdDialog
+    :open="true"
+    class="editor-dialog"
+    :title="dialogTitle"
+    :description="dialogDescription"
+    close-label="关闭编辑器"
+    :close-on-outside="!saving"
+    @dismiss="requestClose"
+  >
+    <form class="editor-form" @submit.prevent="save">
       <div class="form-grid">
         <label class="span-2">
           <span>标题 *</span>
           <input
             v-model="form.title"
+            data-test="prompt-title"
             autofocus
             maxlength="80"
             placeholder="例如：严谨的代码审查"
@@ -111,15 +121,13 @@ function save(): void {
         </label>
         <label>
           <span>分类 *</span>
-          <select v-model="form.categoryId">
-            <option
-              v-for="category in categories"
-              :key="category.id"
-              :value="category.id"
-            >
-              {{ category.name }}
-            </option>
-          </select>
+          <PdSelect
+            v-model="form.categoryId"
+            label="分类"
+            placeholder="请选择分类"
+            :options="categoryOptions"
+            :disabled="saving"
+          />
         </label>
         <label>
           <span>标签</span>
@@ -143,35 +151,46 @@ function save(): void {
         </label>
       </div>
       <div class="toggle-row">
-        <label
-          ><input v-model="form.isFavorite" type="checkbox" /> 加入收藏</label
-        >
-        <label
-          ><input v-model="form.isPinned" type="checkbox" /> 加入快捷便签（最多
-          5 条）</label
-        >
+        <label>
+          <input v-model="form.isFavorite" type="checkbox" :disabled="saving" />
+          加入收藏
+        </label>
+        <label>
+          <input v-model="form.isPinned" type="checkbox" :disabled="saving" />
+          加入快捷便签（最多 5 条）
+        </label>
       </div>
-      <p v-if="validation || serverError" class="form-error" role="alert">
-        {{ serverError || validation }}
-      </p>
-      <footer>
-        <button
-          v-if="prompt"
-          type="button"
-          class="danger-button"
-          @click="emit('delete', prompt)"
-        >
-          删除提示词
-        </button>
-        <span class="spacer" />
-        <button type="button" class="ghost-button" @click="close">取消</button>
-        <button
-          class="primary-button"
-          :disabled="Boolean(validation) || saving"
-        >
-          {{ saving ? "正在保存…" : "保存到本机" }}
-        </button>
-      </footer>
+      <PdStatusMessage
+        v-if="validation || serverError"
+        class="editor-status"
+        tone="danger"
+        :message="serverError || validation"
+      />
     </form>
-  </div>
+
+    <template #footer>
+      <PdButton
+        v-if="prompt"
+        class="editor-delete"
+        variant="danger"
+        :disabled="saving"
+        @click="emit('delete', prompt)"
+      >
+        删除提示词
+      </PdButton>
+      <span class="spacer" />
+      <PdButton variant="ghost" :disabled="saving" @click="requestClose">
+        取消
+      </PdButton>
+      <PdButton
+        data-test="save-prompt"
+        variant="primary"
+        :loading="saving"
+        :disabled="Boolean(validation)"
+        @click="save"
+      >
+        {{ saving ? "正在保存…" : "保存到本机" }}
+      </PdButton>
+    </template>
+  </PdDialog>
 </template>

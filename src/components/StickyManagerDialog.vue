@@ -1,14 +1,24 @@
 <script setup lang="ts">
+import { ArrowDown, ArrowUp } from "lucide-vue-next";
 import { ref } from "vue";
 
 import { promptApi } from "@/api/commands";
+import PdButton from "@/components/ui/PdButton.vue";
+import PdDialog from "@/components/ui/PdDialog.vue";
+import PdIconButton from "@/components/ui/PdIconButton.vue";
+import PdStatusMessage from "@/components/ui/PdStatusMessage.vue";
 import type { Prompt } from "@/types/prompt";
 
 const props = defineProps<{ prompts: Prompt[] }>();
 const emit = defineEmits<{ close: []; changed: [] }>();
-const rows = ref([...props.prompts]);
+const rows = ref([...props.prompts].slice(0, 5));
 const saving = ref(false);
+const removingId = ref<string | null>(null);
 const error = ref("");
+
+function requestClose(): void {
+  if (!saving.value && !removingId.value) emit("close");
+}
 
 function move(index: number, delta: number): void {
   const next = index + delta;
@@ -17,6 +27,7 @@ function move(index: number, delta: number): void {
 }
 
 async function save(): Promise<void> {
+  if (saving.value || removingId.value) return;
   saving.value = true;
   error.value = "";
   try {
@@ -31,73 +42,92 @@ async function save(): Promise<void> {
 }
 
 async function remove(prompt: Prompt): Promise<void> {
+  if (saving.value || removingId.value) return;
+  removingId.value = prompt.id;
+  error.value = "";
   try {
     await promptApi.setPinned(prompt.id, false);
     rows.value = rows.value.filter((item) => item.id !== prompt.id);
     emit("changed");
   } catch (reason) {
     error.value = reason instanceof Error ? reason.message : String(reason);
+  } finally {
+    removingId.value = null;
   }
 }
 </script>
 
 <template>
-  <div class="modal-backdrop" @mousedown.self="emit('close')">
-    <section class="sticky-manager">
-      <header>
-        <div>
-          <span class="eyebrow">快捷便签</span>
-          <h2>管理五个固定槽位</h2>
-        </div>
-        <button
-          class="icon-button"
-          aria-label="关闭便签管理"
-          @click="emit('close')"
+  <PdDialog
+    :open="true"
+    class="sticky-manager"
+    title="管理五个固定槽位"
+    description="顺序会持久保存；复制次数变化不会改变这里的位置"
+    close-label="关闭便签管理"
+    :close-on-outside="!saving && !removingId"
+    @dismiss="requestClose"
+  >
+    <div class="manager-list">
+      <div
+        v-for="(prompt, index) in rows"
+        :key="prompt.id"
+        data-test="sticky-manager-row"
+      >
+        <span>{{ String(index + 1).padStart(2, "0") }}</span>
+        <strong>{{ prompt.title }}</strong>
+        <PdIconButton
+          label="上移"
+          :tooltip="'上移 ' + prompt.title"
+          :icon="ArrowUp"
+          :disabled="index === 0 || saving || Boolean(removingId)"
+          @click="move(index, -1)"
+        />
+        <PdIconButton
+          label="下移"
+          :tooltip="'下移 ' + prompt.title"
+          :icon="ArrowDown"
+          :disabled="index === rows.length - 1 || saving || Boolean(removingId)"
+          @click="move(index, 1)"
+        />
+        <PdButton
+          class="remove"
+          variant="ghost"
+          size="sm"
+          :loading="removingId === prompt.id"
+          :disabled="saving || Boolean(removingId)"
+          @click="remove(prompt)"
         >
-          ×
-        </button>
-      </header>
-      <p>顺序会持久保存；复制次数变化不会改变这里的位置。</p>
-      <div class="manager-list">
-        <div v-for="(prompt, index) in rows" :key="prompt.id">
-          <span>{{ String(index + 1).padStart(2, "0") }}</span>
-          <strong>{{ prompt.title }}</strong>
-          <button
-            :disabled="index === 0"
-            aria-label="上移"
-            @click="move(index, -1)"
-          >
-            ↑
-          </button>
-          <button
-            :disabled="index === rows.length - 1"
-            aria-label="下移"
-            @click="move(index, 1)"
-          >
-            ↓
-          </button>
-          <button class="remove" @click="remove(prompt)">移除</button>
-        </div>
-        <div
-          v-for="index in 5 - rows.length"
-          :key="`empty-${index}`"
-          class="manager-empty"
-        >
-          <span>{{ String(rows.length + index).padStart(2, "0") }}</span
-          ><span>空位</span>
-        </div>
+          移除
+        </PdButton>
       </div>
-      <p v-if="error" class="form-error">{{ error }}</p>
-      <footer>
-        <span class="spacer" /><button
-          class="ghost-button"
-          @click="emit('close')"
-        >
-          取消</button
-        ><button class="primary-button" :disabled="saving" @click="save">
-          {{ saving ? "保存中…" : "保存顺序" }}
-        </button>
-      </footer>
-    </section>
-  </div>
+      <div
+        v-for="index in 5 - rows.length"
+        :key="'empty-' + index"
+        class="manager-empty"
+      >
+        <span>{{ String(rows.length + index).padStart(2, "0") }}</span>
+        <span>空位</span>
+      </div>
+    </div>
+    <PdStatusMessage v-if="error" tone="danger" :message="error" />
+
+    <template #footer>
+      <PdButton
+        variant="ghost"
+        :disabled="saving || Boolean(removingId)"
+        @click="requestClose"
+      >
+        取消
+      </PdButton>
+      <PdButton
+        data-test="save-sticky-order"
+        variant="primary"
+        :loading="saving"
+        :disabled="Boolean(removingId)"
+        @click="save"
+      >
+        {{ saving ? "保存中…" : "保存顺序" }}
+      </PdButton>
+    </template>
+  </PdDialog>
 </template>

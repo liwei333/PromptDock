@@ -2872,3 +2872,150 @@ button.sticky-row:hover {
     animation-duration: 0.01ms !important;
   }
 }
+
+/* Shared native dialog surfaces */
+.editor-dialog,
+.category-dialog,
+.sticky-manager,
+.import-preview,
+.runtime-dialog,
+.category-manager-dialog,
+.category-delete-dialog {
+  padding: 0;
+  overflow: hidden;
+  color: var(--pd-text);
+  border: 1px solid var(--pd-border);
+  border-radius: var(--pd-radius-xl);
+  background: var(--pd-surface-elevated);
+  box-shadow: var(--pd-shadow-popover);
+}
+.editor-dialog {
+  width: min(670px, calc(100vw - 24px));
+}
+.category-manager-dialog {
+  width: min(780px, calc(100vw - 24px));
+}
+.category-delete-dialog {
+  width: min(520px, calc(100vw - 24px));
+}
+.category-dialog {
+  width: min(430px, calc(100vw - 24px));
+}
+.sticky-manager {
+  width: min(560px, calc(100vw - 24px));
+}
+.import-preview {
+  width: min(610px, calc(100vw - 24px));
+}
+.runtime-dialog {
+  width: min(590px, calc(100vw - 24px));
+}
+.editor-dialog .pd-dialog-body,
+.category-dialog .pd-dialog-body,
+.sticky-manager .pd-dialog-body,
+.import-preview .pd-dialog-body,
+.runtime-dialog .pd-dialog-body {
+  padding: 18px 20px;
+}
+.category-manager-dialog .pd-dialog-body,
+.category-delete-dialog .pd-dialog-body {
+  padding: 0 0 18px;
+}
+.category-manager-intro > svg {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  color: var(--pd-accent);
+  stroke-width: 1.8;
+}
+.category-color svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.8;
+}
+.category-manager-row > .pd-icon-button {
+  flex: 0 0 auto;
+}
+.category-dialog-status {
+  margin: 12px 22px 0;
+}
+.category-transfer-field .pd-select-trigger,
+.form-grid .pd-select-trigger {
+  width: 100%;
+  max-width: none;
+}
+.category-create-form,
+.category-create-form > label {
+  display: grid;
+  gap: 8px;
+}
+.category-create-form > label > span {
+  color: var(--pd-text-secondary);
+  font-size: 10px;
+  font-weight: 750;
+}
+.category-create-form input {
+  height: 40px;
+  padding: 0 11px;
+  color: var(--pd-text);
+  border: 1px solid var(--pd-border-strong);
+  border-radius: var(--pd-radius-sm);
+  background: var(--pd-surface-elevated);
+}
+.editor-form .form-grid {
+  margin-top: 0;
+}
+.editor-status {
+  margin-top: 11px;
+}
+.editor-dialog .editor-delete {
+  margin-right: auto;
+}
+.validation-note {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  color: var(--pd-success-foreground);
+  background: var(--pd-success-soft);
+}
+.validation-note svg {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  stroke-width: 1.8;
+}
+.import-preview .pd-status-message,
+.sticky-manager .pd-status-message {
+  margin-top: 12px;
+}
+.manager-list > div {
+  border-color: var(--pd-border);
+}
+.manager-list > div > .pd-icon-button {
+  width: 27px;
+  height: 27px;
+  padding: 0;
+}
+.manager-list > div > .remove {
+  width: auto;
+  color: var(--pd-danger-foreground);
+}
+.runtime-list > div {
+  background: var(--pd-neutral-soft);
+}
+.privacy-note {
+  color: var(--pd-text-secondary);
+  border-color: var(--pd-border);
+}
+
+@media (max-width: 1024px) {
+  .category-manager-dialog .pd-dialog-body {
+    max-height: calc(100vh - 132px);
+  }
+  .preview-stats {
+    gap: 7px;
+  }
+  .form-grid {
+    gap: 11px;
+  }
+}

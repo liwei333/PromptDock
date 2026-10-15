@@ -1,4 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { flushPromises, mount } from "@vue/test-utils";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const { copyPromptText } = vi.hoisted(() => ({ copyPromptText: vi.fn() }));
+
+vi.mock("@/services/clipboard", () => ({ copyPromptText }));
+
+import TemplateVariablesPanel from "@/components/TemplateVariablesPanel.vue";
 
 import {
   extractTemplateVariables,
@@ -7,6 +14,11 @@ import {
 } from "@/composables/useTemplateVariables";
 
 describe("template variables", () => {
+  afterEach(() => {
+    document.body.replaceChildren();
+    copyPromptText.mockReset();
+  });
+
   it("extracts Unicode variables in first-seen order and removes duplicates", () => {
     expect(
       extractTemplateVariables(
@@ -42,6 +54,38 @@ describe("template variables", () => {
     ).join(" ");
     expect(() => extractTemplateVariables(body)).toThrow(
       new TemplateVariableError("TOO_MANY_VARIABLES"),
+    );
+  });
+
+  it("keeps the presentation accessible and blocks copying incomplete fields", async () => {
+    const wrapper = mount(TemplateVariablesPanel, {
+      attachTo: document.body,
+      props: {
+        prompt: {
+          id: "prompt-a",
+          title: "变量模板",
+          description: "",
+          body: "你好 {{姓名}}，路径 {{路径}}",
+          categoryId: "category-a",
+          categoryName: "通用效率",
+          tags: [],
+          isFavorite: false,
+          isPinned: false,
+          pinOrder: null,
+          copyCount: 0,
+          lastCopiedAt: null,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      },
+    });
+
+    await wrapper.get("[data-test='copy-template']").trigger("click");
+    await flushPromises();
+    expect(copyPromptText).not.toHaveBeenCalled();
+    expect(wrapper.get('[role="alert"]').text()).toContain("请填写变量“姓名”");
+    expect(wrapper.find('button[aria-label="关闭变量填写"] svg').exists()).toBe(
+      true,
     );
   });
 });
