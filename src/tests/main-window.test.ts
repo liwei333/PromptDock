@@ -2,7 +2,17 @@ import { createPinia } from "pinia";
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { categoryApi, pinnedPrompt, promptApi, windowApi } = vi.hoisted(() => {
+import type { CopyResult } from "@/services/clipboard";
+
+const {
+  backupApi,
+  categoryApi,
+  copyPromptText,
+  pinnedPrompt,
+  promptApi,
+  secondPrompt,
+  windowApi,
+} = vi.hoisted(() => {
   const pinnedPrompt = {
     id: "pinned-1",
     title: "固定提示词",
@@ -19,14 +29,29 @@ const { categoryApi, pinnedPrompt, promptApi, windowApi } = vi.hoisted(() => {
     createdAt: 1,
     updatedAt: 1,
   };
+  const secondPrompt = {
+    ...pinnedPrompt,
+    id: "prompt-2",
+    title: "第二条提示词",
+    body: "第二条正文",
+    isPinned: false,
+    pinOrder: null,
+  };
 
   return {
+    backupApi: {
+      exportWithDialog: vi.fn(),
+      previewWithDialog: vi.fn(),
+      commit: vi.fn(),
+      cancel: vi.fn(),
+    },
     categoryApi: {
       list: vi.fn(),
       create: vi.fn(),
       rename: vi.fn(),
       delete: vi.fn(),
     },
+    copyPromptText: vi.fn(),
     promptApi: {
       list: vi.fn(),
       listTags: vi.fn(),
@@ -42,26 +67,41 @@ const { categoryApi, pinnedPrompt, promptApi, windowApi } = vi.hoisted(() => {
       enterStickyMode: vi.fn(),
     },
     pinnedPrompt,
+    secondPrompt,
   };
 });
 
 vi.mock("@/api/commands", () => ({
-  backupApi: {
-    exportWithDialog: vi.fn(),
-    previewWithDialog: vi.fn(),
-    commit: vi.fn(),
-    cancel: vi.fn(),
-  },
+  backupApi,
   categoryApi,
   promptApi,
   windowApi,
 }));
+
+vi.mock("@/services/clipboard", () => ({ copyPromptText }));
 
 import MainWindow from "@/windows/MainWindow.vue";
 import DashboardStatCards from "@/components/DashboardStatCards.vue";
 import WorkbenchIconRail from "@/components/WorkbenchIconRail.vue";
 
 const STICKY_ENTRY_SELECTOR = "[data-test='rail-sticky-mode']";
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, reject, resolve };
+}
+
+function successfulCopyResult(copyCount = 1): CopyResult {
+  return {
+    status: "copied",
+    stats: { copyCount, lastCopiedAt: 2 },
+  };
+}
 
 async function mountMainWindow(attachToBody = false) {
   const wrapper = mount(MainWindow, {
@@ -141,6 +181,12 @@ describe("MainWindow V3 workbench", () => {
         promptCount: 0,
       },
     ]);
+    backupApi.previewWithDialog.mockResolvedValue(null);
+    backupApi.exportWithDialog.mockResolvedValue({
+      cancelled: true,
+      promptCount: 0,
+    });
+    copyPromptText.mockResolvedValue(successfulCopyResult());
     windowApi.enterStickyMode.mockResolvedValue({ mode: "sticky" });
   });
 
@@ -319,5 +365,203 @@ describe("MainWindow V3 workbench", () => {
     } finally {
       wrapper.unmount();
     }
+  });
+
+  it("keeps copy pending separate from copied success and clears success after 1.2 seconds", async () => {
+    vi.useFakeTimers();
+    promptApi.list.mockResolvedValue({
+      items: [pinnedPrompt, secondPrompt],
+      total: 2,
+    });
+    const pending = deferred<CopyResult>();
+    copyPromptText.mockReturnValueOnce(pending.promise);
+    const wrapper = await mountMainWindow();
+
+    try {
+      await wrapper.findAll("[data-test='list-copy']")[0].trigger("click");
+      await wrapper.vm.$nextTick();
+
+      let firstCopy = wrapper.findAll("[data-test='list-copy']")[0];
+      expect(firstCopy.attributes("disabled")).toBeDefined();
+      expect(firstCopy.attributes("aria-label")).not.toBe("已复制");
+
+      pending.resolve(successfulCopyResult());
+      await flushPromises();
+
+      firstCopy = wrapper.findAll("[data-test='list-copy']")[0];
+      expect(firstCopy.attributes("disabled")).toBeUndefined();
+      expect(firstCopy.attributes("aria-label")).toBe("已复制");
+      expect(wrapper.find(".toast svg").exists()).toBe(true);
+      expect(wrapper.get(".toast").text()).not.toMatch(/[✓!]/u);
+
+      await vi.advanceTimersByTimeAsync(1199);
+      expect(
+        wrapper.findAll("[data-test='list-copy']")[0].attributes("aria-label"),
+      ).toBe("已复制");
+      await vi.advanceTimersByTimeAsync(1);
+      expect(
+        wrapper.findAll("[data-test='list-copy']")[0].attributes("aria-label"),
+      ).toBe("复制提示词");
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
+  it("treats copied-with-stats-error as copied while retaining the nonfatal warning", async () => {
+    vi.useFakeTimers();
+    promptApi.list.mockResolvedValue({ items: [pinnedPrompt], total: 1 });
+    const pending = deferred<CopyResult>();
+    copyPromptText.mockReturnValueOnce(pending.promise);
+    const wrapper = await mountMainWindow();
+
+    try {
+      await wrapper.get("[data-test='list-copy']").trigger("click");
+      pending.resolve({
+        status: "copied-with-stats-error",
+        error: new Error("stats unavailable"),
+      });
+      await flushPromises();
+
+      expect(
+        wrapper.get("[data-test='list-copy']").attributes("aria-label"),
+      ).toBe("已复制");
+      expect(wrapper.get("[data-test='main-live-region']").text()).toContain(
+        "已复制，但使用次数暂未更新",
+      );
+      expect(wrapper.get(".toast").classes()).toContain("error");
+
+      await vi.advanceTimersByTimeAsync(1200);
+      expect(
+        wrapper.get("[data-test='list-copy']").attributes("aria-label"),
+      ).toBe("复制提示词");
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
+  it("never exposes copied success when clipboard writing rejects", async () => {
+    vi.useFakeTimers();
+    promptApi.list.mockResolvedValue({ items: [pinnedPrompt], total: 1 });
+    const pending = deferred<CopyResult>();
+    copyPromptText.mockReturnValueOnce(pending.promise);
+    const wrapper = await mountMainWindow();
+
+    try {
+      await wrapper.get("[data-test='list-copy']").trigger("click");
+      pending.reject(new Error("无法写入系统剪贴板"));
+      await flushPromises();
+
+      expect(
+        wrapper.get("[data-test='list-copy']").attributes("aria-label"),
+      ).toBe("复制提示词");
+      expect(wrapper.get("[data-test='main-live-region']").text()).toContain(
+        "无法写入系统剪贴板",
+      );
+      expect(wrapper.find(".toast svg").exists()).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(1200);
+      expect(
+        wrapper.get("[data-test='list-copy']").attributes("aria-label"),
+      ).not.toBe("已复制");
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
+  it("moves copied success to the latest row and cancels the old timer", async () => {
+    vi.useFakeTimers();
+    promptApi.list.mockResolvedValue({
+      items: [pinnedPrompt, secondPrompt],
+      total: 2,
+    });
+    const firstPending = deferred<CopyResult>();
+    const secondPending = deferred<CopyResult>();
+    copyPromptText
+      .mockReturnValueOnce(firstPending.promise)
+      .mockReturnValueOnce(secondPending.promise);
+    const wrapper = await mountMainWindow();
+
+    try {
+      await wrapper.findAll("[data-test='list-copy']")[0].trigger("click");
+      firstPending.resolve(successfulCopyResult());
+      await flushPromises();
+      expect(
+        wrapper.findAll("[data-test='list-copy']")[0].attributes("aria-label"),
+      ).toBe("已复制");
+
+      await vi.advanceTimersByTimeAsync(600);
+      await wrapper.findAll("[data-test='list-copy']")[1].trigger("click");
+      secondPending.resolve(successfulCopyResult(2));
+      await flushPromises();
+
+      expect(
+        wrapper.findAll("[data-test='list-copy']")[0].attributes("aria-label"),
+      ).toBe("复制提示词");
+      expect(
+        wrapper.findAll("[data-test='list-copy']")[1].attributes("aria-label"),
+      ).toBe("已复制");
+
+      await vi.advanceTimersByTimeAsync(600);
+      expect(
+        wrapper.findAll("[data-test='list-copy']")[1].attributes("aria-label"),
+      ).toBe("已复制");
+      await vi.advanceTimersByTimeAsync(600);
+      expect(
+        wrapper.findAll("[data-test='list-copy']")[1].attributes("aria-label"),
+      ).toBe("复制提示词");
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
+  it("clears the outstanding copied timer before MainWindow unmounts", async () => {
+    vi.useFakeTimers();
+    promptApi.list.mockResolvedValue({ items: [pinnedPrompt], total: 1 });
+    const pending = deferred<CopyResult>();
+    copyPromptText.mockReturnValueOnce(pending.promise);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const wrapper = await mountMainWindow();
+    let unmounted = false;
+
+    try {
+      await wrapper.get("[data-test='list-copy']").trigger("click");
+      pending.resolve(successfulCopyResult());
+      await flushPromises();
+      expect(
+        wrapper.get("[data-test='list-copy']").attributes("aria-label"),
+      ).toBe("已复制");
+      const { setupState } = wrapper.vm.$ as unknown as {
+        setupState: { copiedId: string | null };
+      };
+
+      wrapper.unmount();
+      unmounted = true;
+      await vi.advanceTimersByTimeAsync(1200);
+
+      expect(setupState.copiedId).toBe(pinnedPrompt.id);
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      if (!unmounted) wrapper.unmount();
+      warn.mockRestore();
+    }
+  });
+
+  it("renders low-emphasis status actions with SVG icons and preserves handlers", async () => {
+    const wrapper = await mountMainWindow();
+    const actions = wrapper.findAll(".v3-status-actions .pd-button");
+
+    expect(actions).toHaveLength(3);
+    expect(wrapper.findAll(".v3-status-actions svg")).toHaveLength(3);
+    expect(wrapper.get(".v3-status-actions").text()).not.toContain("·");
+
+    await wrapper.get("[data-test='manage-sticky']").trigger("click");
+    await wrapper.get("[data-test='status-import']").trigger("click");
+    await wrapper.get("[data-test='status-export']").trigger("click");
+    await flushPromises();
+
+    expect(wrapper.find("sticky-manager-dialog-stub").exists()).toBe(true);
+    expect(backupApi.previewWithDialog).toHaveBeenCalledOnce();
+    expect(backupApi.exportWithDialog).toHaveBeenCalledOnce();
+    wrapper.unmount();
   });
 });

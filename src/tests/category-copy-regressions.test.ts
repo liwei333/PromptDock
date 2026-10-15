@@ -3,6 +3,7 @@ import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Category, Prompt } from "@/types/prompt";
+import PromptDetailPane from "@/components/PromptDetailPane.vue";
 
 const GENERAL_CATEGORY_ID = "10000000-0000-4000-8000-000000000006";
 const CUSTOM_CATEGORY_ID = "dff11ee5-155c-4942-a598-6ffa9b50bc9c";
@@ -127,7 +128,7 @@ const invalidTemplatePrompt: Prompt = {
   id: "d6c3638d-4b01-4624-b13c-12917426b6a7",
   title: "A股量价行为深度分析",
   description: "",
-  body: "分析基准日：{{分析日期，默认最新可获取交易日}}",
+  body: "分析基准日：{{分析日期，默认最新可获取交易日}}\n<strong>仅作为文本</strong>",
   categoryId: "10000000-0000-4000-8000-000000000002",
   categoryName: "投资研究",
   tags: [],
@@ -254,10 +255,37 @@ describe("category and raw-copy regressions", () => {
       text: invalidTemplatePrompt.body,
     });
 
-    const detailCopy = wrapper.get(".prompt-detail-pane .primary-button");
+    const invalidFeedback = wrapper.get(
+      ".prompt-detail-pane .pd-status-message",
+    );
+    expect(invalidFeedback.attributes("role")).toBe("alert");
+    expect(invalidFeedback.text()).toContain("复制时将保留原始占位符");
+    const promptBody = wrapper.get(".v3-body-preview pre");
+    expect(promptBody.text()).toBe(invalidTemplatePrompt.body);
+    expect(promptBody.find("strong").exists()).toBe(false);
+
+    const detailCopy = wrapper.get("[data-test='detail-copy']");
     expect(detailCopy.attributes("disabled")).toBeUndefined();
     expect(detailCopy.text()).toContain("复制");
     wrapper.unmount();
+  });
+
+  it("keeps detail copy, edit, new, and export event payloads unchanged", async () => {
+    const wrapper = mount(PromptDetailPane, {
+      props: { prompt: invalidTemplatePrompt },
+    });
+
+    await wrapper.get("[data-test='detail-copy']").trigger("click");
+    await wrapper.get("[data-test='detail-edit']").trigger("click");
+    await wrapper.get("[data-test='detail-new']").trigger("click");
+    await wrapper.get("[data-test='detail-export']").trigger("click");
+
+    expect(wrapper.emitted("copy")).toEqual([[invalidTemplatePrompt]]);
+    expect(wrapper.emitted("edit")).toEqual([[invalidTemplatePrompt]]);
+    expect(wrapper.emitted("new")).toEqual([[]]);
+    expect(wrapper.emitted("export")).toEqual([[]]);
+    expect(wrapper.findAll(".v3-detail-actions svg").length).toBe(4);
+    expect(wrapper.get(".v3-detail-actions").text()).not.toMatch(/[▣✎＋⇩]/u);
   });
 
   it("copies an invalid template from sticky mode as original text", async () => {

@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import { listen } from "@tauri-apps/api/event";
 import { confirm } from "@tauri-apps/plugin-dialog";
+import {
+  CircleAlert,
+  CircleCheck,
+  DatabaseBackup,
+  Pin,
+  Upload,
+} from "lucide-vue-next";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
 import { backupApi, categoryApi, windowApi } from "@/api/commands";
@@ -15,6 +22,7 @@ import RuntimeInfoDialog from "@/components/RuntimeInfoDialog.vue";
 import StickyManagerDialog from "@/components/StickyManagerDialog.vue";
 import WorkbenchFilters from "@/components/WorkbenchFilters.vue";
 import WorkbenchIconRail from "@/components/WorkbenchIconRail.vue";
+import PdButton from "@/components/ui/PdButton.vue";
 import { inspectTemplateVariables } from "@/composables/useTemplateVariables";
 import { copyPromptText } from "@/services/clipboard";
 import { usePromptStore } from "@/stores/promptStore";
@@ -41,9 +49,11 @@ const saving = ref(false);
 const saveError = ref("");
 const switchingMode = ref(false);
 const copyingId = ref<string | null>(null);
+const copiedId = ref<string | null>(null);
 const toast = ref<{ text: string; kind: "success" | "error" } | null>(null);
 let stopListening: (() => void) | null = null;
 let searchTimer: ReturnType<typeof setTimeout> | null = null;
+let copySuccessTimer: ReturnType<typeof setTimeout> | null = null;
 
 watch(
   () => store.prompts.map((prompt) => prompt.id).join("|"),
@@ -70,6 +80,15 @@ function notify(text: string, kind: "success" | "error" = "success"): void {
 function selectPrompt(prompt: Prompt): void {
   selectedId.value = prompt.id;
   variableMode.value = false;
+}
+
+function markCopied(promptId: string): void {
+  if (copySuccessTimer) window.clearTimeout(copySuccessTimer);
+  copiedId.value = promptId;
+  copySuccessTimer = window.setTimeout(() => {
+    if (copiedId.value === promptId) copiedId.value = null;
+    copySuccessTimer = null;
+  }, 1200);
 }
 
 function applyFilters(patch: PromptQuery): void {
@@ -114,6 +133,7 @@ async function copy(prompt: Prompt): Promise<void> {
         : "已复制，但使用次数暂未更新",
       result.status === "copied" ? "success" : "error",
     );
+    markCopied(prompt.id);
     await store.load();
   } catch (reason) {
     notify(
@@ -330,6 +350,7 @@ onBeforeUnmount(() => {
   window.removeEventListener("keydown", keydown);
   stopListening?.();
   if (searchTimer) window.clearTimeout(searchTimer);
+  if (copySuccessTimer) window.clearTimeout(copySuccessTimer);
 });
 </script>
 
@@ -365,6 +386,7 @@ onBeforeUnmount(() => {
           :loading="store.loading"
           :error="store.error"
           :copying-id="copyingId"
+          :copied-id="copiedId"
           @select="selectPrompt"
           @copy="copy"
           @favorite="toggleFavorite"
@@ -390,13 +412,35 @@ onBeforeUnmount(() => {
       </section>
       <footer class="v3-statusbar">
         <span>本机 SQLite · 离线可用 · 不上传云端</span>
-        <span>
-          <button data-test="manage-sticky" @click="stickyManagerOpen = true">
+        <div class="v3-status-actions">
+          <PdButton
+            variant="ghost"
+            size="sm"
+            data-test="manage-sticky"
+            @click="stickyManagerOpen = true"
+          >
+            <template #leading><Pin aria-hidden="true" /></template>
             管理置顶
-          </button>
-          · <button @click="previewImport">导入</button> ·
-          <button @click="exportBackup">JSON 备份</button>
-        </span>
+          </PdButton>
+          <PdButton
+            variant="ghost"
+            size="sm"
+            data-test="status-import"
+            @click="previewImport"
+          >
+            <template #leading><Upload aria-hidden="true" /></template>
+            导入
+          </PdButton>
+          <PdButton
+            variant="ghost"
+            size="sm"
+            data-test="status-export"
+            @click="exportBackup"
+          >
+            <template #leading><DatabaseBackup aria-hidden="true" /></template>
+            JSON 备份
+          </PdButton>
+        </div>
       </footer>
     </main>
 
@@ -466,7 +510,9 @@ onBeforeUnmount(() => {
       {{ toast?.text ?? "" }}
     </div>
     <div v-if="toast" class="toast" :class="toast.kind">
-      {{ toast.kind === "success" ? "✓" : "!" }} {{ toast.text }}
+      <CircleCheck v-if="toast.kind === 'success'" aria-hidden="true" />
+      <CircleAlert v-else aria-hidden="true" />
+      <span>{{ toast.text }}</span>
     </div>
   </div>
 </template>

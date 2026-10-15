@@ -22,26 +22,75 @@ const prompt: Prompt = {
 };
 
 describe("PromptListPane", () => {
-  it("renders selectable V3 rows and keeps row actions independent", async () => {
+  it("uses listbox selection semantics and keeps row actions independent", async () => {
     const wrapper = mount(PromptListPane, {
       props: { prompts: [prompt], selectedId: prompt.id, total: 1 },
     });
 
+    expect(wrapper.get(".v3-prompt-list").attributes("role")).toBe("listbox");
     const row = wrapper.get("[data-test='prompt-list-row']");
     expect(row.classes()).toContain("selected");
+    expect(row.attributes("role")).toBe("option");
+    expect(row.attributes("aria-selected")).toBe("true");
     expect(row.text()).toContain(prompt.title);
     expect(row.text()).toContain("开发工具");
     expect(row.text()).toContain("复制 26 次");
 
     await row.trigger("click");
+    await row.trigger("keydown", { key: "Enter" });
     await wrapper.get("[data-test='list-copy']").trigger("click");
     await wrapper.get("[data-test='list-favorite']").trigger("click");
     await wrapper.get("[data-test='list-pin']").trigger("click");
 
-    expect(wrapper.emitted("select")).toEqual([[prompt]]);
+    expect(wrapper.emitted("select")).toEqual([[prompt], [prompt]]);
     expect(wrapper.emitted("copy")).toEqual([[prompt]]);
     expect(wrapper.emitted("favorite")).toEqual([[prompt]]);
     expect(wrapper.emitted("pin")).toEqual([[prompt]]);
+  });
+
+  it("renders labelled keyboard-reachable SVG actions without application glyphs", () => {
+    const wrapper = mount(PromptListPane, {
+      props: { prompts: [prompt], selectedId: null, total: 1 },
+    });
+
+    const favorite = wrapper.get<HTMLButtonElement>(
+      "[data-test='list-favorite']",
+    );
+    const pin = wrapper.get<HTMLButtonElement>("[data-test='list-pin']");
+    const copy = wrapper.get<HTMLButtonElement>("[data-test='list-copy']");
+    const applicationControls = [favorite, pin, copy];
+
+    expect(copy.attributes("aria-label")).toBe("复制提示词");
+    expect(copy.element.tabIndex).toBe(0);
+    expect(
+      applicationControls.every((control) => control.find("svg").exists()),
+    ).toBe(true);
+    expect(
+      applicationControls.map((control) => control.text()).join(""),
+    ).not.toMatch(/[☆★▣⌁⌖{}]/u);
+  });
+
+  it("shows copied success independently from the pending copy state", async () => {
+    const wrapper = mount(PromptListPane, {
+      props: {
+        prompts: [prompt],
+        selectedId: prompt.id,
+        total: 1,
+        copyingId: prompt.id,
+        copiedId: null,
+      },
+    });
+
+    const pendingCopy = wrapper.get("[data-test='list-copy']");
+    expect(pendingCopy.attributes("disabled")).toBeDefined();
+    expect(pendingCopy.attributes("aria-busy")).toBe("true");
+    expect(pendingCopy.attributes("aria-label")).not.toBe("已复制");
+
+    await wrapper.setProps({ copyingId: null, copiedId: prompt.id });
+
+    const copied = wrapper.get("[data-test='list-copy']");
+    expect(copied.attributes("disabled")).toBeUndefined();
+    expect(copied.attributes("aria-label")).toBe("已复制");
   });
 
   it("exposes category management, new prompt, and empty-state actions", async () => {
