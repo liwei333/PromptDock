@@ -1,3 +1,68 @@
+# PromptDock Native UI Polish Acceptance Addendum
+
+Test date: 2026-10-15 (Asia/Shanghai)
+
+Candidate: branch `feat/promptdock-ui-native-polish`, application source through commit `3c4ea51` (`refactor: complete native UI component migration`). The report commit, if present, is documentation-only and later than the tested application source.
+
+Environment: macOS 26.4.1 (25E253), Apple Silicon arm64, Node 25.6.0, pnpm 10.34.5, Rust/Cargo 1.92.0, Tauri CLI 2.12.2, PromptDock 1.1.1.
+
+## Native UI polish delivered scope
+
+- The application now uses repository-locked `reka-ui@2.11.0` interaction primitives and `lucide-vue-next@1.0.0` icons through PromptDock-owned wrappers. It does not load a UI framework, icon set, font, or other asset from a CDN at runtime.
+- Main, Quick, Sticky, editor, import preview, variable input, category management, shared dialogs/selects/tooltips/status feedback, and retained prompt card/detail components use one restrained macOS-oriented visual language. Simulated traffic lights and production Unicode action glyphs were removed; genuine keyboard hints and the `340 × 270` size label remain text.
+- The Main workbench's compact CSS contract keeps all search/filter controls visible on one row at the 1024×700 design target by reducing widths, gaps, and padding without replacing the desktop workflow or hiding filters. The configured 1360×860 native view was observed; the exact 1024×700 native resize boundary is recorded separately as unverified.
+- Existing SQLite, clipboard, copy-statistics, template, category-safety, five-pin, native-window, density, and latest-intent behavior remain the product contract. This pass adds no account, network, cloud, telemetry, updater, model, or automatic-paste behavior.
+
+## Native UI polish automated gates
+
+| Command | Result | Evidence |
+| --- | --- | --- |
+| `pnpm format:check` | PASS | Prettier 3.9.10 reported all matched files formatted. |
+| `pnpm typecheck` | PASS | `vue-tsc --noEmit`, exit 0. |
+| `pnpm vitest run` | PASS | 18 files, 220 tests passed; 0 failed. |
+| `pnpm build` | PASS | Vite 8.3.4 transformed 2,429 modules; HTML 0.59 kB (0.41 kB gzip), CSS 56.51 kB (11.25 kB gzip), JS 302.63 kB (101.35 kB gzip). |
+| `cargo fmt --manifest-path src-tauri/Cargo.toml --check` | PASS | Exit 0. |
+| `cargo test --manifest-path src-tauri/Cargo.toml` | PASS | 74 Rust tests passed; 0 failed; binary and documentation test targets also passed. |
+| `cargo clippy --manifest-path src-tauri/Cargo.toml --locked --offline --all-targets --all-features -- -D warnings` | PASS | Exit 0 with warnings denied. |
+| `git diff --check` | PASS | No whitespace errors before the report update. |
+| `pnpm tauri build --bundles app` | PASS | Release binary and macOS `.app` generated; Tauri reported 7.24 MiB. |
+| `codesign --verify --deep --strict` | PASS after generated-artifact repair | The first verification exited 1 with `code has no resources but signature indicates they must be present`. Per the plan, only the generated `.app` was ad-hoc re-signed with `codesign --force --deep --sign -`; the repeated strict verification exited 0. No source signing configuration changed. |
+
+## Dependency and bundle evidence
+
+- Direct production versions are `@tauri-apps/api@2.12.3`, clipboard plugin 2.4.2, dialog plugin 2.8.2, `vue@3.5.44`, `pinia@4.0.3`, `reka-ui@2.11.0`, and `lucide-vue-next@1.0.0`. `pnpm-lock.yaml` SHA-256 is `34678948a615e85ab52a9c2322c31a7789ec18119cc1d23dda62fdef3d4c906a`.
+- Compared with the recorded V3 frontend baseline, CSS increased from 38.34 to 56.51 kB (+18.17 kB, +47.4%) and from 8.74 to 11.25 kB gzip (+2.51 kB, +28.7%). JavaScript increased from 125.96 to 302.63 kB (+176.67 kB, +140.3%) and from 45.18 to 101.35 kB gzip (+56.17 kB, +124.3%). This is the cumulative cost of the local Reka/Lucide implementation and PromptDock wrappers; Vite still tree-shakes direct component/icon imports.
+- The generated application is `/Users/qianduoduo/Desktop/AI_app/PromptDock/src-tauri/target/release/bundle/macos/PromptDock.app`, is 7.2 MiB on disk, contains a thin arm64 Mach-O, and after the ad-hoc repair its executable SHA-256 is `1644438dcf95ea7ef0171b4f4f2630f0c45fff4cc1e83c7bcb3e78cd5ddec731`. There is no archived byte-identical pre-polish `.app` in this worktree, so no unsupported `.app` byte delta is claimed.
+
+## Native UI polish database and offline evidence
+
+- Read-only inspection of `/Users/qianduoduo/Library/Application Support/com.promptdock.local/promptdock.sqlite3` returned `categories=6`, `prompts=4`, `daily_copy_stats=0`, `migrations=3`, `pinned=4`, and `favorites=3`. Category prompt counts remained `0, 1, 0, 0, 0, 3` in their stored order. The aggregate lifetime `copy_count` remained 8 before and after the native interaction pass, and final Sticky settings reported `density="comfortable"` and `visible=false`.
+- The packaged executable was observed running from the repository bundle path. `lsof -a -p <packaged-process-pid> -i -n -P` returned no network descriptors. Production source inspection found no `fetch`, `XMLHttpRequest`, `WebSocket`, remote font/import, or HTTP URL in application TypeScript, Vue, CSS, or Rust sources; release CSP limits connections to Tauri IPC.
+- No real prompt was copied and no prompt or category create, edit, delete, transfer, import, or export action was performed for this verification. The allowed Sticky density/window checks may update only local `sticky_window` settings.
+
+## Native UI polish packaged macOS observations
+
+- The exact repository bundle opened to the configured 1360×860-point Main window. Its Retina content capture measured 2720×1624 pixels after the 48-pixel native titlebar area. Real macOS close/minimize/zoom traffic lights were visible and no duplicate simulated lights appeared.
+- At that size, the search and all filter controls remained on one row. All four live statistics (`total=4`, `todayCopies=0`, `favorites=3`, `pinned=4/5`), four prompt rows, and the selected prompt detail were visible without a replacement mobile workflow.
+- `⌘K` opened the packaged Quick palette. Its accessibility tree exposed the search input, Escape hint, and direction-key hint; Escape closed it. No result was copied.
+- The category Select was exercised from the keyboard: Shift+Tab and Return opened it, arrow-key selection applied the empty `技术研发` filter, and Return/Home/Return restored `全部分类`; a subsequent open/Escape closed without committing another choice. Main finished with all temporary filters cleared.
+- Category management opened with focus on `新增分类`, displayed the safety explanation and all six real category rows with counts `0, 1, 0, 0, 0, 3`, and closed with Escape. No category or prompt was changed.
+- Main → Sticky comfortable → compact → comfortable → Main completed in the packaged app. Retina captures measured 840×1390 pixels (420×695 points) for comfortable and 680×540 pixels (340×270 points) for compact. The accessibility tree exposed four pinned prompts plus empty slot 5 at both densities. Density was restored to `comfortable`; no prompt was copied.
+- Runtime information displayed PromptDock 1.1.1, `Option+Space · 已注册`, and the exact application-data database path. This proves the Rust registration path reported success; foreground focus from another application was not exercised and remains unverified below.
+- Shared icon-button focus treatment was visible during keyboard navigation. A hover Tooltip could not be observed reliably through the computer-use surface, so Tooltip runtime behavior is not promoted to PASS.
+- Exact 1024×700 native resize could not be completed through the available native-window controls. Task 8 tests and static width budgeting remain supporting evidence, not a substitute for that native viewport check.
+
+## Explicit verification boundaries
+
+- `UNVERIFIED_MACOS_RUNTIME` — exact 1024×700 packaged-window layout, mouse-hover Tooltip display, actual Option+Space focus from another application, VoiceOver spoken output, real cross-application clipboard comparison, variable-template native copy, real drag-position restoration, multi-display clamping/Spaces, always-on-top against another app, live cross-window refresh after a real mutation, and destructive category transfer. Deterministic tests and implementation inspection are supporting evidence only for these scenarios.
+- `UNVERIFIED_WINDOWS_RUNTIME` — Windows 10/11 x64 build and window frame, `Ctrl+K`, `Ctrl+Alt+Space`, display scaling, native clipboard, Narrator, Quick, and Sticky. No Windows runner was used.
+
+## Native UI polish conclusion
+
+Automated checks, the release build, strict post-repair signature verification, offline/read-only safety checks, the configured 1360×860 native Main view, keyboard Quick/Select/Dialog flows, and both Sticky densities passed. No P0/P1 failure was found. Final release status is **conditional pass** because the exact 1024×700 native viewport, hover Tooltip, Windows, accessibility, and other explicitly listed physical/system scenarios remain unverified.
+
+---
+
 # PromptDock UI V3 Acceptance Addendum
 
 Test date: 2026-10-14 (Asia/Shanghai)
