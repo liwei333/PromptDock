@@ -17,9 +17,9 @@ Windows。它使用 Vue 3 + TypeScript 构建界面，Tauri 2 提供原生窗口
 
 | 平台                | 推荐下载                                             | 说明                  |
 | ------------------- | ---------------------------------------------------- | --------------------- |
-| macOS Apple Silicon | `PromptDock_1.1.1_aarch64.dmg`                       | M1、M2、M3、M4 等芯片 |
-| macOS Intel         | `PromptDock_1.1.1_x64.dmg`                           | Intel Mac             |
-| Windows x64         | `PromptDock_1.1.1_x64-setup.exe` 或 `_x64_en-US.msi` | Windows 10/11 64 位   |
+| macOS Apple Silicon | `PromptDock_1.1.2_aarch64.dmg`                       | M1、M2、M3、M4 等芯片 |
+| macOS Intel         | `PromptDock_1.1.2_x64.dmg`                           | Intel Mac             |
+| Windows x64         | `PromptDock_1.1.2_x64-setup.exe` 或 `_x64_en-US.msi` | Windows 10/11 64 位   |
 | 源代码              | Release 页面自动提供的 `.zip` / `.tar.gz`            | 用于审计或自行构建    |
 
 当前公开安装包未使用商业代码签名证书：

@@ -3095,7 +3095,7 @@ dependencies = [
 
 [[package]]
 name = "promptdock"
-version = "1.1.1"
+version = "1.1.2"
 dependencies = [
  "chrono",
  "objc2-app-kit",

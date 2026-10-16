@@ -2,6 +2,29 @@
 
 All notable changes to PromptDock are documented in this file.
 
+## [1.1.2] - 2026-10-16
+
+### Added
+
+- A macOS-native lightweight workbench UI with reusable, accessible controls.
+- Dashboard statistics, category management, richer filtering, and improved
+  prompt detail and editor experiences.
+- Comfortable and compact sticky-window density modes with one-click switching.
+
+### Changed
+
+- Simplified sticky-window controls by removing duplicate mode and settings
+  actions while preserving direct management and sorting entry points.
+- Unified primary button, dialog, selector, toggle, tooltip, and feedback styles.
+- Strengthened cross-window intent delivery and asynchronous UI state handling.
+
+### Fixed
+
+- Prevent stale filters, copy feedback, and repeated async requests from leaking
+  into later interactions.
+- Preserve category, tag, template-variable, quick-palette, and sticky-window
+  state across the relevant workflows.
+
 ## [1.1.1] - 2026-10-14
 
 ### Added
