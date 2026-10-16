@@ -194,6 +194,8 @@ pub fn run() {
             windows::hide_quick_window,
             windows::enter_sticky_mode,
             windows::enter_main_mode,
+            windows::peek_main_intent,
+            windows::ack_main_intent,
             windows::hide_sticky_window,
             windows::get_sticky_settings,
             windows::set_sticky_settings,

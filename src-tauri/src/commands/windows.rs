@@ -3,7 +3,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::{
     domain::errors::{AppError, ErrorPayload},
-    state::{AppState, ShortcutStatus},
+    state::{AppState, MainIntent, MainIntentSlot, PendingMainIntent, ShortcutStatus},
     window_mode::{
         TauriWindowModeRuntime, WindowMode, WindowModeRuntime, hide_sticky_explicitly,
         set_sticky_preferences, transition_to,
@@ -86,6 +86,41 @@ pub struct RuntimeInfo {
     pub shortcut: ShortcutStatus,
 }
 
+pub(crate) async fn transition_to_main_with_intent(
+    runtime: &impl WindowModeRuntime,
+    mode_transition: &tokio::sync::Mutex<()>,
+    pending_main_intent: &tokio::sync::Mutex<MainIntentSlot>,
+    intent: Option<MainIntent>,
+) -> Result<(), AppError> {
+    let Some(intent) = intent else {
+        return transition_to(runtime, mode_transition, WindowMode::Main).await;
+    };
+
+    // Lock order is always pending_main_intent -> mode_transition.
+    let mut slot = pending_main_intent.lock().await;
+    let pending = slot.assign(intent);
+    match transition_to(runtime, mode_transition, WindowMode::Main).await {
+        Ok(()) => Ok(()),
+        Err(error) => {
+            slot.clear_if(pending.id);
+            Err(error)
+        }
+    }
+}
+
+pub(crate) async fn peek_main_intent_value(
+    pending_main_intent: &tokio::sync::Mutex<MainIntentSlot>,
+) -> Option<PendingMainIntent> {
+    pending_main_intent.lock().await.peek()
+}
+
+pub(crate) async fn ack_main_intent_value(
+    pending_main_intent: &tokio::sync::Mutex<MainIntentSlot>,
+    id: u32,
+) -> bool {
+    pending_main_intent.lock().await.clear_if(id)
+}
+
 fn native_error(error: impl ToString) -> ErrorPayload {
     AppError::Native(error.to_string()).into()
 }
@@ -140,11 +175,38 @@ pub async fn enter_sticky_mode(
 pub async fn enter_main_mode(
     app: AppHandle,
     state: State<'_, AppState>,
+    intent: Option<MainIntent>,
 ) -> CommandResult<ModeResult> {
     let runtime = TauriWindowModeRuntime::new(app, state.inner().clone());
-    transition_to(&runtime, &state.mode_transition, WindowMode::Main).await?;
+    transition_to_main_with_intent(
+        &runtime,
+        &state.mode_transition,
+        &state.pending_main_intent,
+        intent,
+    )
+    .await?;
     Ok(ModeResult {
         mode: WindowMode::Main,
+    })
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MainIntentAck {
+    pub acknowledged: bool,
+}
+
+#[tauri::command]
+pub async fn peek_main_intent(
+    state: State<'_, AppState>,
+) -> CommandResult<Option<PendingMainIntent>> {
+    Ok(peek_main_intent_value(&state.pending_main_intent).await)
+}
+
+#[tauri::command]
+pub async fn ack_main_intent(state: State<'_, AppState>, id: u32) -> CommandResult<MainIntentAck> {
+    Ok(MainIntentAck {
+        acknowledged: ack_main_intent_value(&state.pending_main_intent, id).await,
     })
 }
 

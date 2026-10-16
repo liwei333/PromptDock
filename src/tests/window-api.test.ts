@@ -23,6 +23,33 @@ describe("windowApi", () => {
     expect(invoke).toHaveBeenLastCalledWith("enter_main_mode");
   });
 
+  it("sends the sticky-manager intent only for task-specific main navigation", async () => {
+    invoke.mockResolvedValueOnce({ mode: "main" });
+
+    await expect(windowApi.enterMainMode("manage-sticky")).resolves.toEqual({
+      mode: "main",
+    });
+    expect(invoke).toHaveBeenLastCalledWith("enter_main_mode", {
+      intent: "manage-sticky",
+    });
+  });
+
+  it("peeks and acknowledges a pending main intent through exact IPC commands", async () => {
+    invoke.mockResolvedValueOnce({ id: 7, intent: "manage-sticky" });
+
+    await expect(windowApi.peekMainIntent()).resolves.toEqual({
+      id: 7,
+      intent: "manage-sticky",
+    });
+    expect(invoke).toHaveBeenLastCalledWith("peek_main_intent");
+
+    invoke.mockResolvedValueOnce({ acknowledged: true });
+    await expect(windowApi.ackMainIntent(7)).resolves.toEqual({
+      acknowledged: true,
+    });
+    expect(invoke).toHaveBeenLastCalledWith("ack_main_intent", { id: 7 });
+  });
+
   it("sends only the requested sticky preference", async () => {
     invoke.mockResolvedValueOnce({
       visible: true,

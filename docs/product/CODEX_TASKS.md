@@ -16,15 +16,15 @@
 5. docs/product/TECH_ARCHITECTURE.md
 6. docs/product/CODEX_TASKS.md
 7. docs/product/reference/schema.sql
-8. docs/product/UI_PROTOTYPE.html（仅作为 UI/交互基线，不复用其 localStorage 假数据层）
-9. docs/product/UI_QUICK_WINDOW.html（独立快捷面板视觉/键盘交互参考）
+8. docs/product/UI_PROTOTYPE.html（仅提供配色、CSS Token 和轻量 macOS 视觉语言参考；不复用其 localStorage 假数据层）
+9. docs/product/UI_QUICK_WINDOW.html（仅提供配色、CSS Token 和轻量 macOS 视觉语言参考）
 
 二、产品目标与硬约束
 这是给我自己使用的 macOS 提示词管理 App。
 技术栈：Tauri 2 + Vue 3 + TypeScript + Rust + SQLite。
 必须完全离线，本地数据存 SQLite，暂不做账号、云同步、iCloud、联网 API、iPhone/iPad、遥测、AI 模型调用。
 主目标是系统剪贴板一键复制。未来还需要 Option+Space 系统级快捷浮窗，但本轮只做到文档规定的阶段 0 + 阶段 1。
-已认可的 UI 以 HTML 原型为基准，避免擅自改变配色、布局、导航结构。
+HTML 原型只提供配色、CSS Token 和轻量 macOS 视觉语言；当前主窗口布局、导航、按钮位置和交互以 PRD、UI_DESIGN_SPEC 第 3–4 节及当前组件合同为准。
 每一个开发阶段必须独立 Git 分支，通过用户验收后才能合并 main。
 
 三、开始前真实核查
@@ -58,7 +58,7 @@ UI 这一阶段可以只是最小真实调试界面，不必实现完整视觉�
 ### 阶段 0 — 工程初始化
 
 - [ ] Git 工作区检查、独立分支，例如 `feat/promptdock-bootstrap`
-- [ ] Tauri 2/Vue 3/TS/Pinia 初始化，样式 token 与原型一致
+- [ ] Tauri 2/Vue 3/TS/Pinia 初始化，应用历史原型提供的配色与 CSS Token 视觉语言
 - [ ] 锁文件、工程 README、TypeScript 严格模式、lint/test 命令
 - [ ] `pnpm tauri dev` 能在 Mac 上显示原生桌面窗口
 - [ ] `pnpm build`、基础测试可运行
@@ -83,9 +83,9 @@ UI 这一阶段可以只是最小真实调试界面，不必实现完整视觉�
 把下面内容发给 Codex（上一阶段验收后）：
 
 ```text
-根据 docs/product/PRD.md、UI_DESIGN_SPEC.md、UI_PROTOTYPE.html 和 AGENTS.md，
-在新的 feat 分支完成阶段 2，保持已确认 UI 配色和布局。
-拆分 Vue3 组件：侧栏、导航、工具条、搜索、置顶快捷区、提示词卡片、详情抽屉、编辑/删除/新建分类弹窗。
+根据 docs/product/PRD.md、UI_DESIGN_SPEC.md 和 AGENTS.md，
+在新的 feat 分支完成阶段 2，保持已确认的配色、CSS Token 和轻量 macOS 视觉语言；主窗口实现按 PRD、UI_DESIGN_SPEC 第 3–4 节及当前组件合同执行。
+拆分 Vue3 组件：工作台图标栏、搜索筛选、统计卡、提示词列表、详情面板、编辑/删除/分类管理弹窗；不要虚构主窗口顶部三条快捷区或对应组件。
 全部数据来自阶段 1 的 Rust SQLite IPC；清除浏览器原型 localStorage 依赖，不自动灌入演示提示词。
 通过 @tauri-apps/plugin-clipboard-manager.writeText 实现普通提示词的一键复制：
 成功后才能增加 copy_count，失败不增加；需要区分“复制成功但统计失败”。
@@ -118,14 +118,15 @@ UI 这一阶段可以只是最小真实调试界面，不必实现完整视觉�
 
 完整的可复制任务指令：**`STICKY_MODE_CODEX_PROMPT.md`**。
 
-- Rust 创建独立第三窗口 `sticky`，约 340×270，默认隐藏，可拖动/置顶/隐藏。
+- Rust 创建默认隐藏的独立第三窗口 `sticky`：舒适模式默认 420×695，精简模式 340×270；只允许两个精确逻辑尺寸直接切换，不允许任意缩放，并持久化密度选择。
 - migration 002 `pin_order`，数据库事务确保至多 5 个位置、不因复制次数变化排序，兼容旧库。
-- 主 UI 增加进入便签和管理置顶；超过 5 条拒绝新增并保留编辑状态。
+- 标题栏只有密度直接切换、通用完整窗口动作、收起；底部只有「排序」与「始终置顶」，不增加通用底部管理按钮或便签设置齿轮/对话框。
+- 主 UI 保留进入便签入口；底部「排序」进入主窗口并直接打开或在已有模态工作之后排队既有 `StickyManagerDialog`。超过 5 条拒绝新增并保留编辑状态。
 - 点击条目复制全文，变量复用 quick，跨窗变更后重查 SQLite。
-- 持久化便签可见状态、位置与置顶开关；不退出主程序、不联网、不自动粘贴。
+- 持久化便签密度、可见状态、位置与置顶开关；不退出主程序、不联网、不自动粘贴。
 - 完成 PRD 新增 **AT-17 至 AT-25**，只在 macOS 原生通过后标记 PASS。
 
-**门槛**：通过 Mac 真正独立小窗口测试、位置重启恢复、系统置顶和复制测试；不 push 或 merge。
+**门槛**：在 Mac 原生验证 420×695 / 340×270 一键双向切换、密度跨重启保留、任意缩放禁用、Sort 直达/安全排队管理器、位置重启恢复、系统置顶和复制；未完成原生验证的项目必须标为 `UNVERIFIED_MACOS_RUNTIME`，不 push 或 merge。
 
 ### 阶段 4 — 导入导出、异常与桌面交付
 
@@ -152,7 +153,7 @@ UI 这一阶段可以只是最小真实调试界面，不必实现完整视觉�
 3. 不要跳过 SQLite，就去做外观或全局浮窗的静态演示。
 4. 不要让 Codex 自行创建在线账户、申请苹果开发者资格或引入同步。
 5. 不要声称已经执行测试而没有命令与真实输出。
-6. 若现有原型中发现功能漏洞，记录在任务结尾并在正式 Vue 实现修复，不需要擅自改已通过的视觉样式。
+6. 若历史原型与当前 PRD、UI_DESIGN_SPEC 或组件合同冲突，记录差异并按当前高优先级规范执行；不擅自改变已确认的配色和轻量 macOS 视觉语言。
 
 ## 四、给用户的验收方式
 

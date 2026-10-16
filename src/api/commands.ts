@@ -11,6 +11,8 @@ import type {
   PromptQuery,
 } from "@/types/prompt";
 import type {
+  MainIntent,
+  PendingMainIntent,
   RuntimeInfo,
   StickySettings,
   StickySettingsPatch,
@@ -57,7 +59,13 @@ export const windowApi = {
     invoke<{ shown: true }>("show_quick_window", { promptId }),
   hideQuick: () => invoke<{ hidden: true }>("hide_quick_window"),
   enterStickyMode: () => invoke<{ mode: "sticky" }>("enter_sticky_mode"),
-  enterMainMode: () => invoke<{ mode: "main" }>("enter_main_mode"),
+  enterMainMode: (intent?: MainIntent) =>
+    intent
+      ? invoke<{ mode: "main" }>("enter_main_mode", { intent })
+      : invoke<{ mode: "main" }>("enter_main_mode"),
+  peekMainIntent: () => invoke<PendingMainIntent | null>("peek_main_intent"),
+  ackMainIntent: (id: number) =>
+    invoke<{ acknowledged: boolean }>("ack_main_intent", { id }),
   hideSticky: () => invoke<{ hidden: true }>("hide_sticky_window"),
   getStickySettings: () => invoke<StickySettings>("get_sticky_settings"),
   setStickySettings: (settings: StickySettingsPatch) =>

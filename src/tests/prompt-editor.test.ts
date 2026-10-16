@@ -472,6 +472,77 @@ describe("StickyManagerDialog", () => {
     ).toBe(true);
   });
 
+  it("syncs later prompt props while the local order is untouched", async () => {
+    const wrapper = track(
+      mount(StickyManagerDialog, {
+        attachTo: document.body,
+        props: { prompts: [] },
+        global: { stubs: { Teleport: false } },
+      }),
+    );
+    await settle();
+    expect(
+      document.body.querySelectorAll("[data-test='sticky-manager-row']"),
+    ).toHaveLength(0);
+
+    await wrapper.setProps({ prompts: [prompt, secondPrompt] });
+    await settle();
+
+    const titles = Array.from(
+      document.body.querySelectorAll("[data-test='sticky-manager-row'] strong"),
+      (element) => element.textContent,
+    );
+    expect(titles).toEqual(["代码审查", "商业分析"]);
+  });
+
+  it("does not overwrite a user-reordered local draft with later props", async () => {
+    const wrapper = track(
+      mount(StickyManagerDialog, {
+        attachTo: document.body,
+        props: { prompts: [prompt, secondPrompt] },
+        global: { stubs: { Teleport: false } },
+      }),
+    );
+    await settle();
+
+    document.body
+      .querySelectorAll<HTMLButtonElement>('button[aria-label="上移"]')[1]
+      .click();
+    await settle();
+    await wrapper.setProps({ prompts: [{ ...prompt }, { ...secondPrompt }] });
+    await settle();
+
+    const titles = Array.from(
+      document.body.querySelectorAll("[data-test='sticky-manager-row'] strong"),
+      (element) => element.textContent,
+    );
+    expect(titles).toEqual(["商业分析", "代码审查"]);
+  });
+
+  it("does not restore a successfully removed local row from later props", async () => {
+    const wrapper = track(
+      mount(StickyManagerDialog, {
+        attachTo: document.body,
+        props: { prompts: [prompt, secondPrompt] },
+        global: { stubs: { Teleport: false } },
+      }),
+    );
+    await settle();
+
+    document.body.querySelector<HTMLButtonElement>("button.remove")!.click();
+    await settle();
+    expect(promptApi.setPinned).toHaveBeenCalledWith("prompt-a", false);
+
+    await wrapper.setProps({ prompts: [{ ...prompt }, { ...secondPrompt }] });
+    await settle();
+
+    const titles = Array.from(
+      document.body.querySelectorAll("[data-test='sticky-manager-row'] strong"),
+      (element) => element.textContent,
+    );
+    expect(titles).toEqual(["商业分析"]);
+  });
+
   it("persists the manually reordered five-slot payload", async () => {
     const second = { ...prompt, id: "prompt-b", title: "第二条" };
     const wrapper = track(

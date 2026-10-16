@@ -2612,59 +2612,6 @@ button.sticky-row:disabled {
 .sticky-top-toggle .pd-switch[data-state="checked"] {
   background: var(--sticky-accent);
 }
-.sticky-settings-dialog {
-  --sticky-ink: #453d2b;
-  --sticky-muted: #817552;
-  width: min(360px, calc(100vw - 24px));
-  max-height: min(560px, calc(100vh - 24px));
-  overflow: auto;
-  color: var(--sticky-ink);
-  border-color: var(--pd-paper-border);
-  background: color-mix(in srgb, var(--pd-paper) 54%, white);
-  box-shadow: 0 20px 50px #3c2e113b;
-}
-.sticky-settings-dialog .pd-dialog-header {
-  border-bottom-color: color-mix(
-    in srgb,
-    var(--pd-paper-border) 62%,
-    transparent
-  );
-}
-.sticky-settings-dialog .pd-dialog-body {
-  display: grid;
-  gap: 9px;
-  padding: 14px;
-}
-.sticky-setting-row {
-  display: flex;
-  gap: 9px;
-  align-items: center;
-  padding: 10px;
-  border: 1px solid color-mix(in srgb, var(--pd-paper-border) 64%, white);
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--pd-paper) 28%, white);
-}
-.sticky-setting-row > span {
-  display: grid;
-  flex: 1;
-  gap: 3px;
-  min-width: 0;
-}
-.sticky-setting-row strong {
-  font-size: 11px;
-}
-.sticky-setting-row small {
-  color: var(--sticky-muted);
-  font-size: 9px;
-}
-.sticky-setting-row > .pd-button {
-  flex: 0 0 auto;
-  max-width: 132px;
-  color: var(--sticky-ink);
-  border-color: var(--pd-paper-border);
-  background: color-mix(in srgb, var(--pd-paper) 24%, white);
-  white-space: nowrap;
-}
 .sticky-window-status {
   position: absolute;
   z-index: 15;
@@ -2788,29 +2735,6 @@ button.sticky-row:disabled {
 }
 .compact .sticky-top-toggle .pd-switch__thumb[data-state="checked"] {
   transform: translateX(14px);
-}
-.sticky-settings-dialog--compact {
-  width: calc(100vw - 16px);
-  max-height: calc(100vh - 16px);
-}
-.sticky-settings-dialog--compact .pd-dialog-header {
-  padding: 9px 11px 7px;
-}
-.sticky-settings-dialog--compact .pd-dialog-description {
-  display: none;
-}
-.sticky-settings-dialog--compact .pd-dialog-body {
-  gap: 6px;
-  padding: 7px 9px 9px;
-}
-.sticky-settings-dialog--compact .sticky-setting-row {
-  padding: 6px 7px;
-}
-.sticky-settings-dialog--compact .sticky-setting-row > .pd-button {
-  max-width: 118px;
-  height: 28px;
-  padding-inline: 8px;
-  font-size: 9px;
 }
 .compact .sticky-window-status {
   right: 10px;

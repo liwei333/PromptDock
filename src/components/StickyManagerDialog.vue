@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ArrowDown, ArrowUp } from "lucide-vue-next";
-import { ref } from "vue";
+import { ref, watch } from "vue";
 
 import { promptApi } from "@/api/commands";
 import PdButton from "@/components/ui/PdButton.vue";
@@ -12,9 +12,17 @@ import type { Prompt } from "@/types/prompt";
 const props = defineProps<{ prompts: Prompt[] }>();
 const emit = defineEmits<{ close: []; changed: [] }>();
 const rows = ref([...props.prompts].slice(0, 5));
+const locallyDirty = ref(false);
 const saving = ref(false);
 const removingId = ref<string | null>(null);
 const error = ref("");
+
+watch(
+  () => props.prompts,
+  (prompts) => {
+    if (!locallyDirty.value) rows.value = [...prompts].slice(0, 5);
+  },
+);
 
 function requestClose(): void {
   if (!saving.value && !removingId.value) emit("close");
@@ -24,6 +32,7 @@ function move(index: number, delta: number): void {
   const next = index + delta;
   if (next < 0 || next >= rows.value.length) return;
   [rows.value[index], rows.value[next]] = [rows.value[next], rows.value[index]];
+  locallyDirty.value = true;
 }
 
 async function save(): Promise<void> {
@@ -47,6 +56,7 @@ async function remove(prompt: Prompt): Promise<void> {
   error.value = "";
   try {
     await promptApi.setPinned(prompt.id, false);
+    locallyDirty.value = true;
     rows.value = rows.value.filter((item) => item.id !== prompt.id);
     emit("changed");
   } catch (reason) {

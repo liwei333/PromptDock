@@ -10,6 +10,13 @@ export type RuntimeInfo = {
   shortcut: ShortcutStatus;
 };
 
+export type MainIntent = "manage-sticky";
+
+export type PendingMainIntent = {
+  id: number;
+  intent: MainIntent;
+};
+
 export type StickyDensity = "comfortable" | "compact";
 
 export type StickySettings = {
