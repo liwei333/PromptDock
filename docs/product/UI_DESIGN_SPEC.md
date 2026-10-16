@@ -77,7 +77,7 @@
 | 列表/详情区 | `PromptListPane.vue` + `PromptDetailPane.vue` | 选择、全文、标签、复制及编辑入口 |
 | 管理置顶 | `StickyManagerDialog.vue` | 五槽位人工排序、移除和添加 |
 | `.modal`（编辑） | `PromptEditorDialog.vue` | 新建编辑、规则校验、未保存变更防护 |
-| 分类管理 | `CategoryManagerDialog.vue` + `CategoryCreateDialog.vue` + `CategoryDeleteDialog.vue` | 查看、新建与安全删除分类 |
+| 分类管理 | `CategoryManagerDialog.vue` + `CategoryDeleteDialog.vue` | 查看、内联新建/重命名与安全删除分类 |
 | 导入预览 | `ImportPreviewDialog.vue` | 合并/替换选择与校验统计 |
 | 快捷搜索面板（`⌘K` / 全局快捷键） | `QuickPalette.vue` + `QuickWindow.vue` | 主窗口键盘面板与独立 `quick` 窗口共用快捷面板，不放入图标栏 |
 | 运行信息 | `RuntimeInfoDialog.vue` | 展示本机运行与数据位置信息 |

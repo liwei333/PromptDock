@@ -102,8 +102,6 @@ const STICKY_ENTRY_SELECTOR = "[data-test='rail-sticky-mode']";
 const mainWindowStubs = {
   CategoryManagerDialog: true,
   ImportPreviewDialog: true,
-  PromptCard: true,
-  PromptDetailDrawer: true,
   PromptEditorDialog: true,
   QuickPalette: true,
   RuntimeInfoDialog: true,

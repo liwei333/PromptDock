@@ -1,7 +1,6 @@
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import { afterEach, describe, expect, it } from "vitest";
 
-import CategoryCreateDialog from "@/components/CategoryCreateDialog.vue";
 import CategoryDeleteDialog from "@/components/CategoryDeleteDialog.vue";
 import CategoryManagerDialog from "@/components/CategoryManagerDialog.vue";
 import type { Category } from "@/types/prompt";
@@ -346,20 +345,5 @@ describe("CategoryManagerDialog", () => {
     );
     await settle();
     expect(wrapper.emitted("rename")).toEqual([["category-a", "键盘重命名"]]);
-  });
-
-  it("uses the shared dialog shell for the standalone create flow", async () => {
-    track(
-      mount(CategoryCreateDialog, {
-        attachTo: document.body,
-        global: { stubs: { Teleport: false } },
-      }),
-    );
-    await settle();
-
-    expect(getDialog("新建分类")).toBeDefined();
-    expect(
-      document.body.querySelector('button[aria-label="关闭分类编辑"] svg'),
-    ).not.toBeNull();
   });
 });

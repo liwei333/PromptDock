@@ -93,7 +93,6 @@ promptdock/
 │   │   ├── PromptDetailPane.vue
 │   │   ├── PromptEditorDialog.vue
 │   │   ├── CategoryManagerDialog.vue
-│   │   ├── CategoryCreateDialog.vue
 │   │   ├── CategoryDeleteDialog.vue
 │   │   ├── ImportPreviewDialog.vue
 │   │   ├── QuickPalette.vue
