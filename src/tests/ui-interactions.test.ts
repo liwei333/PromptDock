@@ -627,8 +627,8 @@ describe("PromptDock interaction wrappers", () => {
     expect(globalCss).toMatch(
       /\.pd-select-trigger__icon\s*\{[^}]*flex:\s*0 0 auto;/s,
     );
-    expect(globalCss).toContain(
-      ".workbench-rail nav button:hover:not(:disabled),\n.rail-settings:hover:not(:disabled)",
+    expect(globalCss).toMatch(
+      /\.workbench-rail nav button:hover:not\(:disabled\),\r?\n\.rail-settings:hover:not\(:disabled\)/,
     );
   });
 
